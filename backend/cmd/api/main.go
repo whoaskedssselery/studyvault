@@ -13,7 +13,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 
+	"github.com/whoaskedssselery/studyvault/backend/internal/auth"
 	"github.com/whoaskedssselery/studyvault/backend/internal/config"
+	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/httpapi"
 )
 
@@ -43,7 +45,12 @@ func run() error {
 	}
 	defer pool.Close()
 
-	srv := httpapi.NewServer(cfg, pool)
+	srv := httpapi.NewServer(cfg, httpapi.Deps{
+		DB:           pool,
+		Auth:         auth.NewService(db.New(pool), cfg.JWTSecret),
+		JWTSecret:    cfg.JWTSecret,
+		CookieSecure: cfg.CookieSecure,
+	})
 
 	errCh := make(chan error, 1)
 	go func() {

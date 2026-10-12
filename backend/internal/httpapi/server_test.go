@@ -20,7 +20,7 @@ func getHealth(t *testing.T, db httpapi.Pinger) *httptest.ResponseRecorder {
 	t.Helper()
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	httpapi.NewHandler(db).ServeHTTP(rec, req)
+	httpapi.NewHandler(httpapi.Deps{DB: db, JWTSecret: testSecret}).ServeHTTP(rec, req)
 	return rec
 }
 
@@ -63,7 +63,7 @@ func TestHealth_DBDown_Returns503(t *testing.T) {
 func TestUnknownRoute_Returns404(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/nope", nil)
-	httpapi.NewHandler(fakePinger{}).ServeHTTP(rec, req)
+	httpapi.NewHandler(httpapi.Deps{DB: fakePinger{}, JWTSecret: testSecret}).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
