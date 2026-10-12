@@ -1,0 +1,1037 @@
+openapi: 3.0.3
+info:
+  title: studyvault API
+  version: 1.0.0
+  description: REST API базы знаний студента.
+
+servers:
+  - url: http://localhost:8080
+    description: local
+
+tags:
+  - name: auth
+  - name: subjects
+  - name: notes
+  - name: tags
+  - name: search
+  - name: attachments
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Проверка живости сервиса и БД
+      security: []
+      responses:
+        "200":
+          description: Всё работает
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: БД недоступна
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Регистрация
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Создан. Refresh-токен приходит в httpOnly cookie `refresh_token`.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Вход
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Успешный вход. Refresh-токен приходит в httpOnly cookie `refresh_token`.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refresh
+      summary: Обновить access-токен
+      description: |
+        Читает cookie `refresh_token`, выдаёт новый access-токен и новый refresh-токен (ротация).
+        Старый refresh-токен после этого недействителен.
+      security: []
+      responses:
+        "200":
+          description: Новая пара токенов
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Выход (отзывает refresh-токен)
+      security: []
+      responses:
+        "204":
+          description: Готово. Cookie `refresh_token` сбрасывается.
+
+  /subjects:
+    get:
+      tags: [subjects]
+      operationId: listSubjects
+      summary: Предметы пользователя
+      responses:
+        "200":
+          description: Список предметов
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Subject"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [subjects]
+      operationId: createSubject
+      summary: Создать предмет
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubjectInput"
+      responses:
+        "201":
+          description: Создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subject"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /subjects/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      tags: [subjects]
+      operationId: updateSubject
+      summary: Изменить предмет
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubjectPatch"
+      responses:
+        "200":
+          description: Обновлён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subject"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [subjects]
+      operationId: deleteSubject
+      summary: Удалить предмет
+      description: Заметки предмета остаются, у них `subject_id` становится `null`.
+      responses:
+        "204":
+          description: Удалён
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /notes:
+    get:
+      tags: [notes]
+      operationId: listNotes
+      summary: Список заметок (без содержимого)
+      description: Сортировка по `updated_at` от новых к старым. Удалённые заметки не возвращаются.
+      parameters:
+        - name: subject_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: tag
+          in: query
+          description: Имя тега
+          schema:
+            type: string
+        - name: pinned
+          in: query
+          schema:
+            type: boolean
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Страница заметок
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotePage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [notes]
+      operationId: createNote
+      summary: Создать заметку
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoteInput"
+      responses:
+        "201":
+          description: Создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /notes/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [notes]
+      operationId: getNote
+      summary: Заметка целиком
+      responses:
+        "200":
+          description: Заметка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [notes]
+      operationId: updateNote
+      summary: Изменить заметку
+      description: |
+        Меняет только переданные поля. При изменении `content` бэкенд пересобирает
+        `content_text`, связи `[[...]]` и поисковый индекс.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotePatch"
+      responses:
+        "200":
+          description: Обновлена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [notes]
+      operationId: deleteNote
+      summary: Удалить заметку (мягко, `deleted_at`)
+      responses:
+        "204":
+          description: Удалена
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /notes/{id}/tags:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      tags: [notes]
+      operationId: setNoteTags
+      summary: Заменить набор тегов заметки целиком
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tag_ids]
+              properties:
+                tag_ids:
+                  type: array
+                  maxItems: 50
+                  uniqueItems: true
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        "200":
+          description: Заметка с новым набором тегов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /notes/{id}/backlinks:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [notes]
+      operationId: listBacklinks
+      summary: Заметки, которые ссылаются на эту через `[[...]]`
+      responses:
+        "200":
+          description: Список обратных ссылок
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/NoteSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /graph:
+    get:
+      tags: [notes]
+      operationId: getGraph
+      summary: Граф связей между заметками
+      responses:
+        "200":
+          description: Узлы и рёбра
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Graph"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /tags:
+    get:
+      tags: [tags]
+      operationId: listTags
+      summary: Теги пользователя
+      responses:
+        "200":
+          description: Список тегов
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Tag"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [tags]
+      operationId: createTag
+      summary: Создать тег
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagInput"
+      responses:
+        "201":
+          description: Создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /tags/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    delete:
+      tags: [tags]
+      operationId: deleteTag
+      summary: Удалить тег (снимается со всех заметок)
+      responses:
+        "204":
+          description: Удалён
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /search:
+    get:
+      tags: [search]
+      operationId: searchNotes
+      summary: Полнотекстовый поиск по заметкам (Meilisearch)
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: subject_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: tag
+          in: query
+          description: Имя тега
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: Результаты, лучшие первыми
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SearchHit"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /attachments:
+    get:
+      tags: [attachments]
+      operationId: listAttachments
+      summary: Файлы заметки
+      parameters:
+        - name: note_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Список файлов
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Attachment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [attachments]
+      operationId: createAttachment
+      summary: Зарегистрировать файл и получить ссылку для загрузки
+      description: |
+        Создаёт запись и возвращает presigned PUT URL. Клиент загружает байты напрямую в S3
+        с тем же `Content-Type`, который указал в `mime_type`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttachmentInput"
+      responses:
+        "201":
+          description: Создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentUpload"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /attachments/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [attachments]
+      operationId: getAttachment
+      summary: Метаданные файла и временная ссылка для скачивания
+      responses:
+        "200":
+          description: Файл
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentDownload"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [attachments]
+      operationId: deleteAttachment
+      summary: Удалить запись и объект в S3
+      responses:
+        "204":
+          description: Удалён
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access-токен (живёт 15 минут).
+
+  headers:
+    RefreshCookie:
+      description: "`refresh_token=<value>; HttpOnly; SameSite=Lax; Path=/auth`"
+      schema:
+        type: string
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 30
+    Cursor:
+      name: cursor
+      in: query
+      description: Непрозрачная строка из `next_cursor` предыдущей страницы
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Нет или просрочен токен
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Не найдено (или принадлежит другому пользователю)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Конфликт (дубликат)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Машиночитаемый код, например `validation_failed`, `not_found`
+            message:
+              type: string
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
+
+    User:
+      type: object
+      required: [id, email, display_name, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    RegisterRequest:
+      type: object
+      required: [email, password, display_name]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          description: Не длиннее 72 байт (ограничение bcrypt)
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    TokenResponse:
+      type: object
+      required: [access_token, expires_in]
+      properties:
+        access_token:
+          type: string
+        expires_in:
+          type: integer
+          description: Секунд до истечения access-токена
+          example: 900
+
+    AuthResponse:
+      type: object
+      required: [access_token, expires_in, user]
+      properties:
+        access_token:
+          type: string
+        expires_in:
+          type: integer
+          example: 900
+        user:
+          $ref: "#/components/schemas/User"
+
+    Subject:
+      type: object
+      required: [id, title, color, semester, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        color:
+          type: string
+          nullable: true
+          description: Hex для UI
+          example: "#4f46e5"
+        semester:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    SubjectInput:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        color:
+          type: string
+          nullable: true
+          pattern: "^#[0-9a-fA-F]{6}$"
+        semester:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 12
+
+    SubjectPatch:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        color:
+          type: string
+          nullable: true
+          pattern: "^#[0-9a-fA-F]{6}$"
+        semester:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 12
+
+    Tag:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    TagInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+
+    TiptapDoc:
+      type: object
+      description: Документ редактора Tiptap (ProseMirror JSON). Бэкенд хранит как есть.
+      additionalProperties: true
+      example:
+        type: doc
+        content:
+          - type: paragraph
+            content:
+              - type: text
+                text: Привет, [[Другая заметка]]
+
+    NoteSummary:
+      type: object
+      required: [id, subject_id, title, is_pinned, tags, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        subject_id:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+        is_pinned:
+          type: boolean
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Note:
+      allOf:
+        - $ref: "#/components/schemas/NoteSummary"
+        - type: object
+          required: [content]
+          properties:
+            content:
+              $ref: "#/components/schemas/TiptapDoc"
+
+    NotePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NoteSummary"
+        next_cursor:
+          type: string
+          nullable: true
+          description: "`null`, если страница последняя"
+
+    NoteInput:
+      type: object
+      required: [title, content]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+        content:
+          $ref: "#/components/schemas/TiptapDoc"
+        subject_id:
+          type: string
+          format: uuid
+          nullable: true
+        is_pinned:
+          type: boolean
+          default: false
+
+    NotePatch:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+        content:
+          $ref: "#/components/schemas/TiptapDoc"
+        subject_id:
+          type: string
+          format: uuid
+          nullable: true
+        is_pinned:
+          type: boolean
+
+    Graph:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes:
+          type: array
+          items:
+            type: object
+            required: [id, title]
+            properties:
+              id:
+                type: string
+                format: uuid
+              title:
+                type: string
+        edges:
+          type: array
+          items:
+            type: object
+            required: [source, target]
+            properties:
+              source:
+                type: string
+                format: uuid
+                description: Заметка, где написано `[[...]]`
+              target:
+                type: string
+                format: uuid
+                description: Заметка, на которую ссылаются
+
+    SearchHit:
+      type: object
+      required: [id, title, snippet, subject_id, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        snippet:
+          type: string
+          description: Фрагмент текста с найденным словом, совпадение обёрнуто в `<mark>`
+        subject_id:
+          type: string
+          format: uuid
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+
+    Attachment:
+      type: object
+      required: [id, note_id, file_name, mime_type, size_bytes, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        note_id:
+          type: string
+          format: uuid
+          nullable: true
+        file_name:
+          type: string
+        mime_type:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+
+    AttachmentInput:
+      type: object
+      required: [file_name, mime_type, size_bytes]
+      properties:
+        note_id:
+          type: string
+          format: uuid
+          nullable: true
+        file_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        mime_type:
+          type: string
+          enum:
+            - application/pdf
+            - image/png
+            - image/jpeg
+            - image/webp
+            - image/gif
+            - text/plain
+            - text/markdown
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 20971520
+          description: До 20 МБ
+
+    AttachmentUpload:
+      type: object
+      required: [attachment, upload_url]
+      properties:
+        attachment:
+          $ref: "#/components/schemas/Attachment"
+        upload_url:
+          type: string
+          format: uri
+          description: Presigned PUT URL
+
+    AttachmentDownload:
+      type: object
+      required: [attachment, download_url]
+      properties:
+        attachment:
+          $ref: "#/components/schemas/Attachment"
+        download_url:
+          type: string
+          format: uri
+          description: Presigned GET URL

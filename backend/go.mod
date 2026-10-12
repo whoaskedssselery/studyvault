@@ -11,6 +11,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/meilisearch/meilisearch-go v0.36.3
 	github.com/minio/minio-go/v7 v7.3.0
+	github.com/oapi-codegen/nullable v1.1.0
 	github.com/oapi-codegen/runtime v1.7.0
 	golang.org/x/crypto v0.57.0
 )
