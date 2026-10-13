@@ -18,9 +18,40 @@ import (
 type fakeStore struct {
 	users   map[string]db.User // ключ: email в нижнем регистре
 	refresh []db.CreateRefreshTokenParams
+	tokens  map[string]*db.RefreshToken // ключ: token_hash
 }
 
-func newFakeStore() *fakeStore { return &fakeStore{users: map[string]db.User{}} }
+func newFakeStore() *fakeStore {
+	return &fakeStore{users: map[string]db.User{}, tokens: map[string]*db.RefreshToken{}}
+}
+
+func (f *fakeStore) GetRefreshTokenByHash(_ context.Context, hash string) (db.RefreshToken, error) {
+	t, ok := f.tokens[hash]
+	if !ok {
+		return db.RefreshToken{}, pgx.ErrNoRows
+	}
+	return *t, nil
+}
+
+func (f *fakeStore) RevokeRefreshToken(_ context.Context, hash string) (int64, error) {
+	t, ok := f.tokens[hash]
+	if !ok || t.RevokedAt != nil {
+		return 0, nil
+	}
+	now := time.Now()
+	t.RevokedAt = &now
+	return 1, nil
+}
+
+func (f *fakeStore) RevokeAllUserRefreshTokens(_ context.Context, userID uuid.UUID) error {
+	now := time.Now()
+	for _, t := range f.tokens {
+		if t.UserID == userID && t.RevokedAt == nil {
+			t.RevokedAt = &now
+		}
+	}
+	return nil
+}
 
 func (f *fakeStore) CreateUser(_ context.Context, a db.CreateUserParams) (db.User, error) {
 	key := lower(a.Email)
@@ -42,6 +73,9 @@ func (f *fakeStore) GetUserByEmail(_ context.Context, email string) (db.User, er
 
 func (f *fakeStore) CreateRefreshToken(_ context.Context, a db.CreateRefreshTokenParams) error {
 	f.refresh = append(f.refresh, a)
+	f.tokens[a.TokenHash] = &db.RefreshToken{
+		ID: uuid.New(), UserID: a.UserID, TokenHash: a.TokenHash, UserAgent: a.UserAgent, ExpiresAt: a.ExpiresAt,
+	}
 	return nil
 }
 
@@ -135,5 +169,98 @@ func TestLogin_UnknownEmail_ReturnsSameError(t *testing.T) {
 	_, err := svc.Login(context.Background(), "nobody@x.io", "password123", "")
 	if !errors.Is(err, auth.ErrInvalidCredentials) {
 		t.Fatalf("err = %v, want ErrInvalidCredentials (no user enumeration)", err)
+	}
+}
+
+func loggedIn(t *testing.T, svc *auth.Service) auth.Result {
+	t.Helper()
+	if _, err := svc.Register(context.Background(), "a@x.io", "password123", "Ann", ""); err != nil {
+		t.Fatal(err)
+	}
+	res, err := svc.Login(context.Background(), "a@x.io", "password123", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
+}
+
+func TestRefresh_Rotates_OldTokenRejected(t *testing.T) {
+	svc := newService(newFakeStore())
+	first := loggedIn(t, svc)
+
+	next, err := svc.Refresh(context.Background(), first.RefreshToken, "ua")
+	if err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if next.RefreshToken == first.RefreshToken || next.AccessToken == "" {
+		t.Error("refresh must issue a new pair")
+	}
+	if id, err := auth.ParseAccessToken(secret, next.AccessToken, time.Now()); err != nil || id != first.User.ID {
+		t.Errorf("new access token is for %v (err %v), want %v", id, err, first.User.ID)
+	}
+
+	if _, err := svc.Refresh(context.Background(), next.RefreshToken, ""); err != nil {
+		t.Errorf("new token must be usable: %v", err)
+	}
+	if _, err := svc.Refresh(context.Background(), first.RefreshToken, ""); !errors.Is(err, auth.ErrInvalidToken) {
+		t.Fatalf("old token: err = %v, want ErrInvalidToken", err)
+	}
+}
+
+func TestRefresh_ReuseOfRotatedToken_RevokesWholeSession(t *testing.T) {
+	svc := newService(newFakeStore())
+	first := loggedIn(t, svc)
+	next, _ := svc.Refresh(context.Background(), first.RefreshToken, "")
+
+	// Кто-то предъявляет уже использованный токен: считаем его украденным.
+	_, _ = svc.Refresh(context.Background(), first.RefreshToken, "")
+
+	if _, err := svc.Refresh(context.Background(), next.RefreshToken, ""); !errors.Is(err, auth.ErrInvalidToken) {
+		t.Fatalf("legitimate newer token must also be revoked, err = %v", err)
+	}
+}
+
+func TestRefresh_UnknownToken_ReturnsErrInvalidToken(t *testing.T) {
+	svc := newService(newFakeStore())
+
+	for _, tok := range []string{"", "garbage", "AAAA"} {
+		if _, err := svc.Refresh(context.Background(), tok, ""); !errors.Is(err, auth.ErrInvalidToken) {
+			t.Errorf("token %q: err = %v, want ErrInvalidToken", tok, err)
+		}
+	}
+}
+
+func TestRefresh_Expired_ReturnsErrInvalidToken(t *testing.T) {
+	store := newFakeStore()
+	now := time.Now()
+	svc := auth.NewService(store, secret, auth.WithBcryptCost(bcrypt.MinCost), auth.WithClock(func() time.Time { return now }))
+	res := loggedIn(t, svc)
+
+	now = now.Add(auth.RefreshTokenTTL + time.Minute)
+
+	if _, err := svc.Refresh(context.Background(), res.RefreshToken, ""); !errors.Is(err, auth.ErrInvalidToken) {
+		t.Fatalf("err = %v, want ErrInvalidToken", err)
+	}
+}
+
+func TestLogout_RevokesToken(t *testing.T) {
+	svc := newService(newFakeStore())
+	res := loggedIn(t, svc)
+
+	if err := svc.Logout(context.Background(), res.RefreshToken); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Refresh(context.Background(), res.RefreshToken, ""); !errors.Is(err, auth.ErrInvalidToken) {
+		t.Fatalf("after logout: err = %v, want ErrInvalidToken", err)
+	}
+}
+
+func TestLogout_UnknownOrEmptyToken_IsNoError(t *testing.T) {
+	svc := newService(newFakeStore())
+
+	for _, tok := range []string{"", "never-issued"} {
+		if err := svc.Logout(context.Background(), tok); err != nil {
+			t.Errorf("token %q: %v", tok, err)
+		}
 	}
 }

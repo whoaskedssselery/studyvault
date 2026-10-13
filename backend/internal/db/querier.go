@@ -6,12 +6,19 @@ package db
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 type Querier interface {
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, lower string) (User, error)
+	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
+	// Возвращает число изменённых строк: 0 значит, что токен уже отозван (или его нет).
+	// Это делает ротацию атомарной: из двух параллельных запросов выиграет только один.
+	RevokeRefreshToken(ctx context.Context, tokenHash string) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

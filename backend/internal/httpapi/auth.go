@@ -73,16 +73,67 @@ func (a *api) Login(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *api) respondWithSession(w http.ResponseWriter, status int, res auth.Result) {
+func (a *api) Refresh(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(refreshCookieName)
+	if err != nil || cookie.Value == "" {
+		writeError(w, http.StatusUnauthorized, "invalid_token", "refresh token is missing")
+		return
+	}
+
+	tokens, err := a.Auth.Refresh(r.Context(), cookie.Value, userAgent(r))
+	switch {
+	case errors.Is(err, auth.ErrInvalidToken):
+		a.clearRefreshCookie(w)
+		writeError(w, http.StatusUnauthorized, "invalid_token", "refresh token is invalid or expired")
+	case err != nil:
+		slog.Error("refresh", "err", err)
+		internalError(w)
+	default:
+		a.setRefreshCookie(w, tokens.RefreshToken)
+		writeJSON(w, http.StatusOK, TokenResponse{
+			AccessToken: tokens.AccessToken,
+			ExpiresIn:   int(auth.AccessTokenTTL.Seconds()),
+		})
+	}
+}
+
+func (a *api) Logout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(refreshCookieName); err == nil {
+		if err := a.Auth.Logout(r.Context(), cookie.Value); err != nil {
+			slog.Error("logout", "err", err)
+			internalError(w)
+			return
+		}
+	}
+	a.clearRefreshCookie(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *api) setRefreshCookie(w http.ResponseWriter, value string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     refreshCookieName,
-		Value:    res.RefreshToken,
+		Value:    value,
 		Path:     refreshCookiePath,
 		MaxAge:   int(auth.RefreshTokenTTL.Seconds()),
 		HttpOnly: true,
 		Secure:   a.CookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+func (a *api) clearRefreshCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     refreshCookieName,
+		Path:     refreshCookiePath,
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   a.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func (a *api) respondWithSession(w http.ResponseWriter, status int, res auth.Result) {
+	a.setRefreshCookie(w, res.RefreshToken)
 	writeJSON(w, status, AuthResponse{
 		AccessToken: res.AccessToken,
 		ExpiresIn:   int(auth.AccessTokenTTL.Seconds()),

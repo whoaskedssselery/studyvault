@@ -20,9 +20,25 @@ import (
 var testSecret = []byte("test-secret-test-secret-test-secret")
 
 type fakeAuth struct {
-	registerErr, loginErr error
-	calls                 int
-	lastEmail, lastUA     string
+	registerErr, loginErr, refreshErr, logoutErr error
+	calls                                        int
+	lastEmail, lastUA                            string
+	lastRefreshToken, lastLogoutToken            string
+}
+
+func (f *fakeAuth) Refresh(_ context.Context, raw, ua string) (auth.Tokens, error) {
+	f.calls++
+	f.lastRefreshToken, f.lastUA = raw, ua
+	if f.refreshErr != nil {
+		return auth.Tokens{}, f.refreshErr
+	}
+	return auth.Tokens{AccessToken: "new.access.token", RefreshToken: "new-raw-refresh"}, nil
+}
+
+func (f *fakeAuth) Logout(_ context.Context, raw string) error {
+	f.calls++
+	f.lastLogoutToken = raw
+	return f.logoutErr
 }
 
 func (f *fakeAuth) result() auth.Result {
@@ -263,5 +279,120 @@ func TestPublicRoutes_NeedNoToken(t *testing.T) {
 	}
 	if rec := post(t, h, "/auth/login", `{"email":"a@x.io","password":"x"}`); rec.Code == http.StatusUnauthorized {
 		t.Error("/auth/login must not require a token")
+	}
+}
+
+func postWithCookie(h http.Handler, path, cookieValue string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, path, nil)
+	req.Header.Set("User-Agent", "test-agent")
+	if cookieValue != "" {
+		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: cookieValue})
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+func refreshCookie(rec *httptest.ResponseRecorder) *http.Cookie {
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "refresh_token" {
+			return c
+		}
+	}
+	return nil
+}
+
+func TestRefresh_OK_RotatesCookieAndReturnsAccessToken(t *testing.T) {
+	f := &fakeAuth{}
+	rec := postWithCookie(newHandler(f), "/auth/refresh", "old-refresh")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
+	}
+	if f.lastRefreshToken != "old-refresh" || f.lastUA != "test-agent" {
+		t.Errorf("service got token %q, ua %q", f.lastRefreshToken, f.lastUA)
+	}
+	var body struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	if body.AccessToken != "new.access.token" || body.ExpiresIn != 900 {
+		t.Errorf("unexpected body: %s", rec.Body)
+	}
+	if strings.Contains(rec.Body.String(), "new-raw-refresh") {
+		t.Error("refresh token must travel only in the cookie")
+	}
+	c := refreshCookie(rec)
+	if c == nil || c.Value != "new-raw-refresh" || !c.HttpOnly || c.Path != "/auth" {
+		t.Errorf("bad rotated cookie: %+v", c)
+	}
+}
+
+func TestRefresh_NoCookie_Returns401(t *testing.T) {
+	f := &fakeAuth{}
+	rec := postWithCookie(newHandler(f), "/auth/refresh", "")
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+	if errorCode(t, rec) != "invalid_token" {
+		t.Errorf("code = %q", errorCode(t, rec))
+	}
+	if f.calls != 0 {
+		t.Error("service must not be called without a cookie")
+	}
+}
+
+func TestRefresh_InvalidToken_Returns401AndClearsCookie(t *testing.T) {
+	rec := postWithCookie(newHandler(&fakeAuth{refreshErr: auth.ErrInvalidToken}), "/auth/refresh", "stolen")
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+	if c := refreshCookie(rec); c == nil || c.MaxAge >= 0 || c.Value != "" {
+		t.Errorf("cookie must be cleared, got %+v", c)
+	}
+}
+
+func TestRefresh_ServiceError_Returns500KeepsCookie(t *testing.T) {
+	rec := postWithCookie(newHandler(&fakeAuth{refreshErr: errors.New("db down")}), "/auth/refresh", "tok")
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	if refreshCookie(rec) != nil {
+		t.Error("a transient failure must not clear the client's session")
+	}
+}
+
+func TestLogout_RevokesAndClearsCookie(t *testing.T) {
+	f := &fakeAuth{}
+	rec := postWithCookie(newHandler(f), "/auth/logout", "tok")
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+	if f.lastLogoutToken != "tok" {
+		t.Errorf("service got %q", f.lastLogoutToken)
+	}
+	if c := refreshCookie(rec); c == nil || c.MaxAge >= 0 || c.Path != "/auth" {
+		t.Errorf("cookie must be cleared on the same path, got %+v", c)
+	}
+}
+
+func TestLogout_NoCookie_Returns204(t *testing.T) {
+	rec := postWithCookie(newHandler(&fakeAuth{}), "/auth/logout", "")
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+}
+
+func TestLogout_ServiceError_Returns500(t *testing.T) {
+	rec := postWithCookie(newHandler(&fakeAuth{logoutErr: errors.New("db down")}), "/auth/logout", "tok")
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
 	}
 }

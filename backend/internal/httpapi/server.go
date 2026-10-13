@@ -23,6 +23,8 @@ type Pinger interface {
 type Authenticator interface {
 	Register(ctx context.Context, email, password, displayName, userAgent string) (auth.Result, error)
 	Login(ctx context.Context, email, password, userAgent string) (auth.Result, error)
+	Refresh(ctx context.Context, rawToken, userAgent string) (auth.Tokens, error)
+	Logout(ctx context.Context, rawToken string) error
 }
 
 type Deps struct {

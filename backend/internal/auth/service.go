@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -18,6 +19,7 @@ import (
 var (
 	ErrEmailTaken         = errors.New("email already registered")
 	ErrInvalidCredentials = errors.New("invalid email or password")
+	ErrInvalidToken       = errors.New("invalid or expired refresh token")
 )
 
 const pgUniqueViolation = "23505"
@@ -26,6 +28,15 @@ type Store interface {
 	CreateUser(ctx context.Context, arg db.CreateUserParams) (db.User, error)
 	GetUserByEmail(ctx context.Context, email string) (db.User, error)
 	CreateRefreshToken(ctx context.Context, arg db.CreateRefreshTokenParams) error
+	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (db.RefreshToken, error)
+	RevokeRefreshToken(ctx context.Context, tokenHash string) (int64, error)
+	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
+}
+
+// Tokens — пара токенов, которую получает клиент.
+type Tokens struct {
+	AccessToken  string
+	RefreshToken string
 }
 
 type Result struct {
@@ -45,6 +56,8 @@ type Service struct {
 type Option func(*Service)
 
 func WithBcryptCost(cost int) Option { return func(s *Service) { s.cost = cost } }
+
+func WithClock(now func() time.Time) Option { return func(s *Service) { s.now = now } }
 
 func NewService(store Store, secret []byte, opts ...Option) *Service {
 	s := &Service{store: store, secret: secret, cost: 12, now: time.Now}
@@ -72,7 +85,7 @@ func (s *Service) Register(ctx context.Context, email, password, displayName, us
 		}
 		return Result{}, fmt.Errorf("create user: %w", err)
 	}
-	return s.issue(ctx, user, userAgent)
+	return s.startSession(ctx, user, userAgent)
 }
 
 func (s *Service) Login(ctx context.Context, email, password, userAgent string) (Result, error) {
@@ -87,29 +100,85 @@ func (s *Service) Login(ctx context.Context, email, password, userAgent string) 
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
 		return Result{}, ErrInvalidCredentials
 	}
-	return s.issue(ctx, user, userAgent)
+	return s.startSession(ctx, user, userAgent)
 }
 
-func (s *Service) issue(ctx context.Context, user db.User, userAgent string) (Result, error) {
-	now := s.now()
-	access, err := NewAccessToken(s.secret, user.ID, now)
+// Refresh меняет действующий refresh-токен на новую пару (ротация).
+// Предъявление уже использованного токена считается кражей: отзываются все токены пользователя.
+func (s *Service) Refresh(ctx context.Context, rawToken, userAgent string) (Tokens, error) {
+	if rawToken == "" {
+		return Tokens{}, ErrInvalidToken
+	}
+	hash := HashRefreshToken(rawToken)
+
+	stored, err := s.store.GetRefreshTokenByHash(ctx, hash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Tokens{}, ErrInvalidToken
+	}
 	if err != nil {
-		return Result{}, fmt.Errorf("sign access token: %w", err)
+		return Tokens{}, fmt.Errorf("get refresh token: %w", err)
+	}
+
+	if stored.RevokedAt != nil {
+		if err := s.store.RevokeAllUserRefreshTokens(ctx, stored.UserID); err != nil {
+			return Tokens{}, fmt.Errorf("revoke session after token reuse: %w", err)
+		}
+		return Tokens{}, ErrInvalidToken
+	}
+	if !stored.ExpiresAt.After(s.now()) {
+		return Tokens{}, ErrInvalidToken
+	}
+
+	// Из двух параллельных запросов с одним токеном отзовёт только один, второй получит 0 строк.
+	n, err := s.store.RevokeRefreshToken(ctx, hash)
+	if err != nil {
+		return Tokens{}, fmt.Errorf("revoke refresh token: %w", err)
+	}
+	if n == 0 {
+		return Tokens{}, ErrInvalidToken
+	}
+	return s.issue(ctx, stored.UserID, userAgent)
+}
+
+// Logout отзывает токен. Неизвестный или пустой токен не ошибка: результат тот же, клиент разлогинен.
+func (s *Service) Logout(ctx context.Context, rawToken string) error {
+	if rawToken == "" {
+		return nil
+	}
+	if _, err := s.store.RevokeRefreshToken(ctx, HashRefreshToken(rawToken)); err != nil {
+		return fmt.Errorf("revoke refresh token: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) startSession(ctx context.Context, user db.User, userAgent string) (Result, error) {
+	t, err := s.issue(ctx, user.ID, userAgent)
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{User: user, AccessToken: t.AccessToken, RefreshToken: t.RefreshToken}, nil
+}
+
+func (s *Service) issue(ctx context.Context, userID uuid.UUID, userAgent string) (Tokens, error) {
+	now := s.now()
+	access, err := NewAccessToken(s.secret, userID, now)
+	if err != nil {
+		return Tokens{}, fmt.Errorf("sign access token: %w", err)
 	}
 	raw, hash, err := NewRefreshToken()
 	if err != nil {
-		return Result{}, fmt.Errorf("generate refresh token: %w", err)
+		return Tokens{}, fmt.Errorf("generate refresh token: %w", err)
 	}
 	err = s.store.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
-		UserID:    user.ID,
+		UserID:    userID,
 		TokenHash: hash,
 		UserAgent: pgtype.Text{String: userAgent, Valid: userAgent != ""},
 		ExpiresAt: now.Add(RefreshTokenTTL),
 	})
 	if err != nil {
-		return Result{}, fmt.Errorf("store refresh token: %w", err)
+		return Tokens{}, fmt.Errorf("store refresh token: %w", err)
 	}
-	return Result{User: user, AccessToken: access, RefreshToken: raw}, nil
+	return Tokens{AccessToken: access, RefreshToken: raw}, nil
 }
 
 func normalizeEmail(email string) string {
