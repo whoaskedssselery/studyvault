@@ -37,7 +37,7 @@ docker compose --profile app up -d --build
 
 - **http://localhost:8080/docs** — Swagger UI: все эндпоинты, кнопка **Authorize** для токена,
   **Try it out** для запросов;
-- http://localhost:8080/health — проверка сервиса и базы;
+- http://localhost:8080/health — проверка сервиса и базы (то же по адресу `/v1/health`);
 - http://localhost:8080/openapi.yaml — контракт для генерации клиентов.
 
 Как попробовать в Swagger UI: `POST /auth/register` → скопировать `access_token` из ответа →
@@ -94,7 +94,9 @@ go run ./cmd/reindex                                                   # пер�
 
 ## API
 
-Все эндпоинты, кроме `/health`, `/docs` и `/auth/*`, требуют заголовок `Authorization: Bearer <access_token>`.
+Все эндпоинты живут под префиксом версии **`/v1`** (например, `POST /v1/auth/login`); в таблице ниже и в Swagger UI
+пути даны без него. Вне версии остаются только `/docs`, `/openapi.yaml` и проба живости `/health` (она же `/v1/health`).
+Все эндпоинты, кроме `/health` и `/auth/*`, требуют заголовок `Authorization: Bearer <access_token>`.
 Подробности, схемы и примеры смотрите в Swagger UI. Там же описаны каталог кодов ошибок, лимиты,
 пагинация и политика версий.
 

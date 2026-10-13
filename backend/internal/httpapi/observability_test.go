@@ -43,14 +43,14 @@ func logLines(t *testing.T, buf *bytes.Buffer) []map[string]any {
 func observed(h http.HandlerFunc) http.Handler {
 	r := chi.NewRouter()
 	r.Use(requestID, accessLog, recoverer)
-	r.Get("/notes/{id}", h)
-	r.Get("/health", h)
+	r.Get("/v1/notes/{id}", h)
+	r.Get("/v1/health", h)
 	return r
 }
 
 func TestRequestID_GeneratedWhenAbsent(t *testing.T) {
 	rec := httptest.NewRecorder()
-	observed(func(http.ResponseWriter, *http.Request) {}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/notes/1", nil))
+	observed(func(http.ResponseWriter, *http.Request) {}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/notes/1", nil))
 
 	if id := rec.Header().Get("X-Request-ID"); !validRequestID.MatchString(id) {
 		t.Errorf("X-Request-ID = %q, want a generated id", id)
@@ -58,7 +58,7 @@ func TestRequestID_GeneratedWhenAbsent(t *testing.T) {
 }
 
 func TestRequestID_ClientValueIsKept(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/notes/1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/notes/1", nil)
 	req.Header.Set("X-Request-ID", "trace-abc.123")
 	rec := httptest.NewRecorder()
 	observed(func(http.ResponseWriter, *http.Request) {}).ServeHTTP(rec, req)
@@ -70,7 +70,7 @@ func TestRequestID_ClientValueIsKept(t *testing.T) {
 
 func TestRequestID_UnsafeClientValueIsReplaced(t *testing.T) {
 	for _, bad := range []string{"has space", "semi;colon", strings.Repeat("a", 65), "кириллица", `quote"`} {
-		req := httptest.NewRequest(http.MethodGet, "/notes/1", nil)
+		req := httptest.NewRequest(http.MethodGet, "/v1/notes/1", nil)
 		req.Header.Set("X-Request-ID", bad)
 		rec := httptest.NewRecorder()
 		observed(func(http.ResponseWriter, *http.Request) {}).ServeHTTP(rec, req)
@@ -84,7 +84,7 @@ func TestRequestID_UnsafeClientValueIsReplaced(t *testing.T) {
 
 func TestAccessLog_RecordsRouteStatusAndRequestID(t *testing.T) {
 	buf := captureLogs(t)
-	req := httptest.NewRequest(http.MethodGet, "/notes/8f1c1e0a-0000-0000-0000-000000000000?q=secret+words", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/notes/8f1c1e0a-0000-0000-0000-000000000000?q=secret+words", nil)
 	req.Header.Set("X-Request-ID", "req-1")
 	req.Header.Set("Authorization", "Bearer super-secret-token")
 	observed(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) }).ServeHTTP(httptest.NewRecorder(), req)
@@ -94,7 +94,7 @@ func TestAccessLog_RecordsRouteStatusAndRequestID(t *testing.T) {
 		t.Fatalf("got %d log lines, want 1: %s", len(lines), buf)
 	}
 	l := lines[0]
-	if l["route"] != "/notes/{id}" || l["status"] != float64(http.StatusTeapot) || l["method"] != "GET" || l["request_id"] != "req-1" {
+	if l["route"] != "/v1/notes/{id}" || l["status"] != float64(http.StatusTeapot) || l["method"] != "GET" || l["request_id"] != "req-1" {
 		t.Errorf("unexpected record: %v", l)
 	}
 	// Ни query string, ни заголовки, ни конкретный id заметки в лог не попадают.
@@ -108,9 +108,9 @@ func TestAccessLog_RecordsRouteStatusAndRequestID(t *testing.T) {
 func TestAccessLog_ServerErrorsAreErrorLevel_HealthIsDebug(t *testing.T) {
 	buf := captureLogs(t)
 	observed(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) }).
-		ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/notes/1", nil))
+		ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/notes/1", nil))
 	observed(func(http.ResponseWriter, *http.Request) {}).
-		ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health", nil))
+		ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/health", nil))
 
 	lines := logLines(t, buf)
 	if len(lines) != 2 || lines[0]["level"] != "ERROR" || lines[1]["level"] != "DEBUG" {
@@ -133,7 +133,7 @@ func TestRecoverer_PanicBecomesJSON500WithRequestID(t *testing.T) {
 	buf := captureLogs(t)
 	rec := httptest.NewRecorder()
 	observed(func(http.ResponseWriter, *http.Request) { panic("boom") }).
-		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/notes/1", nil))
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/notes/1", nil))
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d", rec.Code)
@@ -176,7 +176,7 @@ func TestRecoverer_AbortHandlerIsRethrown(t *testing.T) {
 func TestErrorLogsInHandlersCarryTheRequestID(t *testing.T) {
 	buf := captureLogs(t)
 	h := NewHandler(Deps{DB: failingPinger{}, JWTSecret: []byte("test-secret-test-secret-test-secret")})
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
 	req.Header.Set("X-Request-ID", "req-health")
 	h.ServeHTTP(httptest.NewRecorder(), req)
 

@@ -12,10 +12,12 @@ trap 'rm -rf "$tmp"' EXIT
 step() { printf '\n== %s\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
-# call МЕТОД ПУТЬ [ТЕЛО] -> тело ответа в $tmp/body, код в $code, остальные аргументы curl берутся из $extra
+# call МЕТОД ПУТЬ [ТЕЛО]: путь дан относительно /v1. Тело ответа в $tmp/body, код в $code
 call() {
   local method="$1" path="$2" body="${3:-}"
-  local args=(-sS -o "$tmp/body" -D "$tmp/headers" -w '%{http_code}' -X "$method" "$base$path")
+  local url="$base/v1$path"
+  case "$path" in /docs|/openapi.yaml) url="$base$path" ;; esac   # документация живёт вне версии API
+  local args=(-sS -o "$tmp/body" -D "$tmp/headers" -w '%{http_code}' -X "$method" "$url")
   [ -n "${token:-}" ] && args+=(-H "Authorization: Bearer $token")
   [ -n "$body" ] && args+=(-H 'Content-Type: application/json' --data "$body")
   code="$(curl "${args[@]}")"
@@ -30,6 +32,11 @@ step "service is alive"
 call GET /health;                 expect 200 "GET /health"
 grep -q '"ok"' "$tmp/body" || fail "health body: $(cat "$tmp/body")"
 grep -qi '^x-request-id: ' "$tmp/headers" || fail "responses must carry X-Request-ID"
+
+step "versioning"
+[ "$(curl -sS -o /dev/null -w '%{http_code}' "$base/health")" = "200" ] || fail "the unversioned liveness probe /health must answer 200"
+[ "$(curl -sS -o /dev/null -w '%{http_code}' "$base/subjects")" = "404" ] || fail "paths without /v1 must not exist"
+echo "ok  /health answers, unprefixed API paths are gone"
 
 step "documentation is served"
 call GET /docs;                   expect 200 "GET /docs"

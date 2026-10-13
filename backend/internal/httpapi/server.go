@@ -13,6 +13,9 @@ import (
 	"github.com/whoaskedssselery/studyvault/backend/internal/config"
 )
 
+// apiPrefix — версия API в пути. Несовместимые изменения выйдут под /v2, не ломая этих путей.
+const apiPrefix = "/v1"
+
 // Pinger is satisfied by *pgxpool.Pool.
 type Pinger interface {
 	Ping(ctx context.Context) error
@@ -69,9 +72,12 @@ func NewHandler(deps Deps) http.Handler {
 	// Документация вне сгенерированных маршрутов, поэтому authMiddleware её не касается.
 	r.Get("/docs", serveDocs)
 	r.Get("/openapi.yaml", serveSpec)
+	// Проба живости для оркестратора и прокси не привязана к версии API; тот же обработчик есть и в /v1/health.
+	r.Get("/health", (&api{Deps: deps}).GetHealth)
 
 	return HandlerWithOptions(&api{Deps: deps}, ChiServerOptions{
 		BaseRouter:  r,
+		BaseURL:     apiPrefix,
 		Middlewares: []MiddlewareFunc{authMiddleware(deps.JWTSecret)},
 		ErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
 			badRequest(w, err.Error())

@@ -113,7 +113,7 @@ func decode(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 
 func TestCreateNote_OK_Returns201(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{note: note.Note{Summary: note.Summary{Tags: []note.Tag{}, CreatedAt: time.Now(), UpdatedAt: time.Now()}}})
-	rec := e.do(http.MethodPost, "/notes", `{"title":"  My note ","content":`+validDoc+`}`)
+	rec := e.do(http.MethodPost, "/v1/notes", `{"title":"  My note ","content":`+validDoc+`}`)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -149,7 +149,7 @@ func TestCreateNote_WithSubjectAndPin(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{})
 	sid := uuid.New()
 
-	rec := e.do(http.MethodPost, "/notes", `{"title":"n","content":`+validDoc+`,"subject_id":"`+sid.String()+`","is_pinned":true}`)
+	rec := e.do(http.MethodPost, "/v1/notes", `{"title":"n","content":`+validDoc+`,"subject_id":"`+sid.String()+`","is_pinned":true}`)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -164,7 +164,7 @@ func TestCreateNote_WithSubjectAndPin(t *testing.T) {
 
 func TestCreateNote_NullSubject_IsAccepted(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{})
-	rec := e.do(http.MethodPost, "/notes", `{"title":"n","content":`+validDoc+`,"subject_id":null}`)
+	rec := e.do(http.MethodPost, "/v1/notes", `{"title":"n","content":`+validDoc+`,"subject_id":null}`)
 
 	if rec.Code != http.StatusCreated || e.f.gotInput.SubjectID != nil {
 		t.Fatalf("status = %d, subject = %v", rec.Code, e.f.gotInput.SubjectID)
@@ -191,7 +191,7 @@ func TestCreateNote_Invalid_Returns400AndSkipsService(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			e := newNotesEnv(&fakeNotes{})
-			rec := e.do(http.MethodPost, "/notes", body)
+			rec := e.do(http.MethodPost, "/v1/notes", body)
 
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400 (%s)", rec.Code, rec.Body)
@@ -208,7 +208,7 @@ func TestCreateNote_Invalid_Returns400AndSkipsService(t *testing.T) {
 
 func TestCreateNote_Title300Runes_IsAllowed(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{})
-	rec := e.do(http.MethodPost, "/notes", `{"title":"`+strings.Repeat("я", 300)+`","content":`+validDoc+`}`)
+	rec := e.do(http.MethodPost, "/v1/notes", `{"title":"`+strings.Repeat("я", 300)+`","content":`+validDoc+`}`)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("300 runes (600 bytes) must pass, status = %d", rec.Code)
@@ -217,7 +217,7 @@ func TestCreateNote_Title300Runes_IsAllowed(t *testing.T) {
 
 func TestCreateNote_EmptyDocument_IsAllowed(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{})
-	rec := e.do(http.MethodPost, "/notes", `{"title":"n","content":{"type":"doc"}}`)
+	rec := e.do(http.MethodPost, "/v1/notes", `{"title":"n","content":{"type":"doc"}}`)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("an empty doc is a valid new note, status = %d", rec.Code)
@@ -229,8 +229,8 @@ func TestNoteWrites_UnknownSubject_Returns400(t *testing.T) {
 	id := uuid.NewString()
 
 	for _, c := range []struct{ method, path, body string }{
-		{http.MethodPost, "/notes", `{"title":"n","content":` + validDoc + `,"subject_id":"` + uuid.NewString() + `"}`},
-		{http.MethodPatch, "/notes/" + id, `{"subject_id":"` + uuid.NewString() + `"}`},
+		{http.MethodPost, "/v1/notes", `{"title":"n","content":` + validDoc + `,"subject_id":"` + uuid.NewString() + `"}`},
+		{http.MethodPatch, "/v1/notes/" + id, `{"subject_id":"` + uuid.NewString() + `"}`},
 	} {
 		rec := e.do(c.method, c.path, c.body)
 		if rec.Code != http.StatusBadRequest {
@@ -245,7 +245,7 @@ func TestNoteWrites_UnknownSubject_Returns400(t *testing.T) {
 func TestGetNote_OK(t *testing.T) {
 	n := sampleNote()
 	e := newNotesEnv(&fakeNotes{note: n})
-	rec := e.do(http.MethodGet, "/notes/"+n.ID.String(), "")
+	rec := e.do(http.MethodGet, "/v1/notes/"+n.ID.String(), "")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -272,7 +272,7 @@ func TestNoteByID_NotFound_Returns404(t *testing.T) {
 		{http.MethodPatch, `{"title":"x"}`},
 		{http.MethodDelete, ``},
 	} {
-		rec := e.do(c.method, "/notes/"+id, c.body)
+		rec := e.do(c.method, "/v1/notes/"+id, c.body)
 		if rec.Code != http.StatusNotFound || errorCode(t, rec) != "not_found" {
 			t.Errorf("%s: status = %d, body = %s", c.method, rec.Code, rec.Body)
 		}
@@ -283,7 +283,7 @@ func TestNoteByID_InvalidUUID_Returns400(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{})
 
 	for _, method := range []string{http.MethodGet, http.MethodPatch, http.MethodDelete} {
-		if rec := e.do(method, "/notes/not-a-uuid", `{"title":"x"}`); rec.Code != http.StatusBadRequest {
+		if rec := e.do(method, "/v1/notes/not-a-uuid", `{"title":"x"}`); rec.Code != http.StatusBadRequest {
 			t.Errorf("%s: status = %d, want 400", method, rec.Code)
 		}
 	}
@@ -297,7 +297,7 @@ func TestUpdateNote_PassesThreeStatesOfSubject(t *testing.T) {
 
 	t.Run("null clears", func(t *testing.T) {
 		e := newNotesEnv(&fakeNotes{note: sampleNote()})
-		rec := e.do(http.MethodPatch, "/notes/"+id.String(), `{"subject_id":null}`)
+		rec := e.do(http.MethodPatch, "/v1/notes/"+id.String(), `{"subject_id":null}`)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
 		}
@@ -307,14 +307,14 @@ func TestUpdateNote_PassesThreeStatesOfSubject(t *testing.T) {
 	})
 	t.Run("value sets", func(t *testing.T) {
 		e := newNotesEnv(&fakeNotes{note: sampleNote()})
-		e.do(http.MethodPatch, "/notes/"+id.String(), `{"subject_id":"`+sid.String()+`"}`)
+		e.do(http.MethodPatch, "/v1/notes/"+id.String(), `{"subject_id":"`+sid.String()+`"}`)
 		if p := e.f.gotPatch; !p.SetSubject || p.SubjectID == nil || *p.SubjectID != sid {
 			t.Errorf("value must be set: %+v", p)
 		}
 	})
 	t.Run("absent keeps", func(t *testing.T) {
 		e := newNotesEnv(&fakeNotes{note: sampleNote()})
-		e.do(http.MethodPatch, "/notes/"+id.String(), `{"title":"only title"}`)
+		e.do(http.MethodPatch, "/v1/notes/"+id.String(), `{"title":"only title"}`)
 		p := e.f.gotPatch
 		if p.SetSubject || p.Content != nil || p.IsPinned != nil || p.Title == nil || *p.Title != "only title" {
 			t.Errorf("untouched fields must stay untouched: %+v", p)
@@ -327,7 +327,7 @@ func TestUpdateNote_PassesThreeStatesOfSubject(t *testing.T) {
 
 func TestUpdateNote_ContentAndPin(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{note: sampleNote()})
-	e.do(http.MethodPatch, "/notes/"+uuid.NewString(), `{"content":`+validDoc+`,"is_pinned":false}`)
+	e.do(http.MethodPatch, "/v1/notes/"+uuid.NewString(), `{"content":`+validDoc+`,"is_pinned":false}`)
 
 	p := e.f.gotPatch
 	var stored map[string]any
@@ -351,7 +351,7 @@ func TestUpdateNote_Invalid_Returns400(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			e := newNotesEnv(&fakeNotes{})
-			rec := e.do(http.MethodPatch, "/notes/"+uuid.NewString(), body)
+			rec := e.do(http.MethodPatch, "/v1/notes/"+uuid.NewString(), body)
 
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400 (%s)", rec.Code, rec.Body)
@@ -366,7 +366,7 @@ func TestUpdateNote_Invalid_Returns400(t *testing.T) {
 func TestDeleteNote_OK_Returns204(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{})
 	id := uuid.New()
-	rec := e.do(http.MethodDelete, "/notes/"+id.String(), "")
+	rec := e.do(http.MethodDelete, "/v1/notes/"+id.String(), "")
 
 	if rec.Code != http.StatusNoContent || rec.Body.Len() != 0 {
 		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body)
@@ -378,7 +378,7 @@ func TestDeleteNote_OK_Returns204(t *testing.T) {
 
 func TestListNotes_Empty_ReturnsEmptyItemsAndNullCursor(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{})
-	rec := e.do(http.MethodGet, "/notes", "")
+	rec := e.do(http.MethodGet, "/v1/notes", "")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
@@ -399,7 +399,7 @@ func TestListNotes_Empty_ReturnsEmptyItemsAndNullCursor(t *testing.T) {
 func TestListNotes_ReturnsSummariesWithoutContent(t *testing.T) {
 	n := sampleNote()
 	e := newNotesEnv(&fakeNotes{page: note.Page{Items: []note.Summary{n.Summary}, NextCursor: "next-page"}})
-	rec := e.do(http.MethodGet, "/notes", "")
+	rec := e.do(http.MethodGet, "/v1/notes", "")
 
 	body := decode(t, rec)
 	if body["next_cursor"] != "next-page" {
@@ -420,7 +420,7 @@ func TestListNotes_ReturnsSummariesWithoutContent(t *testing.T) {
 func TestListNotes_ParsesFilters(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{})
 	sid := uuid.New()
-	rec := e.do(http.MethodGet, "/notes?subject_id="+sid.String()+"&tag=exam&pinned=true&limit=5&cursor=abc", "")
+	rec := e.do(http.MethodGet, "/v1/notes?subject_id="+sid.String()+"&tag=exam&pinned=true&limit=5&cursor=abc", "")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -437,7 +437,7 @@ func TestListNotes_ParsesFilters(t *testing.T) {
 
 func TestListNotes_PinnedFalse_IsPassedAsFalse(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{})
-	e.do(http.MethodGet, "/notes?pinned=false", "")
+	e.do(http.MethodGet, "/v1/notes?pinned=false", "")
 
 	if p := e.f.gotList.Pinned; p == nil || *p {
 		t.Errorf("pinned=false must filter unpinned notes, got %v", p)
@@ -448,7 +448,7 @@ func TestListNotes_BadParams_Return400(t *testing.T) {
 	for _, q := range []string{"limit=0", "limit=101", "limit=-1", "limit=abc", "subject_id=nope", "pinned=maybe", "tag="} {
 		t.Run(q, func(t *testing.T) {
 			e := newNotesEnv(&fakeNotes{})
-			rec := e.do(http.MethodGet, "/notes?"+q, "")
+			rec := e.do(http.MethodGet, "/v1/notes?"+q, "")
 
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400", rec.Code)
@@ -463,7 +463,7 @@ func TestListNotes_BadParams_Return400(t *testing.T) {
 func TestListNotes_LimitBounds_AreAccepted(t *testing.T) {
 	for _, q := range []string{"limit=1", "limit=100"} {
 		e := newNotesEnv(&fakeNotes{})
-		if rec := e.do(http.MethodGet, "/notes?"+q, ""); rec.Code != http.StatusOK {
+		if rec := e.do(http.MethodGet, "/v1/notes?"+q, ""); rec.Code != http.StatusOK {
 			t.Errorf("%s: status = %d, want 200", q, rec.Code)
 		}
 	}
@@ -471,7 +471,7 @@ func TestListNotes_LimitBounds_AreAccepted(t *testing.T) {
 
 func TestListNotes_InvalidCursor_Returns400(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{err: note.ErrInvalidCursor})
-	rec := e.do(http.MethodGet, "/notes?cursor=garbage", "")
+	rec := e.do(http.MethodGet, "/v1/notes?cursor=garbage", "")
 
 	if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "validation_failed" {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -482,11 +482,11 @@ func TestNotes_ServiceError_Returns500WithoutLeak(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{err: errors.New("pq: secret internal detail")})
 
 	for _, c := range []struct{ method, path, body string }{
-		{http.MethodGet, "/notes", ""},
-		{http.MethodPost, "/notes", `{"title":"n","content":` + validDoc + `}`},
-		{http.MethodGet, "/notes/" + uuid.NewString(), ""},
-		{http.MethodPatch, "/notes/" + uuid.NewString(), `{"title":"A"}`},
-		{http.MethodDelete, "/notes/" + uuid.NewString(), ""},
+		{http.MethodGet, "/v1/notes", ""},
+		{http.MethodPost, "/v1/notes", `{"title":"n","content":` + validDoc + `}`},
+		{http.MethodGet, "/v1/notes/" + uuid.NewString(), ""},
+		{http.MethodPatch, "/v1/notes/" + uuid.NewString(), `{"title":"A"}`},
+		{http.MethodDelete, "/v1/notes/" + uuid.NewString(), ""},
 	} {
 		rec := e.do(c.method, c.path, c.body)
 		if rec.Code != http.StatusInternalServerError {
@@ -503,11 +503,11 @@ func TestNotes_RequireAuth(t *testing.T) {
 	e.auth = ""
 
 	for _, c := range []struct{ method, path string }{
-		{http.MethodGet, "/notes"},
-		{http.MethodPost, "/notes"},
-		{http.MethodGet, "/notes/" + uuid.NewString()},
-		{http.MethodPatch, "/notes/" + uuid.NewString()},
-		{http.MethodDelete, "/notes/" + uuid.NewString()},
+		{http.MethodGet, "/v1/notes"},
+		{http.MethodPost, "/v1/notes"},
+		{http.MethodGet, "/v1/notes/" + uuid.NewString()},
+		{http.MethodPatch, "/v1/notes/" + uuid.NewString()},
+		{http.MethodDelete, "/v1/notes/" + uuid.NewString()},
 	} {
 		if rec := e.do(c.method, c.path, `{}`); rec.Code != http.StatusUnauthorized {
 			t.Errorf("%s %s: status = %d, want 401", c.method, c.path, rec.Code)

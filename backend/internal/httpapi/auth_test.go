@@ -106,7 +106,7 @@ const validRegister = `{"email":"a@x.io","password":"password123","display_name"
 
 func TestRegister_OK_Returns201AndSetsRefreshCookie(t *testing.T) {
 	f := &fakeAuth{}
-	rec := post(t, newHandler(f), "/auth/register", validRegister)
+	rec := post(t, newHandler(f), "/v1/auth/register", validRegister)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -136,7 +136,7 @@ func TestRegister_OK_Returns201AndSetsRefreshCookie(t *testing.T) {
 	if c == nil {
 		t.Fatal("refresh_token cookie is not set")
 	}
-	if c.Value != "raw-refresh-token" || !c.HttpOnly || c.Path != "/auth" || c.SameSite != http.SameSiteLaxMode {
+	if c.Value != "raw-refresh-token" || !c.HttpOnly || c.Path != "/v1/auth" || c.SameSite != http.SameSiteLaxMode {
 		t.Errorf("bad cookie: %+v", c)
 	}
 	if f.lastUA != "test-agent" {
@@ -145,7 +145,7 @@ func TestRegister_OK_Returns201AndSetsRefreshCookie(t *testing.T) {
 }
 
 func TestRegister_DuplicateEmail_Returns409(t *testing.T) {
-	rec := post(t, newHandler(&fakeAuth{registerErr: auth.ErrEmailTaken}), "/auth/register", validRegister)
+	rec := post(t, newHandler(&fakeAuth{registerErr: auth.ErrEmailTaken}), "/v1/auth/register", validRegister)
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", rec.Code)
@@ -169,7 +169,7 @@ func TestRegister_InvalidBody_Returns400AndSkipsService(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			f := &fakeAuth{}
-			rec := post(t, newHandler(f), "/auth/register", body)
+			rec := post(t, newHandler(f), "/v1/auth/register", body)
 
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400 (%s)", rec.Code, rec.Body)
@@ -186,7 +186,7 @@ func TestRegister_InvalidBody_Returns400AndSkipsService(t *testing.T) {
 
 func TestRegister_EmailWithDisplayName_IsReducedToBareAddress(t *testing.T) {
 	f := &fakeAuth{}
-	rec := post(t, newHandler(f), "/auth/register", `{"email":"Ann <a@x.io>","password":"password123","display_name":"Ann"}`)
+	rec := post(t, newHandler(f), "/v1/auth/register", `{"email":"Ann <a@x.io>","password":"password123","display_name":"Ann"}`)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", rec.Code)
@@ -197,7 +197,7 @@ func TestRegister_EmailWithDisplayName_IsReducedToBareAddress(t *testing.T) {
 }
 
 func TestRegister_ServiceError_Returns500WithoutLeak(t *testing.T) {
-	rec := post(t, newHandler(&fakeAuth{registerErr: errors.New("pq: secret internal detail")}), "/auth/register", validRegister)
+	rec := post(t, newHandler(&fakeAuth{registerErr: errors.New("pq: secret internal detail")}), "/v1/auth/register", validRegister)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
@@ -208,7 +208,7 @@ func TestRegister_ServiceError_Returns500WithoutLeak(t *testing.T) {
 }
 
 func TestLogin_OK_Returns200AndSetsCookie(t *testing.T) {
-	rec := post(t, newHandler(&fakeAuth{}), "/auth/login", `{"email":"a@x.io","password":"password123"}`)
+	rec := post(t, newHandler(&fakeAuth{}), "/v1/auth/login", `{"email":"a@x.io","password":"password123"}`)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -219,7 +219,7 @@ func TestLogin_OK_Returns200AndSetsCookie(t *testing.T) {
 }
 
 func TestLogin_WrongPassword_Returns401(t *testing.T) {
-	rec := post(t, newHandler(&fakeAuth{loginErr: auth.ErrInvalidCredentials}), "/auth/login", `{"email":"a@x.io","password":"nope"}`)
+	rec := post(t, newHandler(&fakeAuth{loginErr: auth.ErrInvalidCredentials}), "/v1/auth/login", `{"email":"a@x.io","password":"nope"}`)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
@@ -234,7 +234,7 @@ func TestLogin_WrongPassword_Returns401(t *testing.T) {
 
 func TestLogin_MissingFields_Returns400(t *testing.T) {
 	for _, body := range []string{`{}`, `{"email":"a@x.io"}`, `{"password":"x"}`} {
-		rec := post(t, newHandler(&fakeAuth{}), "/auth/login", body)
+		rec := post(t, newHandler(&fakeAuth{}), "/v1/auth/login", body)
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("body %s: status = %d, want 400", body, rec.Code)
 		}
@@ -260,7 +260,7 @@ func TestProtectedRoute_RequiresValidAccessToken(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			rec := get(h, "/subjects", c.header)
+			rec := get(h, "/v1/subjects", c.header)
 			if rec.Code != c.want {
 				t.Fatalf("status = %d, want %d", rec.Code, c.want)
 			}
@@ -274,11 +274,11 @@ func TestProtectedRoute_RequiresValidAccessToken(t *testing.T) {
 func TestPublicRoutes_NeedNoToken(t *testing.T) {
 	h := newHandler(&fakeAuth{})
 
-	if rec := get(h, "/health", ""); rec.Code != http.StatusOK {
-		t.Errorf("/health status = %d", rec.Code)
+	if rec := get(h, "/v1/health", ""); rec.Code != http.StatusOK {
+		t.Errorf("/v1/health status = %d", rec.Code)
 	}
-	if rec := post(t, h, "/auth/login", `{"email":"a@x.io","password":"x"}`); rec.Code == http.StatusUnauthorized {
-		t.Error("/auth/login must not require a token")
+	if rec := post(t, h, "/v1/auth/login", `{"email":"a@x.io","password":"x"}`); rec.Code == http.StatusUnauthorized {
+		t.Error("/v1/auth/login must not require a token")
 	}
 }
 
@@ -304,7 +304,7 @@ func refreshCookie(rec *httptest.ResponseRecorder) *http.Cookie {
 
 func TestRefresh_OK_RotatesCookieAndReturnsAccessToken(t *testing.T) {
 	f := &fakeAuth{}
-	rec := postWithCookie(newHandler(f), "/auth/refresh", "old-refresh")
+	rec := postWithCookie(newHandler(f), "/v1/auth/refresh", "old-refresh")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -324,14 +324,14 @@ func TestRefresh_OK_RotatesCookieAndReturnsAccessToken(t *testing.T) {
 		t.Error("refresh token must travel only in the cookie")
 	}
 	c := refreshCookie(rec)
-	if c == nil || c.Value != "new-raw-refresh" || !c.HttpOnly || c.Path != "/auth" {
+	if c == nil || c.Value != "new-raw-refresh" || !c.HttpOnly || c.Path != "/v1/auth" {
 		t.Errorf("bad rotated cookie: %+v", c)
 	}
 }
 
 func TestRefresh_NoCookie_Returns401(t *testing.T) {
 	f := &fakeAuth{}
-	rec := postWithCookie(newHandler(f), "/auth/refresh", "")
+	rec := postWithCookie(newHandler(f), "/v1/auth/refresh", "")
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
@@ -345,7 +345,7 @@ func TestRefresh_NoCookie_Returns401(t *testing.T) {
 }
 
 func TestRefresh_InvalidToken_Returns401AndClearsCookie(t *testing.T) {
-	rec := postWithCookie(newHandler(&fakeAuth{refreshErr: auth.ErrInvalidToken}), "/auth/refresh", "stolen")
+	rec := postWithCookie(newHandler(&fakeAuth{refreshErr: auth.ErrInvalidToken}), "/v1/auth/refresh", "stolen")
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
@@ -356,7 +356,7 @@ func TestRefresh_InvalidToken_Returns401AndClearsCookie(t *testing.T) {
 }
 
 func TestRefresh_ServiceError_Returns500KeepsCookie(t *testing.T) {
-	rec := postWithCookie(newHandler(&fakeAuth{refreshErr: errors.New("db down")}), "/auth/refresh", "tok")
+	rec := postWithCookie(newHandler(&fakeAuth{refreshErr: errors.New("db down")}), "/v1/auth/refresh", "tok")
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
@@ -368,7 +368,7 @@ func TestRefresh_ServiceError_Returns500KeepsCookie(t *testing.T) {
 
 func TestLogout_RevokesAndClearsCookie(t *testing.T) {
 	f := &fakeAuth{}
-	rec := postWithCookie(newHandler(f), "/auth/logout", "tok")
+	rec := postWithCookie(newHandler(f), "/v1/auth/logout", "tok")
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
@@ -376,13 +376,13 @@ func TestLogout_RevokesAndClearsCookie(t *testing.T) {
 	if f.lastLogoutToken != "tok" {
 		t.Errorf("service got %q", f.lastLogoutToken)
 	}
-	if c := refreshCookie(rec); c == nil || c.MaxAge >= 0 || c.Path != "/auth" {
+	if c := refreshCookie(rec); c == nil || c.MaxAge >= 0 || c.Path != "/v1/auth" {
 		t.Errorf("cookie must be cleared on the same path, got %+v", c)
 	}
 }
 
 func TestLogout_NoCookie_Returns204(t *testing.T) {
-	rec := postWithCookie(newHandler(&fakeAuth{}), "/auth/logout", "")
+	rec := postWithCookie(newHandler(&fakeAuth{}), "/v1/auth/logout", "")
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
@@ -390,7 +390,7 @@ func TestLogout_NoCookie_Returns204(t *testing.T) {
 }
 
 func TestLogout_ServiceError_Returns500(t *testing.T) {
-	rec := postWithCookie(newHandler(&fakeAuth{logoutErr: errors.New("db down")}), "/auth/logout", "tok")
+	rec := postWithCookie(newHandler(&fakeAuth{logoutErr: errors.New("db down")}), "/v1/auth/logout", "tok")
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
@@ -408,7 +408,7 @@ func TestRequestBody_TrailingDataAndOversizeAreRejected(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			f := &fakeAuth{}
-			rec := post(t, newHandler(f), "/auth/register", body)
+			rec := post(t, newHandler(f), "/v1/auth/register", body)
 
 			if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "validation_failed" {
 				t.Fatalf("status = %d, body = %.120s", rec.Code, rec.Body)
@@ -421,7 +421,7 @@ func TestRequestBody_TrailingDataAndOversizeAreRejected(t *testing.T) {
 }
 
 func TestRequestBody_TrailingWhitespaceIsFine(t *testing.T) {
-	rec := post(t, newHandler(&fakeAuth{}), "/auth/register", validRegister+"\n\n  \t")
+	rec := post(t, newHandler(&fakeAuth{}), "/v1/auth/register", validRegister+"\n\n  \t")
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("whitespace after the object is normal (editors add a newline), status = %d", rec.Code)
@@ -429,7 +429,7 @@ func TestRequestBody_TrailingWhitespaceIsFine(t *testing.T) {
 }
 
 func TestLogin_InternalError_Returns500WithoutLeak(t *testing.T) {
-	rec := post(t, newHandler(&fakeAuth{loginErr: errors.New("pq: secret internal detail")}), "/auth/login", `{"email":"a@x.io","password":"password123"}`)
+	rec := post(t, newHandler(&fakeAuth{loginErr: errors.New("pq: secret internal detail")}), "/v1/auth/login", `{"email":"a@x.io","password":"password123"}`)
 
 	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "secret internal detail") {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)

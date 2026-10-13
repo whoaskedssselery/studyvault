@@ -17,7 +17,7 @@ import (
 
 const (
 	refreshCookieName = "refresh_token"
-	refreshCookiePath = "/auth"
+	refreshCookiePath = apiPrefix + "/auth"
 	maxBodyBytes      = 1 << 20
 	maxEmailLen       = 254
 	minPasswordLen    = 8

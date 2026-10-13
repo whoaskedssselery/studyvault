@@ -102,13 +102,13 @@ func TestDocs_CSPAllowsExactlyTheInlineScriptOnThePage(t *testing.T) {
 }
 
 func TestResponses_AreNotFrameableAndExecuteNothing(t *testing.T) {
-	for _, path := range []string{"/health", "/subjects", "/openapi.yaml", "/docs"} {
+	for _, path := range []string{"/v1/health", "/v1/subjects", "/openapi.yaml", "/docs"} {
 		h := fetch(path).Header()
 		if h.Get("X-Frame-Options") != "DENY" || h.Get("Referrer-Policy") != "no-referrer" || !strings.Contains(h.Get("Content-Security-Policy"), "frame-ancestors 'none'") {
 			t.Errorf("%s: missing anti-framing or referrer headers: %v", path, h)
 		}
 	}
-	for _, path := range []string{"/health", "/subjects", "/openapi.yaml"} {
+	for _, path := range []string{"/v1/health", "/v1/subjects", "/openapi.yaml"} {
 		if csp := fetch(path).Header().Get("Content-Security-Policy"); csp != "default-src 'none'; frame-ancestors 'none'" {
 			t.Errorf("%s: CSP = %q, want the strict API policy", path, csp)
 		}

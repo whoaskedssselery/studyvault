@@ -91,7 +91,7 @@ func (e subjectsEnv) do(method, path, body string) *httptest.ResponseRecorder {
 
 func TestListSubjects_Empty_ReturnsEmptyArrayNotNull(t *testing.T) {
 	e := newSubjectsEnv(&fakeSubjects{})
-	rec := e.do(http.MethodGet, "/subjects", "")
+	rec := e.do(http.MethodGet, "/v1/subjects", "")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
@@ -109,7 +109,7 @@ func TestListSubjects_NullableFieldsSerializeAsNull(t *testing.T) {
 	bare := db.Subject{ID: uuid.New(), Title: "B", CreatedAt: time.Now()}
 	e := newSubjectsEnv(&fakeSubjects{items: []db.Subject{withBoth, bare}})
 
-	rec := e.do(http.MethodGet, "/subjects", "")
+	rec := e.do(http.MethodGet, "/v1/subjects", "")
 
 	var body struct {
 		Items []map[string]any `json:"items"`
@@ -136,7 +136,7 @@ func TestListSubjects_NullableFieldsSerializeAsNull(t *testing.T) {
 
 func TestCreateSubject_OK_Returns201(t *testing.T) {
 	e := newSubjectsEnv(&fakeSubjects{})
-	rec := e.do(http.MethodPost, "/subjects", `{"title":"  Algebra  ","color":"#4f46e5","semester":3}`)
+	rec := e.do(http.MethodPost, "/v1/subjects", `{"title":"  Algebra  ","color":"#4f46e5","semester":3}`)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -155,7 +155,7 @@ func TestCreateSubject_OK_Returns201(t *testing.T) {
 
 func TestCreateSubject_NullOptionals_AreAccepted(t *testing.T) {
 	e := newSubjectsEnv(&fakeSubjects{})
-	rec := e.do(http.MethodPost, "/subjects", `{"title":"X","color":null,"semester":null}`)
+	rec := e.do(http.MethodPost, "/v1/subjects", `{"title":"X","color":null,"semester":null}`)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -181,7 +181,7 @@ func TestCreateSubject_Invalid_Returns400AndSkipsService(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			e := newSubjectsEnv(&fakeSubjects{})
-			rec := e.do(http.MethodPost, "/subjects", body)
+			rec := e.do(http.MethodPost, "/v1/subjects", body)
 
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400 (%s)", rec.Code, rec.Body)
@@ -198,7 +198,7 @@ func TestCreateSubject_Invalid_Returns400AndSkipsService(t *testing.T) {
 
 func TestCreateSubject_Title200Runes_IsAllowed(t *testing.T) {
 	e := newSubjectsEnv(&fakeSubjects{})
-	rec := e.do(http.MethodPost, "/subjects", `{"title":"`+strings.Repeat("я", 200)+`"}`)
+	rec := e.do(http.MethodPost, "/v1/subjects", `{"title":"`+strings.Repeat("я", 200)+`"}`)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("200 runes (400 bytes) must pass, status = %d", rec.Code)
@@ -210,7 +210,7 @@ func TestUpdateSubject_PassesThreeStates(t *testing.T) {
 	e := newSubjectsEnv(&fakeSubjects{})
 
 	// title меняем, color очищаем (null), semester не передан.
-	rec := e.do(http.MethodPatch, "/subjects/"+id.String(), `{"title":"New","color":null}`)
+	rec := e.do(http.MethodPatch, "/v1/subjects/"+id.String(), `{"title":"New","color":null}`)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -232,7 +232,7 @@ func TestUpdateSubject_PassesThreeStates(t *testing.T) {
 
 func TestUpdateSubject_SetsValues(t *testing.T) {
 	e := newSubjectsEnv(&fakeSubjects{})
-	e.do(http.MethodPatch, "/subjects/"+uuid.NewString(), `{"color":"#AABBCC","semester":7}`)
+	e.do(http.MethodPatch, "/v1/subjects/"+uuid.NewString(), `{"color":"#AABBCC","semester":7}`)
 
 	p := e.f.gotPatch
 	if !p.SetColor || p.Color == nil || *p.Color != "#AABBCC" || !p.SetSemester || p.Semester == nil || *p.Semester != 7 {
@@ -251,7 +251,7 @@ func TestUpdateSubject_Invalid_Returns400(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			e := newSubjectsEnv(&fakeSubjects{})
-			rec := e.do(http.MethodPatch, "/subjects/"+uuid.NewString(), body)
+			rec := e.do(http.MethodPatch, "/v1/subjects/"+uuid.NewString(), body)
 
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400 (%s)", rec.Code, rec.Body)
@@ -271,7 +271,7 @@ func TestSubjectByID_NotFound_Returns404(t *testing.T) {
 		{http.MethodPatch, `{"title":"x"}`},
 		{http.MethodDelete, ``},
 	} {
-		rec := e.do(c.method, "/subjects/"+id, c.body)
+		rec := e.do(c.method, "/v1/subjects/"+id, c.body)
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("%s: status = %d, want 404", c.method, rec.Code)
 		}
@@ -285,7 +285,7 @@ func TestSubjectByID_InvalidUUID_Returns400(t *testing.T) {
 	e := newSubjectsEnv(&fakeSubjects{})
 
 	for _, method := range []string{http.MethodPatch, http.MethodDelete} {
-		rec := e.do(method, "/subjects/not-a-uuid", `{"title":"x"}`)
+		rec := e.do(method, "/v1/subjects/not-a-uuid", `{"title":"x"}`)
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("%s: status = %d, want 400", method, rec.Code)
 		}
@@ -298,7 +298,7 @@ func TestSubjectByID_InvalidUUID_Returns400(t *testing.T) {
 func TestDeleteSubject_OK_Returns204(t *testing.T) {
 	e := newSubjectsEnv(&fakeSubjects{})
 	id := uuid.New()
-	rec := e.do(http.MethodDelete, "/subjects/"+id.String(), "")
+	rec := e.do(http.MethodDelete, "/v1/subjects/"+id.String(), "")
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
@@ -315,10 +315,10 @@ func TestSubjects_ServiceError_Returns500WithoutLeak(t *testing.T) {
 	e := newSubjectsEnv(&fakeSubjects{err: errors.New("pq: secret internal detail")})
 
 	for _, c := range []struct{ method, path, body string }{
-		{http.MethodGet, "/subjects", ""},
-		{http.MethodPost, "/subjects", `{"title":"A"}`},
-		{http.MethodPatch, "/subjects/" + uuid.NewString(), `{"title":"A"}`},
-		{http.MethodDelete, "/subjects/" + uuid.NewString(), ""},
+		{http.MethodGet, "/v1/subjects", ""},
+		{http.MethodPost, "/v1/subjects", `{"title":"A"}`},
+		{http.MethodPatch, "/v1/subjects/" + uuid.NewString(), `{"title":"A"}`},
+		{http.MethodDelete, "/v1/subjects/" + uuid.NewString(), ""},
 	} {
 		rec := e.do(c.method, c.path, c.body)
 		if rec.Code != http.StatusInternalServerError {
@@ -335,10 +335,10 @@ func TestSubjects_RequireAuth(t *testing.T) {
 	e.auth = ""
 
 	for _, c := range []struct{ method, path string }{
-		{http.MethodGet, "/subjects"},
-		{http.MethodPost, "/subjects"},
-		{http.MethodPatch, "/subjects/" + uuid.NewString()},
-		{http.MethodDelete, "/subjects/" + uuid.NewString()},
+		{http.MethodGet, "/v1/subjects"},
+		{http.MethodPost, "/v1/subjects"},
+		{http.MethodPatch, "/v1/subjects/" + uuid.NewString()},
+		{http.MethodDelete, "/v1/subjects/" + uuid.NewString()},
 	} {
 		if rec := e.do(c.method, c.path, `{}`); rec.Code != http.StatusUnauthorized {
 			t.Errorf("%s %s: status = %d, want 401", c.method, c.path, rec.Code)

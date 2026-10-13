@@ -82,7 +82,7 @@ func (e accountEnv) do(method, path, body string) *httptest.ResponseRecorder {
 
 func TestAccount_RequireAToken(t *testing.T) {
 	e := newAccountEnv(t)
-	for _, c := range [][2]string{{"GET", "/me"}, {"PATCH", "/me"}, {"POST", "/me/password"}} {
+	for _, c := range [][2]string{{"GET", "/v1/me"}, {"PATCH", "/v1/me"}, {"POST", "/v1/me/password"}} {
 		req := httptest.NewRequest(c[0], c[1], strings.NewReader(`{}`))
 		rec := httptest.NewRecorder()
 		e.h.ServeHTTP(rec, req)
@@ -95,7 +95,7 @@ func TestAccount_RequireAToken(t *testing.T) {
 func TestGetMe_ReturnsTheCallersAccount(t *testing.T) {
 	e := newAccountEnv(t)
 
-	rec := e.do("GET", "/me", "")
+	rec := e.do("GET", "/v1/me", "")
 
 	if rec.Code != http.StatusOK || e.acc.gotID != e.uid {
 		t.Fatalf("status = %d, looked up %v, want %v", rec.Code, e.acc.gotID, e.uid)
@@ -117,7 +117,7 @@ func TestGetMe_AccountGone_Returns401(t *testing.T) {
 	e := newAccountEnv(t)
 	e.acc.getErr = auth.ErrUserNotFound
 
-	if rec := e.do("GET", "/me", ""); rec.Code != http.StatusUnauthorized || errorCode(t, rec) != "unauthorized" {
+	if rec := e.do("GET", "/v1/me", ""); rec.Code != http.StatusUnauthorized || errorCode(t, rec) != "unauthorized" {
 		t.Errorf("status = %d, body = %s", rec.Code, rec.Body)
 	}
 }
@@ -126,7 +126,7 @@ func TestGetMe_StoreError_Returns500WithoutDetails(t *testing.T) {
 	e := newAccountEnv(t)
 	e.acc.getErr = errors.New("pq: secret internal detail")
 
-	rec := e.do("GET", "/me", "")
+	rec := e.do("GET", "/v1/me", "")
 
 	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "secret") {
 		t.Errorf("status = %d, body = %s", rec.Code, rec.Body)
@@ -136,7 +136,7 @@ func TestGetMe_StoreError_Returns500WithoutDetails(t *testing.T) {
 func TestUpdateMe_TrimsAndSavesTheName(t *testing.T) {
 	e := newAccountEnv(t)
 
-	rec := e.do("PATCH", "/me", `{"display_name":"  Анна Студентова  "}`)
+	rec := e.do("PATCH", "/v1/me", `{"display_name":"  Анна Студентова  "}`)
 
 	if rec.Code != http.StatusOK || e.acc.gotName != "Анна Студентова" {
 		t.Fatalf("status = %d, saved %q", rec.Code, e.acc.gotName)
@@ -157,7 +157,7 @@ func TestUpdateMe_RejectsBadInput(t *testing.T) {
 	}
 	for name, body := range cases {
 		e := newAccountEnv(t)
-		rec := e.do("PATCH", "/me", body)
+		rec := e.do("PATCH", "/v1/me", body)
 		if rec.Code != http.StatusBadRequest || e.acc.updates != 0 {
 			t.Errorf("%s: status = %d, updates = %d, want 400 and nothing saved", name, rec.Code, e.acc.updates)
 		}
@@ -166,7 +166,7 @@ func TestUpdateMe_RejectsBadInput(t *testing.T) {
 
 func TestUpdateMe_100MultibyteCharsAreAllowed(t *testing.T) {
 	e := newAccountEnv(t)
-	if rec := e.do("PATCH", "/me", `{"display_name":"`+strings.Repeat("я", 100)+`"}`); rec.Code != http.StatusOK {
+	if rec := e.do("PATCH", "/v1/me", `{"display_name":"`+strings.Repeat("я", 100)+`"}`); rec.Code != http.StatusOK {
 		t.Errorf("status = %d: the limit counts characters, not bytes", rec.Code)
 	}
 }
@@ -175,7 +175,7 @@ func TestUpdateMe_AccountGone_Returns401(t *testing.T) {
 	e := newAccountEnv(t)
 	e.acc.updateErr = auth.ErrUserNotFound
 
-	if rec := e.do("PATCH", "/me", `{"display_name":"X"}`); rec.Code != http.StatusUnauthorized {
+	if rec := e.do("PATCH", "/v1/me", `{"display_name":"X"}`); rec.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", rec.Code)
 	}
 }
@@ -183,7 +183,7 @@ func TestUpdateMe_AccountGone_Returns401(t *testing.T) {
 func TestChangePassword_OK_ReturnsNewTokensAndCookie(t *testing.T) {
 	e := newAccountEnv(t)
 
-	rec := e.do("POST", "/me/password", `{"current_password":"old-password","new_password":"brand-new-pass"}`)
+	rec := e.do("POST", "/v1/me/password", `{"current_password":"old-password","new_password":"brand-new-pass"}`)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -205,7 +205,7 @@ func TestChangePassword_OK_ReturnsNewTokensAndCookie(t *testing.T) {
 			cookie = c
 		}
 	}
-	if cookie == nil || cookie.Value != "fresh-raw-refresh" || !cookie.HttpOnly || !cookie.Secure || cookie.Path != "/auth" {
+	if cookie == nil || cookie.Value != "fresh-raw-refresh" || !cookie.HttpOnly || !cookie.Secure || cookie.Path != "/v1/auth" {
 		t.Errorf("refresh cookie = %+v", cookie)
 	}
 	if strings.Contains(rec.Body.String(), "brand-new-pass") || strings.Contains(rec.Body.String(), "old-password") {
@@ -217,7 +217,7 @@ func TestChangePassword_WrongCurrentPassword_Returns403(t *testing.T) {
 	e := newAccountEnv(t)
 	e.acc.changeErr = auth.ErrInvalidCredentials
 
-	rec := e.do("POST", "/me/password", `{"current_password":"guess","new_password":"brand-new-pass"}`)
+	rec := e.do("POST", "/v1/me/password", `{"current_password":"guess","new_password":"brand-new-pass"}`)
 
 	// 403, а не 401: клиент не должен принять это за просроченный access-токен и начать обновлять сессию.
 	if rec.Code != http.StatusForbidden || errorCode(t, rec) != "invalid_credentials" {
@@ -241,7 +241,7 @@ func TestChangePassword_RejectsBadInput_WithoutCallingTheService(t *testing.T) {
 	}
 	for name, body := range cases {
 		e := newAccountEnv(t)
-		rec := e.do("POST", "/me/password", body)
+		rec := e.do("POST", "/v1/me/password", body)
 		if rec.Code != http.StatusBadRequest || e.acc.changeCalls != 0 {
 			t.Errorf("%s: status = %d, calls = %d, want 400 and no call", name, rec.Code, e.acc.changeCalls)
 		}
@@ -251,7 +251,7 @@ func TestChangePassword_RejectsBadInput_WithoutCallingTheService(t *testing.T) {
 func TestChangePassword_72BytesIsTheLimit(t *testing.T) {
 	e := newAccountEnv(t)
 	pw := strings.Repeat("я", 36) // 72 байта в UTF-8
-	if rec := e.do("POST", "/me/password", `{"current_password":"old-password","new_password":"`+pw+`"}`); rec.Code != http.StatusOK {
+	if rec := e.do("POST", "/v1/me/password", `{"current_password":"old-password","new_password":"`+pw+`"}`); rec.Code != http.StatusOK {
 		t.Errorf("72 bytes: status = %d", rec.Code)
 	}
 }
@@ -259,7 +259,7 @@ func TestChangePassword_72BytesIsTheLimit(t *testing.T) {
 func TestChangePassword_AccountGone_Returns401(t *testing.T) {
 	e := newAccountEnv(t)
 	e.acc.changeErr = auth.ErrUserNotFound
-	if rec := e.do("POST", "/me/password", `{"current_password":"old-password","new_password":"brand-new-pass"}`); rec.Code != http.StatusUnauthorized {
+	if rec := e.do("POST", "/v1/me/password", `{"current_password":"old-password","new_password":"brand-new-pass"}`); rec.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", rec.Code)
 	}
 }
@@ -267,7 +267,7 @@ func TestChangePassword_AccountGone_Returns401(t *testing.T) {
 func TestChangePassword_InternalError_HidesDetails(t *testing.T) {
 	e := newAccountEnv(t)
 	e.acc.changeErr = errors.New("pq: secret internal detail")
-	rec := e.do("POST", "/me/password", `{"current_password":"old-password","new_password":"brand-new-pass"}`)
+	rec := e.do("POST", "/v1/me/password", `{"current_password":"old-password","new_password":"brand-new-pass"}`)
 	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "secret") {
 		t.Errorf("status = %d, body = %s", rec.Code, rec.Body)
 	}
@@ -278,7 +278,7 @@ func TestChangePassword_IsRateLimited(t *testing.T) {
 	h := httpapi.NewHandler(httpapi.Deps{DB: fakePinger{}, Auth: &fakeAuth{}, Account: e.acc, JWTSecret: testSecret, AuthRateLimit: 2})
 	e.acc.changeErr = auth.ErrInvalidCredentials
 	send := func() int {
-		req := httptest.NewRequest("POST", "/me/password", strings.NewReader(`{"current_password":"guess","new_password":"brand-new-pass"}`))
+		req := httptest.NewRequest("POST", "/v1/me/password", strings.NewReader(`{"current_password":"guess","new_password":"brand-new-pass"}`))
 		req.Header.Set("Authorization", e.bearer)
 		req.RemoteAddr = "192.0.2.9:1000"
 		rec := httptest.NewRecorder()

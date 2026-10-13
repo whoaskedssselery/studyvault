@@ -66,7 +66,7 @@ func accessLog(next http.Handler) http.Handler {
 		switch {
 		case status >= 500:
 			level = slog.LevelError
-		case r.URL.Path == "/health":
+		case r.URL.Path == "/health" || r.URL.Path == apiPrefix+"/health":
 			level = slog.LevelDebug // проверки живости раз в несколько секунд не должны забивать лог
 		}
 		slog.LogAttrs(r.Context(), level, "request",

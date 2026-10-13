@@ -50,7 +50,7 @@ func newSearchEnv(f *fakeSearch) searchEnv {
 }
 
 func (e searchEnv) get(query string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, "/search?"+query, nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/search?"+query, nil)
 	if e.auth != "" {
 		req.Header.Set("Authorization", e.auth)
 	}

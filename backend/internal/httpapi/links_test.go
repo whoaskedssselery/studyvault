@@ -27,7 +27,7 @@ func (f *fakeNotes) Graph(_ context.Context, uid uuid.UUID) (note.Graph, error) 
 func TestBacklinks_Empty_ReturnsEmptyArray(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{})
 	id := uuid.New()
-	rec := e.do(http.MethodGet, "/notes/"+id.String()+"/backlinks", "")
+	rec := e.do(http.MethodGet, "/v1/notes/"+id.String()+"/backlinks", "")
 
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"items":[]}` {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -40,7 +40,7 @@ func TestBacklinks_Empty_ReturnsEmptyArray(t *testing.T) {
 func TestBacklinks_ReturnsSummariesWithoutContent(t *testing.T) {
 	n := sampleNote()
 	e := newNotesEnv(&fakeNotes{backlinks: []note.Summary{n.Summary}})
-	rec := e.do(http.MethodGet, "/notes/"+uuid.NewString()+"/backlinks", "")
+	rec := e.do(http.MethodGet, "/v1/notes/"+uuid.NewString()+"/backlinks", "")
 
 	item := decode(t, rec)["items"].([]any)[0].(map[string]any)
 	if item["title"] != "Sample" || len(item["tags"].([]any)) != 1 {
@@ -56,19 +56,19 @@ func TestBacklinks_ReturnsSummariesWithoutContent(t *testing.T) {
 
 func TestBacklinks_NotFound_And_BadUUID(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{err: note.ErrNotFound})
-	if rec := e.do(http.MethodGet, "/notes/"+uuid.NewString()+"/backlinks", ""); rec.Code != http.StatusNotFound || errorCode(t, rec) != "not_found" {
+	if rec := e.do(http.MethodGet, "/v1/notes/"+uuid.NewString()+"/backlinks", ""); rec.Code != http.StatusNotFound || errorCode(t, rec) != "not_found" {
 		t.Errorf("missing note: status = %d, body = %s", rec.Code, rec.Body)
 	}
 
 	e = newNotesEnv(&fakeNotes{})
-	if rec := e.do(http.MethodGet, "/notes/nope/backlinks", ""); rec.Code != http.StatusBadRequest || e.f.calls != 0 {
+	if rec := e.do(http.MethodGet, "/v1/notes/nope/backlinks", ""); rec.Code != http.StatusBadRequest || e.f.calls != 0 {
 		t.Errorf("bad uuid: status = %d, calls = %d", rec.Code, e.f.calls)
 	}
 }
 
 func TestGraph_Empty_ReturnsEmptyArraysNotNull(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{})
-	rec := e.do(http.MethodGet, "/graph", "")
+	rec := e.do(http.MethodGet, "/v1/graph", "")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
@@ -92,7 +92,7 @@ func TestGraph_MapsNodesAndEdges(t *testing.T) {
 		Edges: []note.GraphEdge{{Source: a, Target: b}},
 	}})
 
-	body := decode(t, e.do(http.MethodGet, "/graph", ""))
+	body := decode(t, e.do(http.MethodGet, "/v1/graph", ""))
 
 	nodes, edges := body["nodes"].([]any), body["edges"].([]any)
 	if len(nodes) != 2 || nodes[1].(map[string]any)["title"] != "B" || nodes[0].(map[string]any)["id"] != a.String() {
@@ -107,7 +107,7 @@ func TestGraph_MapsNodesAndEdges(t *testing.T) {
 func TestLinks_ServiceError_Returns500WithoutLeak(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{err: errors.New("pq: secret internal detail")})
 
-	for _, path := range []string{"/graph", "/notes/" + uuid.NewString() + "/backlinks"} {
+	for _, path := range []string{"/v1/graph", "/v1/notes/" + uuid.NewString() + "/backlinks"} {
 		rec := e.do(http.MethodGet, path, "")
 		if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "secret internal detail") {
 			t.Errorf("%s: status = %d, body = %s", path, rec.Code, rec.Body)
@@ -119,7 +119,7 @@ func TestLinks_RequireAuth(t *testing.T) {
 	e := newNotesEnv(&fakeNotes{})
 	e.auth = ""
 
-	for _, path := range []string{"/graph", "/notes/" + uuid.NewString() + "/backlinks"} {
+	for _, path := range []string{"/v1/graph", "/v1/notes/" + uuid.NewString() + "/backlinks"} {
 		if rec := e.do(http.MethodGet, path, ""); rec.Code != http.StatusUnauthorized {
 			t.Errorf("%s: status = %d, want 401", path, rec.Code)
 		}
