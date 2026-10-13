@@ -2,8 +2,11 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 )
 
 const minJWTSecretLen = 32
@@ -15,7 +18,8 @@ type Config struct {
 	CookieSecure bool
 	MeiliURL     string // пусто: поиск отключён
 	MeiliKey     string
-	S3           S3 // Endpoint пуст: файлы отключены
+	S3           S3       // Endpoint пуст: файлы отключены
+	CORSOrigins  []string // пусто: CORS выключен
 }
 
 func Load() (Config, error) {
@@ -44,6 +48,12 @@ func Load() (Config, error) {
 		PublicEndpoint: os.Getenv("S3_PUBLIC_ENDPOINT"),
 	}
 	cfg.S3.UseSSL, _ = strconv.ParseBool(os.Getenv("S3_USE_SSL"))
+
+	origins, err := parseOrigins(os.Getenv("CORS_ORIGINS"))
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.CORSOrigins = origins
 	return cfg, nil
 }
 
@@ -63,4 +73,22 @@ type S3 struct {
 	Region         string // пусто: us-east-1
 	UseSSL         bool
 	PublicEndpoint string // адрес в presigned-ссылках для клиента, если он отличается от Endpoint
+}
+
+// parseOrigins разбирает список источников через запятую. Допускаются только явные адреса
+// вида схема://хост[:порт]: API отдаёт cookie, а с ними звёздочка в CORS запрещена.
+func parseOrigins(raw string) ([]string, error) {
+	var origins []string
+	for _, o := range strings.Split(raw, ",") {
+		o = strings.TrimSpace(o)
+		if o == "" {
+			continue
+		}
+		u, err := url.Parse(o)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" {
+			return nil, fmt.Errorf("CORS_ORIGINS: %q is not a valid origin (want scheme://host[:port], no wildcards)", o)
+		}
+		origins = append(origins, strings.TrimSuffix(o, "/"))
+	}
+	return origins, nil
 }

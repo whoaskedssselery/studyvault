@@ -132,3 +132,39 @@ func TestLoad_S3_IsOptionalAndHasDefaults(t *testing.T) {
 		t.Errorf("S3 = %+v, want %+v", cfg.S3, want)
 	}
 }
+
+func TestLoad_CORSOrigins(t *testing.T) {
+	setValidEnv(t)
+
+	t.Setenv("CORS_ORIGINS", "")
+	if cfg, _ := config.Load(); len(cfg.CORSOrigins) != 0 {
+		t.Errorf("CORS is off by default, got %v", cfg.CORSOrigins)
+	}
+
+	t.Setenv("CORS_ORIGINS", " http://localhost:5173 , https://app.example.org,, ")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.CORSOrigins) != 2 || cfg.CORSOrigins[0] != "http://localhost:5173" || cfg.CORSOrigins[1] != "https://app.example.org" {
+		t.Errorf("origins = %q", cfg.CORSOrigins)
+	}
+}
+
+func TestLoad_CORSOrigins_RejectsUnsafeOrMalformedEntries(t *testing.T) {
+	setValidEnv(t)
+
+	for _, bad := range []string{
+		"*", // с cookie допустимы только явные источники
+		"http://localhost:5173,*",
+		"localhost:5173",            // без схемы
+		"http://localhost:5173/app", // источник — это схема и хост, без пути
+		"ftp://example.org",         // не http(s)
+		"http://",
+	} {
+		t.Setenv("CORS_ORIGINS", bad)
+		if _, err := config.Load(); err == nil {
+			t.Errorf("CORS_ORIGINS=%q must be rejected", bad)
+		}
+	}
+}

@@ -57,12 +57,13 @@ func run() error {
 		return db.InTx(ctx, pool, func(q *db.Queries) error { return fn(q) })
 	})}
 	deps := httpapi.Deps{
-		DB:           pool,
-		Auth:         auth.NewService(queries, cfg.JWTSecret),
-		Subjects:     subject.NewService(queries),
-		Tags:         tag.NewService(queries),
-		JWTSecret:    cfg.JWTSecret,
-		CookieSecure: cfg.CookieSecure,
+		DB:             pool,
+		Auth:           auth.NewService(queries, cfg.JWTSecret),
+		Subjects:       subject.NewService(queries),
+		Tags:           tag.NewService(queries),
+		JWTSecret:      cfg.JWTSecret,
+		CookieSecure:   cfg.CookieSecure,
+		AllowedOrigins: cfg.CORSOrigins,
 	}
 
 	// Без Meilisearch API работает целиком, кроме /search (503).
