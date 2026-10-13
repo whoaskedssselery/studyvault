@@ -2,12 +2,12 @@ package search_test
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
@@ -221,8 +221,9 @@ func TestE2E_ReplaceAllRebuildsFromTheDatabase(t *testing.T) {
 	if err := e.notes.Delete(ctx, uid, gone.ID); err != nil {
 		t.Fatal(err)
 	}
-	// Индекс «потерялся»: пересобираем его целиком из БД.
-	if _, err := e.meili.ReplaceAll(ctx, search.ReindexPages(db.New(e.tx), 2)); err != nil {
+	// Индекс «потерялся»: пересобираем его из БД. Обход ограничен заметками этого теста, чтобы он
+	// не зависел от того, сколько чужих данных лежит в базе.
+	if _, err := e.meili.ReplaceAll(ctx, search.ReindexPages(ownNotesOnly{tx: e.tx, user: uid}, 2)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -230,5 +231,56 @@ func TestE2E_ReplaceAllRebuildsFromTheDatabase(t *testing.T) {
 
 	if len(got) != 1 || got[0] != live.ID {
 		t.Errorf("after a rebuild only live notes are searchable, got %v", got)
+	}
+}
+
+// ownNotesOnly отдаёт ту же постраничную выгрузку, что ListNotesForIndex, но только для одного пользователя.
+type ownNotesOnly struct {
+	tx   pgx.Tx
+	user uuid.UUID
+}
+
+func (o ownNotesOnly) ListNotesForIndex(ctx context.Context, a db.ListNotesForIndexParams) ([]db.ListNotesForIndexRow, error) {
+	rows, err := o.tx.Query(ctx, `SELECT id, user_id, title, content_text FROM notes
+		WHERE deleted_at IS NULL AND user_id = $1 AND id > $2 ORDER BY id LIMIT $3`, o.user, a.After, a.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []db.ListNotesForIndexRow
+	for rows.Next() {
+		var r db.ListNotesForIndexRow
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Title, &r.ContentText); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// Сам запрос ListNotesForIndex проверяется на первых страницах: порядок по id и продолжение после последней строки.
+func TestE2E_ListNotesForIndex_IsKeysetOrdered(t *testing.T) {
+	e := newE2E(t)
+	ctx := context.Background()
+	uid := e.user(t, "a@x.io")
+	for i := 0; i < 5; i++ {
+		e.create(t, uid, "n", "body")
+	}
+	q := db.New(e.tx)
+
+	first, err := q.ListNotesForIndex(ctx, db.ListNotesForIndexParams{After: uuid.Nil, PageSize: 3})
+	if err != nil || len(first) != 3 {
+		t.Fatalf("first page: %d rows, err %v", len(first), err)
+	}
+	second, err := q.ListNotesForIndex(ctx, db.ListNotesForIndexParams{After: first[2].ID, PageSize: 3})
+	if err != nil || len(second) == 0 {
+		t.Fatalf("second page: %d rows, err %v", len(second), err)
+	}
+	prev := uuid.Nil
+	for _, r := range append(first, second...) {
+		if r.ID.String() <= prev.String() {
+			t.Fatalf("rows must come in strictly increasing id order and never repeat: %v after %v", r.ID, prev)
+		}
+		prev = r.ID
 	}
 }
