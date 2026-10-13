@@ -70,6 +70,7 @@ func run() error {
 	deps := httpapi.Deps{
 		DB:             pool,
 		Auth:           authSvc,
+		Account:        authSvc,
 		Subjects:       subject.NewService(queries),
 		Tags:           tag.NewService(queries),
 		JWTSecret:      cfg.JWTSecret,

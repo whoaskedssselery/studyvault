@@ -29,6 +29,7 @@ type Authenticator interface {
 type Deps struct {
 	DB             Pinger
 	Auth           Authenticator
+	Account        AccountService
 	Subjects       SubjectService
 	Notes          NoteService
 	Tags           TagService
