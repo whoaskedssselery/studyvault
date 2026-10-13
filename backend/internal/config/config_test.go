@@ -102,3 +102,33 @@ func TestLoad_Meilisearch_IsOptional(t *testing.T) {
 		t.Errorf("Meilisearch settings not loaded: %+v", cfg)
 	}
 }
+
+func TestLoad_S3_IsOptionalAndHasDefaults(t *testing.T) {
+	setValidEnv(t)
+	for _, k := range []string{"S3_ENDPOINT", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_BUCKET", "S3_REGION", "S3_USE_SSL", "S3_PUBLIC_ENDPOINT"} {
+		t.Setenv(k, "")
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("a missing storage must not stop the API from starting: %v", err)
+	}
+	if cfg.S3.Endpoint != "" {
+		t.Errorf("Endpoint = %q, want empty (attachments disabled)", cfg.S3.Endpoint)
+	}
+	if cfg.S3.Bucket != "attachments" || cfg.S3.UseSSL || cfg.S3.PublicEndpoint != "" {
+		t.Errorf("defaults: %+v", cfg.S3)
+	}
+
+	t.Setenv("S3_ENDPOINT", "localhost:9000")
+	t.Setenv("S3_ACCESS_KEY", "ak")
+	t.Setenv("S3_SECRET_KEY", "sk")
+	t.Setenv("S3_BUCKET", "files")
+	t.Setenv("S3_USE_SSL", "true")
+	t.Setenv("S3_PUBLIC_ENDPOINT", "cdn.example.org")
+	cfg, _ = config.Load()
+	want := config.S3{Endpoint: "localhost:9000", AccessKey: "ak", SecretKey: "sk", Bucket: "files", UseSSL: true, PublicEndpoint: "cdn.example.org"}
+	if cfg.S3 != want {
+		t.Errorf("S3 = %+v, want %+v", cfg.S3, want)
+	}
+}

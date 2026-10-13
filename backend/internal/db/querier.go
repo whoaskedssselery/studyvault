@@ -12,19 +12,24 @@ import (
 
 type Querier interface {
 	CountUserTags(ctx context.Context, arg CountUserTagsParams) (int64, error)
+	CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (Attachment, error)
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSubject(ctx context.Context, arg CreateSubjectParams) (Subject, error)
 	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	// Возвращает удалённую строку: из неё берётся ключ объекта, который надо убрать из хранилища.
+	DeleteAttachment(ctx context.Context, arg DeleteAttachmentParams) (Attachment, error)
 	DeleteSubject(ctx context.Context, arg DeleteSubjectParams) (int64, error)
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	// Перепроверка результатов поиска в Postgres: Meilisearch лишь предлагает кандидатов, а решает БД.
 	// Чужие и удалённые заметки отсекаются здесь, даже если индекс устарел.
 	FilterLiveNotes(ctx context.Context, arg FilterLiveNotesParams) ([]FilterLiveNotesRow, error)
+	GetAttachment(ctx context.Context, arg GetAttachmentParams) (Attachment, error)
 	GetNote(ctx context.Context, arg GetNoteParams) (Note, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, lower string) (User, error)
+	ListAttachmentsByNote(ctx context.Context, arg ListAttachmentsByNoteParams) ([]Attachment, error)
 	ListBacklinks(ctx context.Context, arg ListBacklinksParams) ([]ListBacklinksRow, error)
 	ListGraphEdges(ctx context.Context, userID uuid.UUID) ([]NoteLink, error)
 	ListGraphNodes(ctx context.Context, userID uuid.UUID) ([]ListGraphNodesRow, error)

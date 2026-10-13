@@ -34,6 +34,7 @@ type Deps struct {
 	Notes        NoteService
 	Tags         TagService
 	Search       SearchService
+	Attachments  AttachmentService
 	JWTSecret    []byte
 	CookieSecure bool
 }

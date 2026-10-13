@@ -539,8 +539,11 @@ paths:
       operationId: createAttachment
       summary: Зарегистрировать файл и получить ссылку для загрузки
       description: |
-        Создаёт запись и возвращает presigned PUT URL. Клиент загружает байты напрямую в S3
-        с тем же `Content-Type`, который указал в `mime_type`.
+        Создаёт запись и возвращает presigned PUT URL (действует 15 минут). Клиент загружает байты
+        напрямую в хранилище запросом `PUT` на этот адрес, **не передавая токен**, и обязан отправить
+        ровно те `Content-Type` (`mime_type`) и `Content-Length` (`size_bytes`), которые заявил здесь:
+        они входят в подпись ссылки, и при любом расхождении хранилище ответит 403.
+        Разрешены PDF, PNG, JPEG, WebP, GIF, обычный текст и Markdown, до 20 МБ.
       requestBody:
         required: true
         content:
@@ -560,6 +563,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /attachments/{id}:
     parameters:
@@ -568,6 +573,7 @@ paths:
       tags: [attachments]
       operationId: getAttachment
       summary: Метаданные файла и временная ссылка для скачивания
+      description: Ссылка действует 15 минут, файл по ней скачивается как вложение.
       responses:
         "200":
           description: Файл
@@ -579,6 +585,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     delete:
       tags: [attachments]
       operationId: deleteAttachment
@@ -648,13 +658,13 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     ServiceUnavailable:
-      description: Поиск временно недоступен (остальное API работает)
+      description: Поиск или хранилище файлов временно недоступны (остальное API работает)
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     Conflict:
-      description: Конфликт (дубликат)
+      description: Конфликт (дубликат) или файл ещё не загружен (`not_uploaded`)
       content:
         application/json:
           schema:

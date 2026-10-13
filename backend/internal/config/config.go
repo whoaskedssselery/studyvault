@@ -15,6 +15,7 @@ type Config struct {
 	CookieSecure bool
 	MeiliURL     string // пусто: поиск отключён
 	MeiliKey     string
+	S3           S3 // Endpoint пуст: файлы отключены
 }
 
 func Load() (Config, error) {
@@ -33,6 +34,16 @@ func Load() (Config, error) {
 	}
 	// Для локальной разработки по http cookie с Secure не сохранится, поэтому по умолчанию выключено.
 	cfg.CookieSecure, _ = strconv.ParseBool(os.Getenv("COOKIE_SECURE"))
+
+	cfg.S3 = S3{
+		Endpoint:       os.Getenv("S3_ENDPOINT"),
+		AccessKey:      os.Getenv("S3_ACCESS_KEY"),
+		SecretKey:      os.Getenv("S3_SECRET_KEY"),
+		Bucket:         getenv("S3_BUCKET", "attachments"),
+		Region:         os.Getenv("S3_REGION"),
+		PublicEndpoint: os.Getenv("S3_PUBLIC_ENDPOINT"),
+	}
+	cfg.S3.UseSSL, _ = strconv.ParseBool(os.Getenv("S3_USE_SSL"))
 	return cfg, nil
 }
 
@@ -41,4 +52,15 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// S3 описывает S3-совместимое хранилище файлов.
+type S3 struct {
+	Endpoint       string
+	AccessKey      string
+	SecretKey      string
+	Bucket         string
+	Region         string // пусто: us-east-1
+	UseSSL         bool
+	PublicEndpoint string // адрес в presigned-ссылках для клиента, если он отличается от Endpoint
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -13,12 +14,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 
+	"github.com/whoaskedssselery/studyvault/backend/internal/attachment"
 	"github.com/whoaskedssselery/studyvault/backend/internal/auth"
 	"github.com/whoaskedssselery/studyvault/backend/internal/config"
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/httpapi"
 	"github.com/whoaskedssselery/studyvault/backend/internal/note"
 	"github.com/whoaskedssselery/studyvault/backend/internal/search"
+	"github.com/whoaskedssselery/studyvault/backend/internal/storage"
 	"github.com/whoaskedssselery/studyvault/backend/internal/subject"
 	"github.com/whoaskedssselery/studyvault/backend/internal/tag"
 )
@@ -70,6 +73,25 @@ func run() error {
 	} else {
 		slog.Warn("MEILI_URL is not set: search is disabled")
 	}
+	// Без хранилища файлов API работает целиком, кроме /attachments (503).
+	if cfg.S3.Endpoint != "" {
+		s3, err := storage.NewS3(storage.Config{
+			Endpoint:       cfg.S3.Endpoint,
+			AccessKey:      cfg.S3.AccessKey,
+			SecretKey:      cfg.S3.SecretKey,
+			Bucket:         cfg.S3.Bucket,
+			Region:         cfg.S3.Region,
+			UseSSL:         cfg.S3.UseSSL,
+			PublicEndpoint: cfg.S3.PublicEndpoint,
+		})
+		if err != nil {
+			return fmt.Errorf("file storage: %w", err)
+		}
+		deps.Attachments = attachment.NewService(queries, s3)
+	} else {
+		slog.Warn("S3_ENDPOINT is not set: attachments are disabled")
+	}
+
 	deps.Notes = note.NewService(queries, noteOpts...)
 
 	srv := httpapi.NewServer(cfg, deps)
