@@ -10,7 +10,7 @@ test('capture the submitted app and unavailable real API for the report', async 
     if (route === '/new') {
       await page.getByLabel('Название материала').fill('Индексы в PostgreSQL: когда они помогают');
       await page.getByLabel('Краткое описание').fill('Конспект для практики по базам данных. Создаётся без ожидания API.');
-      await page.getByLabel('Предмет').selectOption('Базы данных');
+      await page.getByRole('combobox', { name: /^Предмет/ }).selectOption('Базы данных');
       await page.getByRole('textbox', { name: 'Текст материала' }).fill('Индекс помогает быстрее находить строки, но требует памяти и замедляет вставку и обновление данных.\n\nПример\nCREATE INDEX notes_user_id_idx ON notes (user_id);\n\nПроверьте план запроса с EXPLAIN ANALYZE. Индекс полезен не для каждого запроса.');
       await page.getByLabel('Теги').fill('PostgreSQL, индексы, SQL');
       await page.getByLabel('Теги').blur();
