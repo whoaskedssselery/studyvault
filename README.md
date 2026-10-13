@@ -118,6 +118,63 @@ go run ./cmd/reindex                                                   # пер�
 Ошибки всегда имеют вид `{"error": {"code": "...", "message": "..."}}`. Чужие заметки, предметы, теги
 и файлы отвечают 404, как и несуществующие.
 
+## Проверка в браузере
+
+API проверено через Swagger UI (`/docs`) на запущенном сервере: каждый запрос выполнен кнопкой **Execute**
+и показывает настоящий ответ сервера. Данные демо-студента вымышленные.
+
+**1. Сервис жив.** `GET /health` в адресной строке браузера.
+
+![health](docs/screenshots/01-health.jpg)
+
+**2. Документация.** Все эндпоинты сгруппированы по разделам; замок значит, что нужен токен.
+
+![Swagger UI](docs/screenshots/02-docs-overview.jpg)
+
+**3. Регистрация.** `POST /auth/register` вернул 201 и access-токен; refresh-токен уходит в httpOnly cookie.
+
+![register](docs/screenshots/03-register-201.jpg)
+
+**4. Авторизация.** Токен вставлен в **Authorize**, остальные запросы идут от имени студента.
+
+![authorize](docs/screenshots/04-authorize.jpg)
+
+**5. Без токена API закрыто.** `GET /subjects` без авторизации отвечает 401.
+
+![401](docs/screenshots/07-no-token-401.jpg)
+
+**6. Предмет.** `POST /subjects` создал предмет, русские названия сохраняются корректно.
+
+![subject](docs/screenshots/05-create-subject-201.jpg)
+
+**7. Заметка со ссылкой.** В тексте есть `[[Производные]]`, и заметка привязана к предмету.
+
+![note](docs/screenshots/06-create-note-with-link-201.jpg)
+
+**8. Список заметок.** Теги, предмет, закрепление и постраничная выдача (`next_cursor`).
+
+![notes](docs/screenshots/09-notes-list-200.png)
+
+**9. Граф связей.** Ссылка `[[Производные]]` превратилась в ребро между двумя заметками.
+
+![graph](docs/screenshots/10-graph-200.png)
+
+**10. Поиск.** Запрос «производная» нашёл обе заметки, включая форму «Производные», и подсветил совпадения.
+
+![search](docs/screenshots/08-search-200.jpg)
+
+**11. Файл: регистрация.** `POST /attachments` выдал временную ссылку на загрузку; в её подпись входят тип и размер файла.
+
+![attachment](docs/screenshots/11-create-attachment-201.jpg)
+
+**12. Файл: скачивание.** После загрузки `GET /attachments/{id}` возвращает метаданные и ссылку на скачивание.
+
+![download](docs/screenshots/12-get-attachment-200.jpg)
+
+**13. Автоматические проверки.** Тесты на настоящих Postgres, Meilisearch и S3 и сборка образа проходят в GitHub Actions.
+
+![CI](docs/screenshots/13-ci-green.jpg)
+
 ## Схема базы данных
 
 ![Схема БД](backend/db/schema.png)
