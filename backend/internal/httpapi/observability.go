@@ -74,7 +74,7 @@ func accessLog(next http.Handler) http.Handler {
 			slog.String("route", route),
 			slog.Int("status", status),
 			slog.Int("bytes", ww.BytesWritten()),
-			slog.Duration("duration", time.Since(start)),
+			slog.Float64("duration_ms", float64(time.Since(start).Microseconds())/1000),
 		)
 	})
 }
