@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5440:5432" # 5432 и 5433 обычно заняты локальными Postgres
+      - "127.0.0.1:5440:5432" # только с этой машины; 5432 и 5433 обычно заняты локальными Postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +21,7 @@ services:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
       MEILI_ENV: development
     ports:
-      - "7700:7700"
+      - "127.0.0.1:7700:7700"
     volumes:
       - meili_data:/meili_data
 
@@ -34,8 +34,8 @@ services:
       RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
       RUSTFS_CONSOLE_ENABLE: "true"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - s3_data:/data
 
@@ -74,7 +74,7 @@ services:
       # Локальный запуск идёт по http, поэтому Secure выключен. В проде оставьте true.
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       migrate:
         condition: service_completed_successfully
