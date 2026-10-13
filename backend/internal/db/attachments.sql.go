@@ -156,13 +156,19 @@ func (q *Queries) ListAttachmentsByNote(ctx context.Context, arg ListAttachments
 	return items, nil
 }
 
-const sumUserAttachmentBytes = `-- name: SumUserAttachmentBytes :one
-SELECT COALESCE(sum(size_bytes), 0)::bigint FROM attachments WHERE user_id = $1
+const userAttachmentUsage = `-- name: UserAttachmentUsage :one
+SELECT count(*)::bigint AS files, COALESCE(sum(size_bytes), 0)::bigint AS bytes
+FROM attachments WHERE user_id = $1
 `
 
-func (q *Queries) SumUserAttachmentBytes(ctx context.Context, userID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, sumUserAttachmentBytes, userID)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
+type UserAttachmentUsageRow struct {
+	Files int64 `json:"files"`
+	Bytes int64 `json:"bytes"`
+}
+
+func (q *Queries) UserAttachmentUsage(ctx context.Context, userID uuid.UUID) (UserAttachmentUsageRow, error) {
+	row := q.db.QueryRow(ctx, userAttachmentUsage, userID)
+	var i UserAttachmentUsageRow
+	err := row.Scan(&i.Files, &i.Bytes)
+	return i, err
 }

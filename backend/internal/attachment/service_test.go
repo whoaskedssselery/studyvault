@@ -69,6 +69,7 @@ type fakeStore struct {
 
 	noteFiles int64 // сколько файлов уже у заметки
 	usedBytes int64 // сколько байт файлов уже у пользователя
+	userFiles int64 // сколько файлов уже у пользователя
 	countErr  error
 }
 
@@ -76,8 +77,8 @@ func (f *fakeStore) CountNoteAttachments(context.Context, db.CountNoteAttachment
 	return f.noteFiles, f.countErr
 }
 
-func (f *fakeStore) SumUserAttachmentBytes(context.Context, uuid.UUID) (int64, error) {
-	return f.usedBytes, f.countErr
+func (f *fakeStore) UserAttachmentUsage(context.Context, uuid.UUID) (db.UserAttachmentUsageRow, error) {
+	return db.UserAttachmentUsageRow{Files: f.userFiles, Bytes: f.usedBytes}, f.countErr
 }
 
 func newFakeStore() *fakeStore { return &fakeStore{rows: map[uuid.UUID]db.Attachment{}} }
@@ -419,5 +420,15 @@ func TestCreate_QuotaLookupFailure_IsReturned(t *testing.T) {
 	f.countErr = errors.New("db down")
 	if _, err := attachment.NewService(f, st).Create(context.Background(), uuid.New(), valid()); err == nil || len(st.putCalls) != 0 {
 		t.Errorf("err = %v, presign calls = %d", err, len(st.putCalls))
+	}
+}
+
+// Без этого предела квота в байтах не ограничивала бы число записей: файлы по одному байту без заметки.
+func TestCreate_TooManyFilesInTotal_IsRefused(t *testing.T) {
+	f, st := newFakeStore(), newMemStorage()
+	f.userFiles = limits.MaxAttachmentsPerUser
+	_, err := attachment.NewService(f, st).Create(context.Background(), uuid.New(), valid())
+	if !errors.Is(err, limits.ErrReached) || len(st.putCalls) != 0 {
+		t.Fatalf("err = %v, presign calls = %d", err, len(st.putCalls))
 	}
 }

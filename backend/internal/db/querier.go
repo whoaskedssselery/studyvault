@@ -74,7 +74,6 @@ type Querier interface {
 	RevokeRefreshToken(ctx context.Context, tokenHash string) (int64, error)
 	SoftDeleteNote(ctx context.Context, arg SoftDeleteNoteParams) (int64, error)
 	SubjectOwnedByUser(ctx context.Context, arg SubjectOwnedByUserParams) (bool, error)
-	SumUserAttachmentBytes(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Частичное обновление. NULL в title, content, content_text и is_pinned значит «не менять».
 	// subject_id может быть очищен, поэтому «менять или нет» передаётся флагом set_subject.
 	UpdateNote(ctx context.Context, arg UpdateNoteParams) (Note, error)
@@ -83,6 +82,7 @@ type Querier interface {
 	UpdateSubject(ctx context.Context, arg UpdateSubjectParams) (Subject, error)
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (int64, error)
+	UserAttachmentUsage(ctx context.Context, userID uuid.UUID) (UserAttachmentUsageRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

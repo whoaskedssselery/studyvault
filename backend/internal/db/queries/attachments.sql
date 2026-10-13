@@ -18,5 +18,6 @@ DELETE FROM attachments WHERE id = $1 AND user_id = $2 RETURNING *;
 -- name: CountNoteAttachments :one
 SELECT count(*) FROM attachments WHERE note_id = $1 AND user_id = $2;
 
--- name: SumUserAttachmentBytes :one
-SELECT COALESCE(sum(size_bytes), 0)::bigint FROM attachments WHERE user_id = $1;
+-- name: UserAttachmentUsage :one
+SELECT count(*)::bigint AS files, COALESCE(sum(size_bytes), 0)::bigint AS bytes
+FROM attachments WHERE user_id = $1;

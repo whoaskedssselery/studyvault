@@ -45,7 +45,7 @@ var allowedMIME = map[string]bool{
 type Store interface {
 	NoteOwnedByUser(ctx context.Context, arg db.NoteOwnedByUserParams) (bool, error)
 	CountNoteAttachments(ctx context.Context, arg db.CountNoteAttachmentsParams) (int64, error)
-	SumUserAttachmentBytes(ctx context.Context, userID uuid.UUID) (int64, error)
+	UserAttachmentUsage(ctx context.Context, userID uuid.UUID) (db.UserAttachmentUsageRow, error)
 	CreateAttachment(ctx context.Context, arg db.CreateAttachmentParams) (db.Attachment, error)
 	GetAttachment(ctx context.Context, arg db.GetAttachmentParams) (db.Attachment, error)
 	ListAttachmentsByNote(ctx context.Context, arg db.ListAttachmentsByNoteParams) ([]db.Attachment, error)
@@ -107,11 +107,14 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (Uploa
 			return Upload{}, limits.Reached("files per note", limits.MaxAttachmentsPerNote)
 		}
 	}
-	used, err := s.store.SumUserAttachmentBytes(ctx, userID)
+	usage, err := s.store.UserAttachmentUsage(ctx, userID)
 	if err != nil {
-		return Upload{}, fmt.Errorf("sum attachment bytes: %w", err)
+		return Upload{}, fmt.Errorf("measure attachment usage: %w", err)
 	}
-	if used+in.SizeBytes > limits.MaxAttachmentBytesPerUser {
+	if usage.Files >= limits.MaxAttachmentsPerUser {
+		return Upload{}, limits.Reached("files in total", limits.MaxAttachmentsPerUser)
+	}
+	if usage.Bytes+in.SizeBytes > limits.MaxAttachmentBytesPerUser {
 		return Upload{}, limits.Reached("bytes of files in total", limits.MaxAttachmentBytesPerUser)
 	}
 
