@@ -16,9 +16,11 @@ func corsMiddleware(origins []string) func(http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler { return next }
 	}
 	return cors.Handler(cors.Options{
-		AllowedOrigins:   origins,
-		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowedHeaders:   []string{"Authorization", "Content-Type"},
+		AllowedOrigins: origins,
+		AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
+		AllowedHeaders: []string{"Authorization", "Content-Type", requestIDHeader},
+		// Без этого скрипт фронтенда не увидел бы эти заголовки ответа: из чужого источника браузер скрывает всё, кроме базовых.
+		ExposedHeaders:   []string{requestIDHeader, "Retry-After"},
 		AllowCredentials: true,
 		MaxAge:           int((10 * time.Minute).Seconds()),
 	})

@@ -11,6 +11,17 @@ import (
 	"github.com/google/uuid"
 )
 
+const countTagsByUser = `-- name: CountTagsByUser :one
+SELECT count(*) FROM tags WHERE user_id = $1
+`
+
+func (q *Queries) CountTagsByUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countTagsByUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUserTags = `-- name: CountUserTags :one
 SELECT count(*) FROM tags WHERE user_id = $1 AND id = ANY($2::uuid[])
 `

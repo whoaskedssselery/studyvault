@@ -17,10 +17,13 @@ var publicPaths = map[string]bool{
 	apiPrefix + "/auth/logout":   true,
 }
 
-func authMiddleware(secret []byte) MiddlewareFunc {
+// authMiddleware стоит на уровне роутера, до разбора параметров пути: запрос без токена получает 401, а не 400 за
+// неверный id, и неизвестный путь внутри /v1 не выдаёт, что такого маршрута нет. За пределами /v1 (документация,
+// проба /health) токен не нужен.
+func authMiddleware(secret []byte) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if publicPaths[r.URL.Path] {
+			if !strings.HasPrefix(r.URL.Path, apiPrefix+"/") || publicPaths[r.URL.Path] {
 				next.ServeHTTP(w, r)
 				return
 			}

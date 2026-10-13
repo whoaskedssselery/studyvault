@@ -12,6 +12,9 @@ import (
 )
 
 type Querier interface {
+	CountNoteAttachments(ctx context.Context, arg CountNoteAttachmentsParams) (int64, error)
+	CountSubjects(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountTagsByUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountUserTags(ctx context.Context, arg CountUserTagsParams) (int64, error)
 	CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (Attachment, error)
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
@@ -79,6 +82,7 @@ type Querier interface {
 	UpdateSubject(ctx context.Context, arg UpdateSubjectParams) (Subject, error)
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (int64, error)
+	UserAttachmentUsage(ctx context.Context, userID uuid.UUID) (UserAttachmentUsageRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 )
 
 // ErrNotFound возвращается и для чужого предмета: снаружи они неотличимы.
@@ -17,6 +18,7 @@ var ErrNotFound = errors.New("subject not found")
 
 type Store interface {
 	ListSubjects(ctx context.Context, userID uuid.UUID) ([]db.Subject, error)
+	CountSubjects(ctx context.Context, userID uuid.UUID) (int64, error)
 	CreateSubject(ctx context.Context, arg db.CreateSubjectParams) (db.Subject, error)
 	UpdateSubject(ctx context.Context, arg db.UpdateSubjectParams) (db.Subject, error)
 	DeleteSubject(ctx context.Context, arg db.DeleteSubjectParams) (int64, error)
@@ -51,6 +53,13 @@ func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]db.Subject, err
 }
 
 func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (db.Subject, error) {
+	n, err := s.store.CountSubjects(ctx, userID)
+	if err != nil {
+		return db.Subject{}, fmt.Errorf("count subjects: %w", err)
+	}
+	if n >= limits.MaxSubjectsPerUser {
+		return db.Subject{}, limits.Reached("subjects", limits.MaxSubjectsPerUser)
+	}
 	subj, err := s.store.CreateSubject(ctx, db.CreateSubjectParams{
 		UserID:   userID,
 		Title:    in.Title,

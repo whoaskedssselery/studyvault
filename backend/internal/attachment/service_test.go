@@ -13,6 +13,7 @@ import (
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/attachment"
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 	"github.com/whoaskedssselery/studyvault/backend/internal/storage"
 )
 
@@ -65,6 +66,19 @@ type fakeStore struct {
 	created   []db.CreateAttachmentParams
 	listed    []db.Attachment
 	err       error
+
+	noteFiles int64 // сколько файлов уже у заметки
+	usedBytes int64 // сколько байт файлов уже у пользователя
+	userFiles int64 // сколько файлов уже у пользователя
+	countErr  error
+}
+
+func (f *fakeStore) CountNoteAttachments(context.Context, db.CountNoteAttachmentsParams) (int64, error) {
+	return f.noteFiles, f.countErr
+}
+
+func (f *fakeStore) UserAttachmentUsage(context.Context, uuid.UUID) (db.UserAttachmentUsageRow, error) {
+	return db.UserAttachmentUsageRow{Files: f.userFiles, Bytes: f.usedBytes}, f.countErr
 }
 
 func newFakeStore() *fakeStore { return &fakeStore{rows: map[uuid.UUID]db.Attachment{}} }
@@ -353,5 +367,68 @@ func TestStoreError_IsPropagated(t *testing.T) {
 
 	if _, err := attachment.NewService(f, newMemStorage()).Create(context.Background(), uuid.New(), valid()); !errors.Is(err, boom) {
 		t.Errorf("Create: err = %v", err)
+	}
+}
+
+func TestCreate_TooManyFilesOnANote_IsRefused(t *testing.T) {
+	f, st := newFakeStore(), newMemStorage()
+	f.noteOwned, f.noteFiles = true, limits.MaxAttachmentsPerNote
+	noteID := uuid.New()
+	in := valid()
+	in.NoteID = &noteID
+
+	_, err := attachment.NewService(f, st).Create(context.Background(), uuid.New(), in)
+
+	if !errors.Is(err, limits.ErrReached) {
+		t.Fatalf("err = %v, want limits.ErrReached", err)
+	}
+	if len(st.putCalls) != 0 || len(f.created) != 0 {
+		t.Error("no upload link may be issued and no row created over the quota")
+	}
+}
+
+func TestCreate_FilesWithoutANote_AreNotLimitedPerNote(t *testing.T) {
+	f, st := newFakeStore(), newMemStorage()
+	f.noteFiles = limits.MaxAttachmentsPerNote // чужая заметка не должна влиять: заметки нет
+	if _, err := attachment.NewService(f, st).Create(context.Background(), uuid.New(), valid()); err != nil {
+		t.Fatalf("a file without a note: %v", err)
+	}
+}
+
+func TestCreate_OverTheUserStorageQuota_IsRefused(t *testing.T) {
+	f, st := newFakeStore(), newMemStorage()
+	f.usedBytes = limits.MaxAttachmentBytesPerUser - 1000 // осталось 1000 байт, а файл на 1234
+	_, err := attachment.NewService(f, st).Create(context.Background(), uuid.New(), valid())
+	if !errors.Is(err, limits.ErrReached) {
+		t.Fatalf("err = %v, want limits.ErrReached", err)
+	}
+	if len(st.putCalls) != 0 {
+		t.Error("no upload link may be issued over the quota")
+	}
+}
+
+func TestCreate_ExactlyFillingTheUserStorageQuota_Succeeds(t *testing.T) {
+	f, st := newFakeStore(), newMemStorage()
+	f.usedBytes = limits.MaxAttachmentBytesPerUser - 1234
+	if _, err := attachment.NewService(f, st).Create(context.Background(), uuid.New(), valid()); err != nil {
+		t.Fatalf("a file that exactly fits must be accepted: %v", err)
+	}
+}
+
+func TestCreate_QuotaLookupFailure_IsReturned(t *testing.T) {
+	f, st := newFakeStore(), newMemStorage()
+	f.countErr = errors.New("db down")
+	if _, err := attachment.NewService(f, st).Create(context.Background(), uuid.New(), valid()); err == nil || len(st.putCalls) != 0 {
+		t.Errorf("err = %v, presign calls = %d", err, len(st.putCalls))
+	}
+}
+
+// Без этого предела квота в байтах не ограничивала бы число записей: файлы по одному байту без заметки.
+func TestCreate_TooManyFilesInTotal_IsRefused(t *testing.T) {
+	f, st := newFakeStore(), newMemStorage()
+	f.userFiles = limits.MaxAttachmentsPerUser
+	_, err := attachment.NewService(f, st).Create(context.Background(), uuid.New(), valid())
+	if !errors.Is(err, limits.ErrReached) || len(st.putCalls) != 0 {
+		t.Fatalf("err = %v, presign calls = %d", err, len(st.putCalls))
 	}
 }

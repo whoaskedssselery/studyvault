@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 	"github.com/whoaskedssselery/studyvault/backend/internal/subject"
 )
 
@@ -19,6 +20,13 @@ type fakeStore struct {
 	gotUpdate db.UpdateSubjectParams
 	gotDelete db.DeleteSubjectParams
 	deleteN   int64
+
+	count    int64 // сколько предметов уже есть у пользователя
+	countErr error
+}
+
+func (f *fakeStore) CountSubjects(context.Context, uuid.UUID) (int64, error) {
+	return f.count, f.countErr
 }
 
 func (f *fakeStore) ListSubjects(context.Context, uuid.UUID) ([]db.Subject, error) { return nil, f.err }
@@ -120,5 +128,32 @@ func TestStoreError_IsPropagated(t *testing.T) {
 	}
 	if err := svc.Delete(context.Background(), uuid.New(), uuid.New()); !errors.Is(err, boom) || errors.Is(err, subject.ErrNotFound) {
 		t.Errorf("Delete: err = %v, want the store error", err)
+	}
+}
+
+func TestCreate_AtTheQuota_IsRefusedWithoutInserting(t *testing.T) {
+	f := &fakeStore{count: limits.MaxSubjectsPerUser}
+
+	_, err := subject.NewService(f).Create(context.Background(), uuid.New(), subject.Input{Title: "One too many"})
+
+	if !errors.Is(err, limits.ErrReached) {
+		t.Fatalf("err = %v, want limits.ErrReached", err)
+	}
+	if f.gotCreate.Title != "" {
+		t.Error("nothing may be inserted once the quota is reached")
+	}
+}
+
+func TestCreate_JustBelowTheQuota_Succeeds(t *testing.T) {
+	f := &fakeStore{count: limits.MaxSubjectsPerUser - 1}
+	if _, err := subject.NewService(f).Create(context.Background(), uuid.New(), subject.Input{Title: "Last one"}); err != nil {
+		t.Fatalf("the last allowed subject must be accepted: %v", err)
+	}
+}
+
+func TestCreate_CountFailure_IsReturnedAndNothingIsInserted(t *testing.T) {
+	f := &fakeStore{countErr: errors.New("db down")}
+	if _, err := subject.NewService(f).Create(context.Background(), uuid.New(), subject.Input{Title: "X"}); err == nil || f.gotCreate.Title != "" {
+		t.Errorf("err = %v, inserted = %q", err, f.gotCreate.Title)
 	}
 }

@@ -138,8 +138,8 @@ func TestRecoverer_PanicBecomesJSON500WithRequestID(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	var body Error
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.Error.Code != "internal" {
+	var body Problem
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.Code != "internal" {
 		t.Errorf("body = %q, want the API error format (err %v)", rec.Body.String(), err)
 	}
 	if strings.Contains(rec.Body.String(), "boom") {

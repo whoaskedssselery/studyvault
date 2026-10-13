@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 	"github.com/whoaskedssselery/studyvault/backend/internal/storage"
 )
 
@@ -43,6 +44,8 @@ var allowedMIME = map[string]bool{
 
 type Store interface {
 	NoteOwnedByUser(ctx context.Context, arg db.NoteOwnedByUserParams) (bool, error)
+	CountNoteAttachments(ctx context.Context, arg db.CountNoteAttachmentsParams) (int64, error)
+	UserAttachmentUsage(ctx context.Context, userID uuid.UUID) (db.UserAttachmentUsageRow, error)
 	CreateAttachment(ctx context.Context, arg db.CreateAttachmentParams) (db.Attachment, error)
 	GetAttachment(ctx context.Context, arg db.GetAttachmentParams) (db.Attachment, error)
 	ListAttachmentsByNote(ctx context.Context, arg db.ListAttachmentsByNoteParams) ([]db.Attachment, error)
@@ -96,6 +99,23 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (Uploa
 		if !owned {
 			return Upload{}, ErrNoteNotFound
 		}
+		count, err := s.store.CountNoteAttachments(ctx, db.CountNoteAttachmentsParams{NoteID: toNullUUID(in.NoteID), UserID: userID})
+		if err != nil {
+			return Upload{}, fmt.Errorf("count note attachments: %w", err)
+		}
+		if count >= limits.MaxAttachmentsPerNote {
+			return Upload{}, limits.Reached("files per note", limits.MaxAttachmentsPerNote)
+		}
+	}
+	usage, err := s.store.UserAttachmentUsage(ctx, userID)
+	if err != nil {
+		return Upload{}, fmt.Errorf("measure attachment usage: %w", err)
+	}
+	if usage.Files >= limits.MaxAttachmentsPerUser {
+		return Upload{}, limits.Reached("files in total", limits.MaxAttachmentsPerUser)
+	}
+	if usage.Bytes+in.SizeBytes > limits.MaxAttachmentBytesPerUser {
+		return Upload{}, limits.Reached("bytes of files in total", limits.MaxAttachmentBytesPerUser)
 	}
 
 	key := userID.String() + "/" + uuid.NewString()

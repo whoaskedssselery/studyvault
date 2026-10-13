@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 	"github.com/whoaskedssselery/studyvault/backend/internal/tag"
 )
 
@@ -20,6 +21,13 @@ type fakeStore struct {
 
 	replaced   *db.ReplaceNoteTagsParams
 	countedFor []uuid.UUID
+
+	userTags int64 // сколько тегов уже есть у пользователя
+	countErr error
+}
+
+func (f *fakeStore) CountTagsByUser(context.Context, uuid.UUID) (int64, error) {
+	return f.userTags, f.countErr
 }
 
 func (f *fakeStore) ListTags(context.Context, uuid.UUID) ([]db.Tag, error) { return nil, f.err }
@@ -127,5 +135,24 @@ func TestStoreError_IsPropagated(t *testing.T) {
 	}
 	if err := svc.SetNoteTags(context.Background(), uuid.New(), uuid.New(), nil); !errors.Is(err, boom) {
 		t.Errorf("SetNoteTags: err = %v", err)
+	}
+}
+
+func TestCreate_AtTheQuota_IsRefused(t *testing.T) {
+	_, err := tag.NewService(&fakeStore{userTags: limits.MaxTagsPerUser}).Create(context.Background(), uuid.New(), "one-too-many")
+	if !errors.Is(err, limits.ErrReached) {
+		t.Fatalf("err = %v, want limits.ErrReached", err)
+	}
+}
+
+func TestCreate_JustBelowTheQuota_Succeeds(t *testing.T) {
+	if _, err := tag.NewService(&fakeStore{userTags: limits.MaxTagsPerUser - 1}).Create(context.Background(), uuid.New(), "last"); err != nil {
+		t.Fatalf("the last allowed tag must be accepted: %v", err)
+	}
+}
+
+func TestCreate_CountFailure_IsReturned(t *testing.T) {
+	if _, err := tag.NewService(&fakeStore{countErr: errors.New("db down")}).Create(context.Background(), uuid.New(), "x"); err == nil {
+		t.Fatal("a failing count must not be treated as zero")
 	}
 }

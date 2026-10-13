@@ -14,6 +14,7 @@ import (
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/attachment"
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 	"github.com/whoaskedssselery/studyvault/backend/internal/storage"
 )
 
@@ -127,6 +128,8 @@ func (a *api) attachmentError(w http.ResponseWriter, r *http.Request, err error,
 		writeError(w, http.StatusConflict, "not_uploaded", "the file has not been uploaded yet")
 	case errors.Is(err, attachment.ErrInvalid):
 		badRequest(w, err.Error())
+	case errors.Is(err, limits.ErrReached):
+		limitReached(w, err)
 	case errors.Is(err, storage.ErrUnavailable):
 		slog.WarnContext(r.Context(), op+": storage is unavailable", "err", err)
 		storageUnavailable(w)

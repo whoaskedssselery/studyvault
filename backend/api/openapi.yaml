@@ -1,4 +1,5 @@
 openapi: 3.0.3
+    | `method_not_allowed` | 405 | у этого пути нет такого метода |
 info:
   title: studyvault API
   version: 1.0.0
@@ -12,8 +13,12 @@ info:
     Его передают в заголовке `Authorization: Bearer <токен>`. Refresh-токен приходит в httpOnly cookie
     `refresh_token`, а `POST /auth/refresh` меняет его на новую пару.
 
-    **Ошибки.** Всегда один формат: `{"error": {"code": "...", "message": "..."}}`. Клиент ориентируется на `code`,
-    `message` написан для человека. Чужие и несуществующие объекты неотличимы: оба дают `not_found`.
+    **Ошибки.** Формат RFC 7807 (`Content-Type: application/problem+json`), всегда один и тот же:
+    `{"type": "...", "title": "Not Found", "status": 404, "detail": "...", "code": "not_found", "request_id": "..."}`.
+    Клиент ориентируется на `code`: он стабилен. `detail` написан для человека, `type` ведёт на описание кода в
+    [docs/errors.md](https://github.com/whoaskedssselery/studyvault/blob/main/docs/errors.md), `request_id`
+    совпадает с заголовком `X-Request-ID` и нужен, чтобы найти запрос в логе сервера. Чужие и несуществующие
+    объекты неотличимы: оба дают `not_found`.
 
     | code | HTTP | Когда |
     |---|---|---|
@@ -24,6 +29,7 @@ info:
     | `not_found` | 404 | объект не найден (или принадлежит другому пользователю) |
     | `email_taken` | 409 | почта уже зарегистрирована |
     | `tag_exists` | 409 | у пользователя уже есть тег с таким именем |
+    | `limit_reached` | 409 | исчерпана квота пользователя, см. «Лимиты» |
     | `not_uploaded` | 409 | файл зарегистрирован, но ещё не загружен |
     | `rate_limited` | 429 | слишком много попыток входа; заголовок `Retry-After` в секундах |
     | `internal` | 500 | непредвиденная ошибка сервера (подробности только в его логе) |
@@ -31,9 +37,12 @@ info:
     | `storage_unavailable` | 503 | хранилище файлов недоступно, остальное API работает |
 
     **Лимиты.** Вход, регистрация, обновление токена и смена пароля: 20 попыток в минуту с одного адреса, дальше 429.
+    Квоты на пользователя: 200 предметов, 500 тегов, 50 файлов на заметку, 5000 файлов и 1 ГиБ суммарно (один файл до
+    20 МБ), дальше 409 `limit_reached`. Квоты мягкие: при одновременных запросах предел можно превысить на число
+    параллельных запросов.
 
     **Страницы.** Список заметок отдаётся страницами по курсору: `next_cursor` из ответа передают в `?cursor=`,
-    `null` значит, что страница последняя. Остальные списки небольшие и приходят целиком.
+    `null` значит, что страница последняя. Остальные списки ограничены квотами (см. «Лимиты») и приходят целиком.
 
     **Версии.** Версия указана в пути: все эндпоинты живут под `/v1` (пути в этой документации даны относительно
     него). Совместимые изменения (новые поля и эндпоинты) выходят без смены версии. Несовместимые выйдут под
@@ -287,6 +296,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /subjects/{id}:
     parameters:
@@ -684,6 +695,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
@@ -763,33 +776,33 @@ components:
     BadRequest:
       description: Некорректный запрос
       content:
-        application/json:
+        application/problem+json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/Problem"
     Unauthorized:
       description: Нет или просрочен токен
       content:
-        application/json:
+        application/problem+json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/Problem"
     WrongPassword:
       description: Неверный текущий пароль (`invalid_credentials`)
       content:
-        application/json:
+        application/problem+json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/Problem"
     NotFound:
       description: Не найдено (или принадлежит другому пользователю)
       content:
-        application/json:
+        application/problem+json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/Problem"
     ServiceUnavailable:
       description: Поиск или хранилище файлов временно недоступны (остальное API работает)
       content:
-        application/json:
+        application/problem+json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/Problem"
     TooManyRequests:
       description: Слишком много попыток входа, регистрации, обновления токена или смены пароля с этого адреса
       headers:
@@ -798,30 +811,46 @@ components:
           schema:
             type: integer
       content:
-        application/json:
+        application/problem+json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/Problem"
     Conflict:
-      description: Конфликт (дубликат) или файл ещё не загружен (`not_uploaded`)
+      description: Конфликт, дубликат (`tag_exists`, `email_taken`), файл ещё не загружен (`not_uploaded`) или исчерпана квота (`limit_reached`)
       content:
-        application/json:
+        application/problem+json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/Problem"
 
   schemas:
-    Error:
+    Problem:
       type: object
-      required: [error]
+      description: Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
+      required: [type, title, status, detail, code]
       properties:
-        error:
-          type: object
-          required: [code, message]
-          properties:
-            code:
-              type: string
-              description: Машиночитаемый код, например `validation_failed`, `not_found`
-            message:
-              type: string
+        type:
+          type: string
+          format: uri
+          description: Адрес описания этого вида ошибки
+          example: https://github.com/whoaskedssselery/studyvault/blob/main/docs/errors.md#not_found
+        title:
+          type: string
+          description: Краткое название по HTTP-статусу
+          example: Not Found
+        status:
+          type: integer
+          example: 404
+        detail:
+          type: string
+          description: Объяснение для человека
+          example: note not found
+        code:
+          type: string
+          description: Стабильный машиночитаемый код, например `validation_failed` или `not_found`
+          example: not_found
+        request_id:
+          type: string
+          description: Совпадает с заголовком `X-Request-ID` ответа
+          example: 3f9a1c2b7d4e5a60
 
     Health:
       type: object

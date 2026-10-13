@@ -11,6 +11,22 @@ import (
 	"github.com/google/uuid"
 )
 
+const countNoteAttachments = `-- name: CountNoteAttachments :one
+SELECT count(*) FROM attachments WHERE note_id = $1 AND user_id = $2
+`
+
+type CountNoteAttachmentsParams struct {
+	NoteID uuid.NullUUID `json:"note_id"`
+	UserID uuid.UUID     `json:"user_id"`
+}
+
+func (q *Queries) CountNoteAttachments(ctx context.Context, arg CountNoteAttachmentsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countNoteAttachments, arg.NoteID, arg.UserID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAttachment = `-- name: CreateAttachment :one
 INSERT INTO attachments (user_id, note_id, object_key, file_name, mime_type, size_bytes)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -138,4 +154,21 @@ func (q *Queries) ListAttachmentsByNote(ctx context.Context, arg ListAttachments
 		return nil, err
 	}
 	return items, nil
+}
+
+const userAttachmentUsage = `-- name: UserAttachmentUsage :one
+SELECT count(*)::bigint AS files, COALESCE(sum(size_bytes), 0)::bigint AS bytes
+FROM attachments WHERE user_id = $1
+`
+
+type UserAttachmentUsageRow struct {
+	Files int64 `json:"files"`
+	Bytes int64 `json:"bytes"`
+}
+
+func (q *Queries) UserAttachmentUsage(ctx context.Context, userID uuid.UUID) (UserAttachmentUsageRow, error) {
+	row := q.db.QueryRow(ctx, userAttachmentUsage, userID)
+	var i UserAttachmentUsageRow
+	err := row.Scan(&i.Files, &i.Bytes)
+	return i, err
 }

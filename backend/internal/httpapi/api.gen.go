@@ -130,15 +130,6 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"new_password"`
 }
 
-// Error defines model for Error.
-type Error struct {
-	Error struct {
-		// Code Машиночитаемый код, например `validation_failed`, `not_found`
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
-}
-
 // Graph defines model for Graph.
 type Graph struct {
 	Edges []struct {
@@ -233,6 +224,37 @@ type NoteSummary struct {
 	Tags      []Tag                                 `json:"tags"`
 	Title     string                                `json:"title"`
 	UpdatedAt time.Time                             `json:"updated_at"`
+}
+
+// Problem Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
+type Problem struct {
+	// Code Стабильный машиночитаемый код, например `validation_failed` или `not_found`
+	//
+	// Example: not_found
+	Code string `json:"code"`
+
+	// Detail Объяснение для человека
+	//
+	// Example: note not found
+	Detail string `json:"detail"`
+
+	// RequestId Совпадает с заголовком `X-Request-ID` ответа
+	//
+	// Example: 3f9a1c2b7d4e5a60
+	RequestId *string `json:"request_id,omitempty"`
+
+	// Status Example: 404
+	Status int `json:"status"`
+
+	// Title Краткое название по HTTP-статусу
+	//
+	// Example: Not Found
+	Title string `json:"title"`
+
+	// Type Адрес описания этого вида ошибки
+	//
+	// Example: https://github.com/whoaskedssselery/studyvault/blob/main/docs/errors.md#not_found
+	Type string `json:"type"`
 }
 
 // ProfilePatch defines model for ProfilePatch.
@@ -347,26 +369,26 @@ type Id = openapi_types.UUID
 // Limit defines model for Limit.
 type Limit = int
 
-// BadRequest defines model for BadRequest.
-type BadRequest = Error
+// BadRequest Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
+type BadRequest = Problem
 
-// Conflict defines model for Conflict.
-type Conflict = Error
+// Conflict Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
+type Conflict = Problem
 
-// NotFound defines model for NotFound.
-type NotFound = Error
+// NotFound Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
+type NotFound = Problem
 
-// ServiceUnavailable defines model for ServiceUnavailable.
-type ServiceUnavailable = Error
+// ServiceUnavailable Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
+type ServiceUnavailable = Problem
 
-// TooManyRequests defines model for TooManyRequests.
-type TooManyRequests = Error
+// TooManyRequests Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
+type TooManyRequests = Problem
 
-// Unauthorized defines model for Unauthorized.
-type Unauthorized = Error
+// Unauthorized Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
+type Unauthorized = Problem
 
-// WrongPassword defines model for WrongPassword.
-type WrongPassword = Error
+// WrongPassword Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
+type WrongPassword = Problem
 
 // ListAttachmentsParams defines parameters for ListAttachments.
 type ListAttachmentsParams struct {

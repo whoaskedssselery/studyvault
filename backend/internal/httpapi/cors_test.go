@@ -126,3 +126,23 @@ func TestAPIResponses_AreNotCached_ButDocsAre(t *testing.T) {
 		}
 	}
 }
+
+// Из чужого источника браузер отдаёт скрипту только базовые заголовки ответа. Без Expose-Headers фронтенд не смог бы
+// показать пользователю id запроса для обращения в поддержку и узнать, через сколько повторить после 429.
+func TestCORS_ExposesRequestIDAndRetryAfter_AndAcceptsRequestIDFromTheClient(t *testing.T) {
+	h := handlerWithOrigins("http://localhost:5173")
+
+	rec := request(h, http.MethodGet, "/v1/health", "http://localhost:5173", nil)
+	exposed := strings.ToLower(rec.Header().Get("Access-Control-Expose-Headers"))
+	if !strings.Contains(exposed, "x-request-id") || !strings.Contains(exposed, "retry-after") {
+		t.Errorf("Expose-Headers = %q, want X-Request-ID and Retry-After", exposed)
+	}
+
+	pre := request(h, http.MethodOptions, "/v1/notes", "http://localhost:5173", map[string]string{
+		"Access-Control-Request-Method":  "GET",
+		"Access-Control-Request-Headers": "authorization,x-request-id",
+	})
+	if !strings.Contains(strings.ToLower(pre.Header().Get("Access-Control-Allow-Headers")), "x-request-id") {
+		t.Errorf("a client-chosen X-Request-ID must pass the preflight: %v", pre.Header())
+	}
+}

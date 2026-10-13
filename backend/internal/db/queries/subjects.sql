@@ -20,3 +20,6 @@ RETURNING *;
 
 -- name: DeleteSubject :execrows
 DELETE FROM subjects WHERE id = $1 AND user_id = $2;
+
+-- name: CountSubjects :one
+SELECT count(*) FROM subjects WHERE user_id = $1;

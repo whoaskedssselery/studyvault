@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 )
 
 var (
@@ -27,6 +28,7 @@ type Store interface {
 	CreateTag(ctx context.Context, arg db.CreateTagParams) (db.Tag, error)
 	DeleteTag(ctx context.Context, arg db.DeleteTagParams) (int64, error)
 	NoteOwnedByUser(ctx context.Context, arg db.NoteOwnedByUserParams) (bool, error)
+	CountTagsByUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountUserTags(ctx context.Context, arg db.CountUserTagsParams) (int64, error)
 	ReplaceNoteTags(ctx context.Context, arg db.ReplaceNoteTagsParams) error
 }
@@ -44,6 +46,13 @@ func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]db.Tag, error) 
 }
 
 func (s *Service) Create(ctx context.Context, userID uuid.UUID, name string) (db.Tag, error) {
+	n, err := s.store.CountTagsByUser(ctx, userID)
+	if err != nil {
+		return db.Tag{}, fmt.Errorf("count tags: %w", err)
+	}
+	if n >= limits.MaxTagsPerUser {
+		return db.Tag{}, limits.Reached("tags", limits.MaxTagsPerUser)
+	}
 	t, err := s.store.CreateTag(ctx, db.CreateTagParams{UserID: userID, Name: name})
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
