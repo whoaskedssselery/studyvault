@@ -1,6 +1,6 @@
 # Проверки и баг-репорты
 
-Дата обновления: 14 октября 2026. Основание серверного кода: main, коммит bfcf9ae. Первичная проверка была на 0cb885d; устаревшие замечания перепроверены. Браузер: Chromium из Playwright, desktop 1440×1050, mobile 390×844.
+Дата обновления: 14 октября 2026. Основание серверного кода: main, коммит aa8e71d. Первичная проверка была на 0cb885d; устаревшие замечания перепроверены. Браузер: Chromium из Playwright, desktop 1440×1050, mobile 390×844.
 
 ## Границы результатов
 
@@ -38,9 +38,9 @@
 
 ### INT-001 · Path refresh-cookie не совпадал с путём фронтенд-прокси
 
-Приоритет P1, статус: исправлено. Backend выдаёт cookie с Path=/auth, а браузер отправляет refresh на /backend-api/auth/refresh. Без переписывания cookie не отправлялась бы на этот путь.
+Приоритет P1, статус: исправлено и обновлено для `/v1`. Backend выдаёт cookie с Path=/v1/auth, а браузер отправляет refresh на /backend-api/auth/refresh. Без переписывания cookie не отправлялась бы на этот путь. После переноса API запросы без `/v1` также перестали бы попадать в обработчики.
 
-Исправление: Vite и serve.mjs переписывают Path на /backend-api/auth. Подтверждение: 2 Node HTTP-теста прокси и браузерная проверка reload/refresh. Access-токен не хранится в localStorage/sessionStorage, httpOnly-cookie не доступна через document.cookie.
+Исправление: Vite и serve.mjs направляют `/backend-api/*` на `/v1/*` и переписывают Path на /backend-api/auth. Подтверждение: 2 Node HTTP-теста прокси и браузерная проверка reload/refresh. Access-токен не хранится в localStorage/sessionStorage, httpOnly-cookie не доступна через document.cookie.
 
 ### INT-002 · Учебные данные нельзя подставить вместо моделей API
 
