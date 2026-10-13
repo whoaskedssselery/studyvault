@@ -745,7 +745,7 @@ components:
 
   headers:
     RefreshCookie:
-      description: "`refresh_token=<value>; HttpOnly; SameSite=Lax; Path=/auth`"
+      description: "`refresh_token=<value>; HttpOnly; SameSite=Lax; Path=/v1/auth`"
       schema:
         type: string
 
