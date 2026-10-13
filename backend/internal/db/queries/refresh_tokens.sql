@@ -19,3 +19,8 @@ WHERE user_id = $1 AND revoked_at IS NULL;
 -- по ним распознаётся повторное предъявление использованного токена.
 -- name: DeleteExpiredRefreshTokens :execrows
 DELETE FROM refresh_tokens WHERE expires_at <= $1;
+
+-- Смена пароля стирает сессии, а не отзывает их: устаревшее устройство, предъявив старый токен, получит
+-- обычный отказ, а не срабатывание защиты от кражи, которое закрыло бы и новую сессию.
+-- name: DeleteUserRefreshTokens :exec
+DELETE FROM refresh_tokens WHERE user_id = $1;

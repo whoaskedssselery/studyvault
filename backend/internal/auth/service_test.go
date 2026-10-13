@@ -66,6 +66,46 @@ func (f *fakeStore) DeleteExpiredRefreshTokens(_ context.Context, before time.Ti
 	return n, nil
 }
 
+func (f *fakeStore) DeleteUserRefreshTokens(_ context.Context, userID uuid.UUID) error {
+	for h, t := range f.tokens {
+		if t.UserID == userID {
+			delete(f.tokens, h)
+		}
+	}
+	return nil
+}
+
+func (f *fakeStore) GetUserByID(_ context.Context, id uuid.UUID) (db.User, error) {
+	for _, u := range f.users {
+		if u.ID == id {
+			return u, nil
+		}
+	}
+	return db.User{}, pgx.ErrNoRows
+}
+
+func (f *fakeStore) UpdateUserDisplayName(_ context.Context, a db.UpdateUserDisplayNameParams) (db.User, error) {
+	for k, u := range f.users {
+		if u.ID == a.ID {
+			u.DisplayName = a.DisplayName
+			f.users[k] = u
+			return u, nil
+		}
+	}
+	return db.User{}, pgx.ErrNoRows
+}
+
+func (f *fakeStore) UpdateUserPassword(_ context.Context, a db.UpdateUserPasswordParams) (int64, error) {
+	for k, u := range f.users {
+		if u.ID == a.ID {
+			u.PasswordHash = a.PasswordHash
+			f.users[k] = u
+			return 1, nil
+		}
+	}
+	return 0, nil
+}
+
 func (f *fakeStore) CreateUser(_ context.Context, a db.CreateUserParams) (db.User, error) {
 	key := lower(a.Email)
 	if _, ok := f.users[key]; ok {
@@ -396,5 +436,84 @@ func TestRunTokenPurge_RunsAtStartAndOnEveryTick_ThenStopsWithItsContext(t *test
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("RunTokenPurge must return once its context is cancelled")
+	}
+}
+
+func TestGetUser_ReturnsTheAccount_OrErrUserNotFound(t *testing.T) {
+	svc := newService(newFakeStore())
+	res := loggedIn(t, svc)
+
+	u, err := svc.GetUser(context.Background(), res.User.ID)
+	if err != nil || u.Email != "a@x.io" {
+		t.Fatalf("GetUser = %+v, %v", u, err)
+	}
+	if _, err := svc.GetUser(context.Background(), uuid.New()); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("unknown id: err = %v, want ErrUserNotFound", err)
+	}
+}
+
+func TestUpdateDisplayName(t *testing.T) {
+	svc := newService(newFakeStore())
+	res := loggedIn(t, svc)
+
+	u, err := svc.UpdateDisplayName(context.Background(), res.User.ID, "Anna")
+	if err != nil || u.DisplayName != "Anna" {
+		t.Fatalf("UpdateDisplayName = %+v, %v", u, err)
+	}
+	if _, err := svc.UpdateDisplayName(context.Background(), uuid.New(), "X"); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("unknown id: err = %v, want ErrUserNotFound", err)
+	}
+}
+
+func TestChangePassword_NewPasswordWorks_OldDoesNot_AllOldSessionsDie(t *testing.T) {
+	ctx := context.Background()
+	svc := newService(newFakeStore())
+	phone := loggedIn(t, svc)
+	laptop, err := svc.Login(ctx, "a@x.io", "password123", "laptop")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tokens, err := svc.ChangePassword(ctx, phone.User.ID, "password123", "brand-new-pass", "phone")
+
+	if err != nil || tokens.AccessToken == "" || tokens.RefreshToken == "" {
+		t.Fatalf("ChangePassword = %+v, %v", tokens, err)
+	}
+	if _, err := svc.Login(ctx, "a@x.io", "password123", ""); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Errorf("old password: err = %v, want ErrInvalidCredentials", err)
+	}
+	if _, err := svc.Login(ctx, "a@x.io", "brand-new-pass", ""); err != nil {
+		t.Errorf("new password must work: %v", err)
+	}
+	for name, old := range map[string]string{"phone": phone.RefreshToken, "laptop": laptop.RefreshToken} {
+		if _, err := svc.Refresh(ctx, old, ""); !errors.Is(err, auth.ErrInvalidToken) {
+			t.Errorf("%s session survived the password change: err = %v", name, err)
+		}
+	}
+	if _, err := svc.Refresh(ctx, tokens.RefreshToken, ""); err != nil {
+		t.Errorf("the session that changed the password must stay signed in: %v", err)
+	}
+}
+
+func TestChangePassword_WrongCurrentPassword_ChangesNothing(t *testing.T) {
+	ctx := context.Background()
+	svc := newService(newFakeStore())
+	res := loggedIn(t, svc)
+
+	if _, err := svc.ChangePassword(ctx, res.User.ID, "not-my-password", "brand-new-pass", ""); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Fatalf("err = %v, want ErrInvalidCredentials", err)
+	}
+	if _, err := svc.Login(ctx, "a@x.io", "password123", ""); err != nil {
+		t.Errorf("the old password must still work: %v", err)
+	}
+	if _, err := svc.Refresh(ctx, res.RefreshToken, ""); err != nil {
+		t.Errorf("a failed change must not end the session: %v", err)
+	}
+}
+
+func TestChangePassword_UnknownUser(t *testing.T) {
+	svc := newService(newFakeStore())
+	if _, err := svc.ChangePassword(context.Background(), uuid.New(), "a", "b", ""); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("err = %v, want ErrUserNotFound", err)
 	}
 }

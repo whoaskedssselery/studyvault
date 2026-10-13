@@ -88,3 +88,53 @@ func TestIntegration_PurgeDeletesExpiredButKeepsRevokedLiveTokens(t *testing.T) 
 		t.Errorf("%d live tokens after a reuse, want the whole session revoked", live)
 	}
 }
+
+func TestIntegration_ChangePasswordAndProfile(t *testing.T) {
+	svc, tx := newTxService(t)
+	ctx := context.Background()
+	const email = "account-test@x.io"
+	reg, err := svc.Register(ctx, email, "password123", "Pat", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := svc.Login(ctx, email, "password123", "other device")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Постороннему пользователю смена пароля не должна ничего менять.
+	bystander, err := svc.Register(ctx, "bystander-test@x.io", "password123", "Bob", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	renamed, err := svc.UpdateDisplayName(ctx, reg.User.ID, "Patricia")
+	if err != nil || renamed.DisplayName != "Patricia" {
+		t.Fatalf("UpdateDisplayName = %+v, %v", renamed, err)
+	}
+	fresh, err := svc.ChangePassword(ctx, reg.User.ID, "password123", "brand-new-pass", "phone")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Login(ctx, email, "password123", ""); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Errorf("old password still works: %v", err)
+	}
+	if _, err := svc.Login(ctx, email, "brand-new-pass", ""); err != nil {
+		t.Errorf("new password: %v", err)
+	}
+	if _, err := svc.Refresh(ctx, other.RefreshToken, ""); !errors.Is(err, auth.ErrInvalidToken) {
+		t.Errorf("another device's session survived: %v", err)
+	}
+	if _, err := svc.Refresh(ctx, fresh.RefreshToken, ""); err != nil {
+		t.Errorf("the changing device must stay signed in: %v", err)
+	}
+	if _, err := svc.Refresh(ctx, bystander.RefreshToken, ""); err != nil {
+		t.Errorf("another user's session must be untouched: %v", err)
+	}
+	if got := tokenCount(t, tx, "bystander-test@x.io"); got != 2 { // регистрация и ротация
+		t.Errorf("bystander has %d tokens, want 2", got)
+	}
+	if _, err := svc.GetUser(ctx, reg.User.ID); err != nil {
+		t.Errorf("GetUser: %v", err)
+	}
+}

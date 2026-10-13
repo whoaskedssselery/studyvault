@@ -49,6 +49,17 @@ func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time
 	return result.RowsAffected(), nil
 }
 
+const deleteUserRefreshTokens = `-- name: DeleteUserRefreshTokens :exec
+DELETE FROM refresh_tokens WHERE user_id = $1
+`
+
+// Смена пароля стирает сессии, а не отзывает их: устаревшее устройство, предъявив старый токен, получит
+// обычный отказ, а не срабатывание защиты от кражи, которое закрыло бы и новую сессию.
+func (q *Queries) DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserRefreshTokens, userID)
+	return err
+}
+
 const getRefreshTokenByHash = `-- name: GetRefreshTokenByHash :one
 SELECT id, user_id, token_hash, user_agent, expires_at, revoked_at, created_at FROM refresh_tokens WHERE token_hash = $1
 `

@@ -23,6 +23,7 @@ var (
 	ErrEmailTaken         = errors.New("email already registered")
 	ErrInvalidCredentials = errors.New("invalid email or password")
 	ErrInvalidToken       = errors.New("invalid or expired refresh token")
+	ErrUserNotFound       = errors.New("user not found")
 )
 
 const pgUniqueViolation = "23505"
@@ -35,6 +36,10 @@ type Store interface {
 	RevokeRefreshToken(ctx context.Context, tokenHash string) (int64, error)
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time.Time) (int64, error)
+	DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
+	GetUserByID(ctx context.Context, id uuid.UUID) (db.User, error)
+	UpdateUserDisplayName(ctx context.Context, arg db.UpdateUserDisplayNameParams) (db.User, error)
+	UpdateUserPassword(ctx context.Context, arg db.UpdateUserPasswordParams) (int64, error)
 }
 
 // Tokens — пара токенов, которую получает клиент.
@@ -247,4 +252,56 @@ func (s *Service) RunTokenPurge(ctx context.Context, every time.Duration) {
 			purge()
 		}
 	}
+}
+
+// GetUser возвращает аккаунт по id из access-токена. ErrUserNotFound значит, что аккаунта уже нет.
+func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (db.User, error) {
+	u, err := s.store.GetUserByID(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.User{}, ErrUserNotFound
+	}
+	if err != nil {
+		return db.User{}, fmt.Errorf("get user: %w", err)
+	}
+	return u, nil
+}
+
+func (s *Service) UpdateDisplayName(ctx context.Context, id uuid.UUID, displayName string) (db.User, error) {
+	u, err := s.store.UpdateUserDisplayName(ctx, db.UpdateUserDisplayNameParams{ID: id, DisplayName: displayName})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.User{}, ErrUserNotFound
+	}
+	if err != nil {
+		return db.User{}, fmt.Errorf("update display name: %w", err)
+	}
+	return u, nil
+}
+
+// ChangePassword проверяет текущий пароль, сохраняет новый и стирает все сессии пользователя, включая
+// сессии на других устройствах: если пароль утёк, они не должны пережить его смену. Возвращает новую пару
+// токенов, чтобы текущий клиент остался в системе. Сессии стираются до записи пароля: при сбое посередине
+// пользователь лишь войдёт заново, а не останется со старыми сессиями и новым паролем.
+func (s *Service) ChangePassword(ctx context.Context, id uuid.UUID, current, next, userAgent string) (Tokens, error) {
+	u, err := s.GetUser(ctx, id)
+	if err != nil {
+		return Tokens{}, err
+	}
+	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(current)) != nil {
+		return Tokens{}, ErrInvalidCredentials
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(next), s.cost)
+	if err != nil {
+		return Tokens{}, fmt.Errorf("hash password: %w", err)
+	}
+	if err := s.store.DeleteUserRefreshTokens(ctx, id); err != nil {
+		return Tokens{}, fmt.Errorf("end sessions: %w", err)
+	}
+	n, err := s.store.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{ID: id, PasswordHash: string(hash)})
+	if err != nil {
+		return Tokens{}, fmt.Errorf("update password: %w", err)
+	}
+	if n == 0 {
+		return Tokens{}, ErrUserNotFound
+	}
+	return s.issue(ctx, id, userAgent)
 }
