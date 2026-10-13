@@ -9,6 +9,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "api:generate": "openapi-typescript ../backend/api/openapi.yaml -o src/api/schema.d.ts",
     "test": "playwright test",
+    "test:proxy": "node --test checks/proxy.test.mjs",
     "package:submission": "npm run build && node scripts/package-submission.mjs",
     "test:submission": "npm run package:submission && playwright test tests/submission.spec.ts"
   },
