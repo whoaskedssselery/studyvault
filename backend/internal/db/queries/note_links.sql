@@ -18,17 +18,31 @@ INSERT INTO note_links (source_note_id, target_note_id)
 SELECT sqlc.arg('source_id'), id FROM targets
 ON CONFLICT DO NOTHING;
 
--- Входящие связи заметки: кто из живых заметок пользователя упоминает её текущее название как
--- [[название]]. Нужно, когда заметка создана или переименована позже, чем на неё сослались.
--- Устаревшие рёбра (текст больше не содержит такого названия) удаляются.
+-- Что заметка упоминает как [[Название]]: хранится отдельно, чтобы входящие связи искать по индексу.
+-- Названия приходят как написаны в тексте, ключом становится нижний регистр. Устаревшие записи удаляются.
+-- name: ReplaceNoteMentions :exec
+WITH wanted AS (
+    SELECT DISTINCT lower(x) AS k FROM unnest(sqlc.arg('titles')::text[]) AS x
+), removed AS (
+    DELETE FROM note_mentions
+    WHERE note_id = sqlc.arg('note_id') AND title_key NOT IN (SELECT k FROM wanted)
+)
+INSERT INTO note_mentions (note_id, title_key)
+SELECT sqlc.arg('note_id'), k FROM wanted
+ON CONFLICT DO NOTHING;
+
+-- Входящие связи заметки: кто из живых заметок пользователя упоминает её текущее название.
+-- Нужно, когда заметка создана или переименована позже, чем на неё сослались. Поиск идёт по индексу
+-- упоминаний. Устаревшие рёбра (текст больше не содержит такого названия) удаляются.
 -- name: ReplaceIncomingLinks :exec
 WITH sources AS (
     SELECT n.id
-    FROM notes n
-    WHERE n.user_id = sqlc.arg('user_id')
+    FROM note_mentions m
+    JOIN notes n ON n.id = m.note_id
+    WHERE m.title_key = lower(sqlc.arg('title')::text)
+      AND n.user_id = sqlc.arg('user_id')
       AND n.deleted_at IS NULL
       AND n.id <> sqlc.arg('target_id')
-      AND strpos(lower(n.content_text), lower('[[' || sqlc.arg('title')::text || ']]')) > 0
 ), removed AS (
     DELETE FROM note_links
     WHERE target_note_id = sqlc.arg('target_id')

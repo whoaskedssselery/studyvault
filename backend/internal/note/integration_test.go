@@ -550,14 +550,15 @@ func TestDB_Graph_ContainsOnlyOwnNotes(t *testing.T) {
 
 // В таблице note_links не должно быть рёбер между заметками разных пользователей, даже таких,
 // которые запросы чтения всё равно спрятали бы.
-func (e env) crossUserEdges(t *testing.T) int {
+func (e env) crossUserEdges(t *testing.T, users ...uuid.UUID) int {
 	t.Helper()
 	var n int
+	// Только рёбра пользователей этого теста: результат не зависит от остального содержимого базы.
 	err := e.tx.QueryRow(context.Background(), `
 		SELECT count(*) FROM note_links l
 		JOIN notes s ON s.id = l.source_note_id
 		JOIN notes t ON t.id = l.target_note_id
-		WHERE s.user_id <> t.user_id`).Scan(&n)
+		WHERE s.user_id <> t.user_id AND (s.user_id = ANY($1) OR t.user_id = ANY($1))`, users).Scan(&n)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -571,7 +572,7 @@ func TestDB_Links_NothingIsStoredAcrossUsers(t *testing.T) {
 	// Исходящие: у Боба уже есть «Algebra», ссылается Алиса.
 	e.noteWith(t, bob, "Algebra", "")
 	e.noteWith(t, alice, "Mine", "[[Algebra]]")
-	if n := e.crossUserEdges(t); n != 0 {
+	if n := e.crossUserEdges(t, alice, bob); n != 0 {
 		t.Errorf("outgoing resolution stored %d cross-user edge(s)", n)
 	}
 
@@ -579,7 +580,80 @@ func TestDB_Links_NothingIsStoredAcrossUsers(t *testing.T) {
 	e.noteWith(t, alice, "Waiting", "[[Zeta]]")
 	zeta := e.noteWith(t, bob, "Zeta", "")
 	e.rename(t, bob, zeta.ID, "Zeta")
-	if n := e.crossUserEdges(t); n != 0 {
+	if n := e.crossUserEdges(t, alice, bob); n != 0 {
 		t.Errorf("incoming resolution stored %d cross-user edge(s)", n)
+	}
+}
+
+func (e env) mentionKeys(t *testing.T, noteID uuid.UUID) []string {
+	t.Helper()
+	rows, err := e.tx.Query(context.Background(), `SELECT title_key FROM note_mentions WHERE note_id = $1 ORDER BY title_key`, noteID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var keys []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			t.Fatal(err)
+		}
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func TestDB_Mentions_AreStoredLowercasedAndDeduplicated(t *testing.T) {
+	e := newEnv(t)
+	uid := e.user(t, "a@x.io")
+
+	n := e.noteWith(t, uid, "Source", "see [[Algebra]], [[algebra]] and [[LOGIC|shown]]")
+
+	if got := e.mentionKeys(t, n.ID); !equal(got, []string{"algebra", "logic"}) {
+		t.Errorf("mention keys = %v", got)
+	}
+}
+
+func TestDB_Mentions_FollowTheText(t *testing.T) {
+	e := newEnv(t)
+	uid := e.user(t, "a@x.io")
+	n := e.noteWith(t, uid, "Source", "[[Ghost]] and [[Keep]]")
+
+	e.setText(t, uid, n.ID, "only [[Keep]] now")
+
+	if got := e.mentionKeys(t, n.ID); !equal(got, []string{"keep"}) {
+		t.Errorf("a removed link must stop being a mention: %v", got)
+	}
+	ghost := e.noteWith(t, uid, "Ghost", "")
+	if got := e.backlinkTitles(t, uid, ghost.ID); len(got) != 0 {
+		t.Errorf("a link that was deleted from the text must not come back when a note with that title appears: %v", got)
+	}
+}
+
+func TestDB_Links_AliasedForwardReferenceResolvesWhenTheTargetAppears(t *testing.T) {
+	e := newEnv(t)
+	uid := e.user(t, "a@x.io")
+	e.noteWith(t, uid, "Source", "waiting for [[Later|a nicer label]]")
+
+	later := e.noteWith(t, uid, "Later", "")
+
+	if got := e.backlinkTitles(t, uid, later.ID); !equal(got, []string{"Source"}) {
+		t.Errorf("[[Title|alias]] must resolve to the note called Title, got %v", got)
+	}
+}
+
+func TestDB_Links_DeletedSourceNeverLinksToALaterNote(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	uid := e.user(t, "a@x.io")
+	src := e.noteWith(t, uid, "Source", "[[Later]]")
+	if err := e.notes.Delete(ctx, uid, src.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	later := e.noteWith(t, uid, "Later", "")
+
+	if got := e.backlinkTitles(t, uid, later.ID); len(got) != 0 {
+		t.Errorf("a soft-deleted note must not link to anything: %v", got)
 	}
 }

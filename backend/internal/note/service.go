@@ -36,6 +36,7 @@ type Store interface {
 	SoftDeleteNote(ctx context.Context, arg db.SoftDeleteNoteParams) (int64, error)
 	ListNotes(ctx context.Context, arg db.ListNotesParams) ([]db.ListNotesRow, error)
 	ListNoteTags(ctx context.Context, noteIds []uuid.UUID) ([]db.ListNoteTagsRow, error)
+	ReplaceNoteMentions(ctx context.Context, arg db.ReplaceNoteMentionsParams) error
 	ReplaceOutgoingLinks(ctx context.Context, arg db.ReplaceOutgoingLinksParams) error
 	ReplaceIncomingLinks(ctx context.Context, arg db.ReplaceIncomingLinksParams) error
 	ListBacklinks(ctx context.Context, arg db.ListBacklinksParams) ([]db.ListBacklinksRow, error)
@@ -387,6 +388,10 @@ func replaceOutgoing(ctx context.Context, st Store, userID, noteID uuid.UUID, co
 	titles := ParseLinks(content)
 	if titles == nil {
 		titles = []string{} // пустой массив, а не NULL: иначе в SQL не отработает снятие связей
+	}
+	// Сначала упоминания: по ним другие заметки найдут эту, когда появятся.
+	if err := st.ReplaceNoteMentions(ctx, db.ReplaceNoteMentionsParams{NoteID: noteID, Titles: titles}); err != nil {
+		return fmt.Errorf("replace note mentions: %w", err)
 	}
 	err := st.ReplaceOutgoingLinks(ctx, db.ReplaceOutgoingLinksParams{SourceID: noteID, UserID: userID, Titles: titles})
 	if err != nil {

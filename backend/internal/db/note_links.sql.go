@@ -125,11 +125,12 @@ func (q *Queries) ListGraphNodes(ctx context.Context, userID uuid.UUID) ([]ListG
 const replaceIncomingLinks = `-- name: ReplaceIncomingLinks :exec
 WITH sources AS (
     SELECT n.id
-    FROM notes n
-    WHERE n.user_id = $2
+    FROM note_mentions m
+    JOIN notes n ON n.id = m.note_id
+    WHERE m.title_key = lower($2::text)
+      AND n.user_id = $3
       AND n.deleted_at IS NULL
       AND n.id <> $1
-      AND strpos(lower(n.content_text), lower('[[' || $3::text || ']]')) > 0
 ), removed AS (
     DELETE FROM note_links
     WHERE target_note_id = $1
@@ -142,15 +143,39 @@ ON CONFLICT DO NOTHING
 
 type ReplaceIncomingLinksParams struct {
 	TargetID uuid.UUID `json:"target_id"`
-	UserID   uuid.UUID `json:"user_id"`
 	Title    string    `json:"title"`
+	UserID   uuid.UUID `json:"user_id"`
 }
 
-// Входящие связи заметки: кто из живых заметок пользователя упоминает её текущее название как
-// [[название]]. Нужно, когда заметка создана или переименована позже, чем на неё сослались.
-// Устаревшие рёбра (текст больше не содержит такого названия) удаляются.
+// Входящие связи заметки: кто из живых заметок пользователя упоминает её текущее название.
+// Нужно, когда заметка создана или переименована позже, чем на неё сослались. Поиск идёт по индексу
+// упоминаний. Устаревшие рёбра (текст больше не содержит такого названия) удаляются.
 func (q *Queries) ReplaceIncomingLinks(ctx context.Context, arg ReplaceIncomingLinksParams) error {
-	_, err := q.db.Exec(ctx, replaceIncomingLinks, arg.TargetID, arg.UserID, arg.Title)
+	_, err := q.db.Exec(ctx, replaceIncomingLinks, arg.TargetID, arg.Title, arg.UserID)
+	return err
+}
+
+const replaceNoteMentions = `-- name: ReplaceNoteMentions :exec
+WITH wanted AS (
+    SELECT DISTINCT lower(x) AS k FROM unnest($2::text[]) AS x
+), removed AS (
+    DELETE FROM note_mentions
+    WHERE note_id = $1 AND title_key NOT IN (SELECT k FROM wanted)
+)
+INSERT INTO note_mentions (note_id, title_key)
+SELECT $1, k FROM wanted
+ON CONFLICT DO NOTHING
+`
+
+type ReplaceNoteMentionsParams struct {
+	NoteID uuid.UUID `json:"note_id"`
+	Titles []string  `json:"titles"`
+}
+
+// Что заметка упоминает как [[Название]]: хранится отдельно, чтобы входящие связи искать по индексу.
+// Названия приходят как написаны в тексте, ключом становится нижний регистр. Устаревшие записи удаляются.
+func (q *Queries) ReplaceNoteMentions(ctx context.Context, arg ReplaceNoteMentionsParams) error {
+	_, err := q.db.Exec(ctx, replaceNoteMentions, arg.NoteID, arg.Titles)
 	return err
 }
 

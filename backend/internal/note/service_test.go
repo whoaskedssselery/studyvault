@@ -20,6 +20,7 @@ type fakeStore struct {
 	deleteRows int64
 	linkErr    error
 	outgoing   []db.ReplaceOutgoingLinksParams
+	mentions   []db.ReplaceNoteMentionsParams
 	incoming   []db.ReplaceIncomingLinksParams
 	backlinks  []db.ListBacklinksRow
 	nodes      []db.ListGraphNodesRow
@@ -273,6 +274,11 @@ func (f *fakeStore) NoteOwnedByUser(context.Context, db.NoteOwnedByUserParams) (
 	return f.noteOwned, f.err
 }
 
+func (f *fakeStore) ReplaceNoteMentions(_ context.Context, a db.ReplaceNoteMentionsParams) error {
+	f.mentions = append(f.mentions, a)
+	return f.linkErr
+}
+
 func (f *fakeStore) ReplaceOutgoingLinks(_ context.Context, a db.ReplaceOutgoingLinksParams) error {
 	f.outgoing = append(f.outgoing, a)
 	return f.linkErr
@@ -317,6 +323,10 @@ func TestCreate_RebuildsBothDirectionsOfLinksInOneTransaction(t *testing.T) {
 	if runs != 1 {
 		t.Errorf("transactions opened = %d, want exactly 1", runs)
 	}
+	if len(f.mentions) != 1 || f.mentions[0].NoteID != n.ID || len(f.mentions[0].Titles) != 2 ||
+		f.mentions[0].Titles[0] != "Algebra" || f.mentions[0].Titles[1] != "Logic" {
+		t.Errorf("the titles the note mentions must be recorded, so a note created later finds them by index: %+v", f.mentions)
+	}
 	if len(f.outgoing) != 1 || f.outgoing[0].SourceID != n.ID || f.outgoing[0].UserID != uid ||
 		len(f.outgoing[0].Titles) != 2 || f.outgoing[0].Titles[0] != "Algebra" || f.outgoing[0].Titles[1] != "Logic" {
 		t.Errorf("outgoing: %+v", f.outgoing)
@@ -353,6 +363,9 @@ func TestUpdate_LinkRebuildDependsOnWhatChanged(t *testing.T) {
 			f := &fakeStore{}
 			if _, err := note.NewService(f).Update(context.Background(), uid, id, c.patch); err != nil {
 				t.Fatal(err)
+			}
+			if len(f.mentions) != c.wantOut {
+				t.Errorf("mentions are rewritten exactly when the text changes: %d times, want %d", len(f.mentions), c.wantOut)
 			}
 			if len(f.outgoing) != c.wantOut || len(f.incoming) != c.wantIn {
 				t.Errorf("outgoing rebuilds = %d (want %d), incoming = %d (want %d)", len(f.outgoing), c.wantOut, len(f.incoming), c.wantIn)

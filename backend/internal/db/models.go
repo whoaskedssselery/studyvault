@@ -40,6 +40,11 @@ type NoteLink struct {
 	TargetNoteID uuid.UUID `json:"target_note_id"`
 }
 
+type NoteMention struct {
+	NoteID   uuid.UUID `json:"note_id"`
+	TitleKey string    `json:"title_key"`
+}
+
 type NoteTag struct {
 	NoteID uuid.UUID `json:"note_id"`
 	TagID  uuid.UUID `json:"tag_id"`
