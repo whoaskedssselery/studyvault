@@ -14,3 +14,9 @@ ORDER BY created_at, id;
 -- Возвращает удалённую строку: из неё берётся ключ объекта, который надо убрать из хранилища.
 -- name: DeleteAttachment :one
 DELETE FROM attachments WHERE id = $1 AND user_id = $2 RETURNING *;
+
+-- name: CountNoteAttachments :one
+SELECT count(*) FROM attachments WHERE note_id = $1 AND user_id = $2;
+
+-- name: SumUserAttachmentBytes :one
+SELECT COALESCE(sum(size_bytes), 0)::bigint FROM attachments WHERE user_id = $1;

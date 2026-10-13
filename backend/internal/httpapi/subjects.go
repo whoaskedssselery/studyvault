@@ -12,6 +12,7 @@ import (
 	"github.com/oapi-codegen/nullable"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 	"github.com/whoaskedssselery/studyvault/backend/internal/subject"
 )
 
@@ -79,6 +80,10 @@ func (a *api) CreateSubject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	created, err := a.Subjects.Create(r.Context(), userID, subject.Input{Title: title, Color: color, Semester: sem})
+	if errors.Is(err, limits.ErrReached) {
+		limitReached(w, err)
+		return
+	}
 	if err != nil {
 		slog.ErrorContext(r.Context(), "create subject", "err", err)
 		internalError(w)

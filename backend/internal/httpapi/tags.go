@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 	"github.com/whoaskedssselery/studyvault/backend/internal/tag"
 )
 
@@ -65,6 +66,8 @@ func (a *api) CreateTag(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, tag.ErrNameTaken):
 		writeError(w, http.StatusConflict, "tag_exists", "a tag with this name already exists")
+	case errors.Is(err, limits.ErrReached):
+		limitReached(w, err)
 	case err != nil:
 		slog.ErrorContext(r.Context(), "create tag", "err", err)
 		internalError(w)

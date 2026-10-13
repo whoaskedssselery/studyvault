@@ -12,6 +12,9 @@ import (
 )
 
 type Querier interface {
+	CountNoteAttachments(ctx context.Context, arg CountNoteAttachmentsParams) (int64, error)
+	CountSubjects(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountTagsByUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountUserTags(ctx context.Context, arg CountUserTagsParams) (int64, error)
 	CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (Attachment, error)
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
@@ -71,6 +74,7 @@ type Querier interface {
 	RevokeRefreshToken(ctx context.Context, tokenHash string) (int64, error)
 	SoftDeleteNote(ctx context.Context, arg SoftDeleteNoteParams) (int64, error)
 	SubjectOwnedByUser(ctx context.Context, arg SubjectOwnedByUserParams) (bool, error)
+	SumUserAttachmentBytes(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Частичное обновление. NULL в title, content, content_text и is_pinned значит «не менять».
 	// subject_id может быть очищен, поэтому «менять или нет» передаётся флагом set_subject.
 	UpdateNote(ctx context.Context, arg UpdateNoteParams) (Note, error)

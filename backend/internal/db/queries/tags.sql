@@ -26,3 +26,6 @@ SELECT sqlc.arg('note_id'), t.id
 FROM tags t
 WHERE t.user_id = sqlc.arg('user_id') AND t.id = ANY(sqlc.arg('tag_ids')::uuid[])
 ON CONFLICT DO NOTHING;
+
+-- name: CountTagsByUser :one
+SELECT count(*) FROM tags WHERE user_id = $1;

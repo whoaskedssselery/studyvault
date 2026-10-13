@@ -35,3 +35,8 @@ func currentUser(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	}
 	return id, ok
 }
+
+// limitReached отвечает 409: запрос корректен, но у пользователя исчерпана квота (см. пакет limits).
+func limitReached(w http.ResponseWriter, err error) {
+	writeError(w, http.StatusConflict, "limit_reached", err.Error())
+}

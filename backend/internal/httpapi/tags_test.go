@@ -14,6 +14,7 @@ import (
 	"github.com/whoaskedssselery/studyvault/backend/internal/auth"
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/httpapi"
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 	"github.com/whoaskedssselery/studyvault/backend/internal/tag"
 )
 
@@ -307,5 +308,14 @@ func TestTags_RequireAuth(t *testing.T) {
 	}
 	if e.tags.calls != 0 {
 		t.Error("service must not be called without auth")
+	}
+}
+
+func TestCreateTag_QuotaReached_Returns409(t *testing.T) {
+	e := newTagsEnv(&fakeTags{err: limits.Reached("tags", 500)}, &fakeNotes{})
+	rec := e.do(http.MethodPost, "/v1/tags", `{"name":"one-too-many"}`)
+
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "limit_reached" {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
 	}
 }

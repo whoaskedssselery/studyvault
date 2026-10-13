@@ -12,6 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countSubjects = `-- name: CountSubjects :one
+SELECT count(*) FROM subjects WHERE user_id = $1
+`
+
+func (q *Queries) CountSubjects(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSubjects, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createSubject = `-- name: CreateSubject :one
 INSERT INTO subjects (user_id, title, color, semester)
 VALUES ($1, $2, $3, $4)
