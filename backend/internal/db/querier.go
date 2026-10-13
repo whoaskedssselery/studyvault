@@ -19,6 +19,9 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteSubject(ctx context.Context, arg DeleteSubjectParams) (int64, error)
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
+	// Перепроверка результатов поиска в Postgres: Meilisearch лишь предлагает кандидатов, а решает БД.
+	// Чужие и удалённые заметки отсекаются здесь, даже если индекс устарел.
+	FilterLiveNotes(ctx context.Context, arg FilterLiveNotesParams) ([]FilterLiveNotesRow, error)
 	GetNote(ctx context.Context, arg GetNoteParams) (Note, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, lower string) (User, error)
@@ -29,6 +32,8 @@ type Querier interface {
 	// Список без содержимого. Страницы по ключу (updated_at, id): курсор — это последняя строка
 	// предыдущей страницы. Все фильтры необязательные: NULL значит «не фильтровать».
 	ListNotes(ctx context.Context, arg ListNotesParams) ([]ListNotesRow, error)
+	// Постраничная выгрузка живых заметок для полной пересборки индекса.
+	ListNotesForIndex(ctx context.Context, arg ListNotesForIndexParams) ([]ListNotesForIndexRow, error)
 	ListSubjects(ctx context.Context, userID uuid.UUID) ([]Subject, error)
 	ListTags(ctx context.Context, userID uuid.UUID) ([]Tag, error)
 	NoteOwnedByUser(ctx context.Context, arg NoteOwnedByUserParams) (bool, error)

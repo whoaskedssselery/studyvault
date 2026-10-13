@@ -3,6 +3,7 @@ package note_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,16 +12,18 @@ import (
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/note"
+	"github.com/whoaskedssselery/studyvault/backend/internal/search"
 )
 
 type fakeStore struct {
-	noteOwned bool // чем ответит NoteOwnedByUser
-	linkErr   error
-	outgoing  []db.ReplaceOutgoingLinksParams
-	incoming  []db.ReplaceIncomingLinksParams
-	backlinks []db.ListBacklinksRow
-	nodes     []db.ListGraphNodesRow
-	edges     []db.NoteLink
+	noteOwned  bool // чем ответит NoteOwnedByUser
+	deleteRows int64
+	linkErr    error
+	outgoing   []db.ReplaceOutgoingLinksParams
+	incoming   []db.ReplaceIncomingLinksParams
+	backlinks  []db.ListBacklinksRow
+	nodes      []db.ListGraphNodesRow
+	edges      []db.NoteLink
 
 	owned     bool // чем ответит SubjectOwnedByUser
 	subjectQs int  // сколько раз проверяли владельца предмета
@@ -41,7 +44,7 @@ func (f *fakeStore) SubjectOwnedByUser(context.Context, db.SubjectOwnedByUserPar
 
 func (f *fakeStore) CreateNote(_ context.Context, a db.CreateNoteParams) (db.Note, error) {
 	f.created = a
-	return db.Note{ID: uuid.New(), UserID: a.UserID, SubjectID: a.SubjectID, Title: a.Title, Content: a.Content}, f.err
+	return db.Note{ID: uuid.New(), UserID: a.UserID, SubjectID: a.SubjectID, Title: a.Title, Content: a.Content, ContentText: a.ContentText}, f.err
 }
 
 func (f *fakeStore) GetNote(context.Context, db.GetNoteParams) (db.Note, error) {
@@ -50,11 +53,11 @@ func (f *fakeStore) GetNote(context.Context, db.GetNoteParams) (db.Note, error) 
 
 func (f *fakeStore) UpdateNote(_ context.Context, a db.UpdateNoteParams) (db.Note, error) {
 	f.updated = a
-	return db.Note{ID: a.ID}, f.err
+	return db.Note{ID: a.ID, UserID: a.UserID, Title: a.Title.String, ContentText: a.ContentText.String}, f.err
 }
 
 func (f *fakeStore) SoftDeleteNote(context.Context, db.SoftDeleteNoteParams) (int64, error) {
-	return 0, f.err
+	return f.deleteRows, f.err
 }
 
 func (f *fakeStore) ListNotes(_ context.Context, a db.ListNotesParams) ([]db.ListNotesRow, error) {
@@ -425,5 +428,151 @@ func TestGraph_MapsRows(t *testing.T) {
 
 	if len(g.Nodes) != 2 || g.Nodes[1].Title != "B" || len(g.Edges) != 1 || g.Edges[0].Source != a || g.Edges[0].Target != b {
 		t.Errorf("graph: %+v", g)
+	}
+}
+
+type fakeIndexer struct {
+	events  []string
+	docs    []search.Doc
+	removed []uuid.UUID
+	err     error
+}
+
+func (f *fakeIndexer) Upsert(_ context.Context, d search.Doc) error {
+	f.events = append(f.events, "upsert")
+	f.docs = append(f.docs, d)
+	return f.err
+}
+
+func (f *fakeIndexer) Remove(_ context.Context, id uuid.UUID) error {
+	f.events = append(f.events, "remove")
+	f.removed = append(f.removed, id)
+	return f.err
+}
+
+// orderedTx запоминает момент фиксации транзакции в том же журнале, что и индексатор.
+func orderedTx(f *fakeStore, idx *fakeIndexer) note.Option {
+	return note.WithTx(func(_ context.Context, fn func(note.Store) error) error {
+		if err := fn(f); err != nil {
+			idx.events = append(idx.events, "rollback")
+			return err
+		}
+		idx.events = append(idx.events, "commit")
+		return nil
+	})
+}
+
+func TestCreate_IndexesAfterTheTransactionCommits(t *testing.T) {
+	f, idx := &fakeStore{}, &fakeIndexer{}
+	uid := uuid.New()
+	svc := note.NewService(f, orderedTx(f, idx), note.WithIndexer(idx))
+
+	n, err := svc.Create(context.Background(), uid, note.Input{Title: "Algebra", Content: doc("groups")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if fmt.Sprint(idx.events) != "[commit upsert]" {
+		t.Fatalf("events = %v, want the index updated only after the commit", idx.events)
+	}
+	d := idx.docs[0]
+	if d.ID != n.ID || d.UserID != uid || d.Title != "Algebra" || d.ContentText != "groups" {
+		t.Errorf("indexed doc: %+v", d)
+	}
+}
+
+func TestCreate_RolledBack_IsNotIndexed(t *testing.T) {
+	f, idx := &fakeStore{linkErr: errors.New("links broke")}, &fakeIndexer{}
+	svc := note.NewService(f, orderedTx(f, idx), note.WithIndexer(idx))
+
+	if _, err := svc.Create(context.Background(), uuid.New(), note.Input{Title: "T", Content: doc("x")}); err == nil {
+		t.Fatal("expected the link error")
+	}
+
+	if fmt.Sprint(idx.events) != "[rollback]" {
+		t.Errorf("events = %v: a note that was rolled back must never reach the index", idx.events)
+	}
+}
+
+func TestUpdate_ReindexesOnlyWhenTitleOrTextChange(t *testing.T) {
+	title, pinned := "New title", true
+	cases := map[string]struct {
+		patch note.Patch
+		want  int
+	}{
+		"title":   {note.Patch{Title: &title}, 1},
+		"content": {note.Patch{Content: doc("fresh text")}, 1},
+		"both":    {note.Patch{Title: &title, Content: doc("fresh text")}, 1},
+		"pin":     {note.Patch{IsPinned: &pinned}, 0},
+		"subject": {note.Patch{SetSubject: true}, 0},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			f, idx := &fakeStore{}, &fakeIndexer{}
+			uid, id := uuid.New(), uuid.New()
+
+			if _, err := note.NewService(f, note.WithIndexer(idx)).Update(context.Background(), uid, id, c.patch); err != nil {
+				t.Fatal(err)
+			}
+			if len(idx.docs) != c.want {
+				t.Fatalf("reindexed %d time(s), want %d", len(idx.docs), c.want)
+			}
+			if c.want == 1 && (idx.docs[0].ID != id || idx.docs[0].UserID != uid) {
+				t.Errorf("doc: %+v", idx.docs[0])
+			}
+		})
+	}
+}
+
+func TestUpdate_NotFound_IsNotIndexed(t *testing.T) {
+	f, idx := &fakeStore{err: pgx.ErrNoRows}, &fakeIndexer{}
+	title := "x"
+
+	_, err := note.NewService(f, note.WithIndexer(idx)).Update(context.Background(), uuid.New(), uuid.New(), note.Patch{Title: &title})
+
+	if !errors.Is(err, note.ErrNotFound) || len(idx.events) != 0 {
+		t.Errorf("err = %v, index events = %v", err, idx.events)
+	}
+}
+
+func TestDelete_RemovesFromTheIndex(t *testing.T) {
+	idx := &fakeIndexer{}
+	id := uuid.New()
+	f := &fakeStore{deleteRows: 1}
+
+	if err := note.NewService(f, note.WithIndexer(idx)).Delete(context.Background(), uuid.New(), id); err != nil {
+		t.Fatal(err)
+	}
+	if len(idx.removed) != 1 || idx.removed[0] != id {
+		t.Errorf("removed = %v, want [%v]", idx.removed, id)
+	}
+
+	idx2 := &fakeIndexer{}
+	f.deleteRows = 0
+	if err := note.NewService(f, note.WithIndexer(idx2)).Delete(context.Background(), uuid.New(), id); !errors.Is(err, note.ErrNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+	if len(idx2.events) != 0 {
+		t.Errorf("deleting a missing note must not touch the index: %v", idx2.events)
+	}
+}
+
+func TestIndexerFailure_NeverFailsTheOperation(t *testing.T) {
+	f, idx := &fakeStore{deleteRows: 1}, &fakeIndexer{err: errors.New("meilisearch is down")}
+	svc := note.NewService(f, note.WithIndexer(idx))
+	ctx, uid := context.Background(), uuid.New()
+	title := "x"
+
+	if _, err := svc.Create(ctx, uid, note.Input{Title: "T", Content: doc("x")}); err != nil {
+		t.Errorf("Create must succeed when only the index is down: %v", err)
+	}
+	if _, err := svc.Update(ctx, uid, uuid.New(), note.Patch{Title: &title}); err != nil {
+		t.Errorf("Update must succeed when only the index is down: %v", err)
+	}
+	if err := svc.Delete(ctx, uid, uuid.New()); err != nil {
+		t.Errorf("Delete must succeed when only the index is down: %v", err)
+	}
+	if len(idx.events) != 3 {
+		t.Errorf("the index must have been attempted each time: %v", idx.events)
 	}
 }

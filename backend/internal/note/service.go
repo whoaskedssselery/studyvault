@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/search"
 )
 
 const (
@@ -44,7 +46,16 @@ type Store interface {
 // TxFunc выполняет fn в одной транзакции над хранилищем. В продакшене это db.InTx.
 type TxFunc func(ctx context.Context, fn func(Store) error) error
 
+// Indexer ведёт поисковый индекс. Это лишь ускоритель, так что его сбои заметки не ломают.
+type Indexer interface {
+	Upsert(ctx context.Context, doc search.Doc) error
+	Remove(ctx context.Context, id uuid.UUID) error
+}
+
 type Option func(*Service)
+
+// WithIndexer включает синхронизацию поискового индекса после каждой записи.
+func WithIndexer(idx Indexer) Option { return func(s *Service) { s.idx = idx } }
 
 // WithTx включает транзакции: заметка и её связи записываются атомарно.
 func WithTx(run TxFunc) Option { return func(s *Service) { s.inTx = run } }
@@ -114,6 +125,7 @@ type Graph struct {
 type Service struct {
 	store Store
 	inTx  TxFunc
+	idx   Indexer // может быть nil: тогда индекс не ведётся
 }
 
 func NewService(store Store, opts ...Option) *Service {
@@ -156,6 +168,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (Note,
 	if err != nil {
 		return Note{}, err
 	}
+	s.index(ctx, searchDoc(userID, created))
 	return toNote(created, nil), nil
 }
 
@@ -220,6 +233,9 @@ func (s *Service) Update(ctx context.Context, userID, id uuid.UUID, p Patch) (No
 	if err != nil {
 		return Note{}, err
 	}
+	if p.Title != nil || p.Content != nil {
+		s.index(ctx, searchDoc(userID, updated))
+	}
 	return s.withTags(ctx, updated)
 }
 
@@ -231,6 +247,7 @@ func (s *Service) Delete(ctx context.Context, userID, id uuid.UUID) error {
 	if n == 0 {
 		return ErrNotFound
 	}
+	s.unindex(ctx, id)
 	return nil
 }
 
@@ -333,6 +350,37 @@ func (s *Service) checkSubject(ctx context.Context, userID uuid.UUID, subjectID 
 		return ErrInvalidSubject
 	}
 	return nil
+}
+
+func searchDoc(userID uuid.UUID, n db.Note) search.Doc {
+	return search.Doc{ID: n.ID, UserID: userID, Title: n.Title, ContentText: n.ContentText}
+}
+
+const indexTimeout = 5 * time.Second
+
+// index и unindex вызываются после успешной записи в БД. Сбой индекса только логируется:
+// источник правды — Postgres, а индекс чинится повторным сохранением или командой reindex.
+// Контекст отвязан от запроса, чтобы обрыв соединения клиентом не оставил индекс отставшим.
+func (s *Service) index(ctx context.Context, doc search.Doc) {
+	if s.idx == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), indexTimeout)
+	defer cancel()
+	if err := s.idx.Upsert(ctx, doc); err != nil {
+		slog.Error("search index: upsert failed", "note", doc.ID, "err", err)
+	}
+}
+
+func (s *Service) unindex(ctx context.Context, id uuid.UUID) {
+	if s.idx == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), indexTimeout)
+	defer cancel()
+	if err := s.idx.Remove(ctx, id); err != nil {
+		slog.Error("search index: remove failed", "note", id, "err", err)
+	}
 }
 
 func replaceOutgoing(ctx context.Context, st Store, userID, noteID uuid.UUID, content []byte) error {

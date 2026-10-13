@@ -500,6 +500,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /attachments:
     get:
@@ -641,6 +643,12 @@ components:
             $ref: "#/components/schemas/Error"
     NotFound:
       description: Не найдено (или принадлежит другому пользователю)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServiceUnavailable:
+      description: Поиск временно недоступен (остальное API работает)
       content:
         application/json:
           schema:
@@ -954,7 +962,9 @@ components:
           type: string
         snippet:
           type: string
-          description: Фрагмент текста с найденным словом, совпадение обёрнуто в `<mark>`
+          description: |
+            HTML-фрагмент текста вокруг совпадения. Весь текст заметки экранирован, а найденные
+            слова обёрнуты в `<mark>`, поэтому фрагмент можно безопасно вставлять как HTML.
         subject_id:
           type: string
           format: uuid

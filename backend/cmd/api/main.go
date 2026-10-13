@@ -18,6 +18,7 @@ import (
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/httpapi"
 	"github.com/whoaskedssselery/studyvault/backend/internal/note"
+	"github.com/whoaskedssselery/studyvault/backend/internal/search"
 	"github.com/whoaskedssselery/studyvault/backend/internal/subject"
 	"github.com/whoaskedssselery/studyvault/backend/internal/tag"
 )
@@ -49,17 +50,29 @@ func run() error {
 	defer pool.Close()
 
 	queries := db.New(pool)
-	srv := httpapi.NewServer(cfg, httpapi.Deps{
-		DB:       pool,
-		Auth:     auth.NewService(queries, cfg.JWTSecret),
-		Subjects: subject.NewService(queries),
-		Notes: note.NewService(queries, note.WithTx(func(ctx context.Context, fn func(note.Store) error) error {
-			return db.InTx(ctx, pool, func(q *db.Queries) error { return fn(q) })
-		})),
+	noteOpts := []note.Option{note.WithTx(func(ctx context.Context, fn func(note.Store) error) error {
+		return db.InTx(ctx, pool, func(q *db.Queries) error { return fn(q) })
+	})}
+	deps := httpapi.Deps{
+		DB:           pool,
+		Auth:         auth.NewService(queries, cfg.JWTSecret),
+		Subjects:     subject.NewService(queries),
 		Tags:         tag.NewService(queries),
 		JWTSecret:    cfg.JWTSecret,
 		CookieSecure: cfg.CookieSecure,
-	})
+	}
+
+	// Без Meilisearch API работает целиком, кроме /search (503).
+	if cfg.MeiliURL != "" {
+		meili := search.NewMeili(cfg.MeiliURL, cfg.MeiliKey, search.IndexUID)
+		noteOpts = append(noteOpts, note.WithIndexer(meili))
+		deps.Search = search.NewService(meili, queries)
+	} else {
+		slog.Warn("MEILI_URL is not set: search is disabled")
+	}
+	deps.Notes = note.NewService(queries, noteOpts...)
+
+	srv := httpapi.NewServer(cfg, deps)
 
 	errCh := make(chan error, 1)
 	go func() {

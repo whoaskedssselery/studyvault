@@ -13,6 +13,8 @@ type Config struct {
 	DatabaseURL  string
 	JWTSecret    []byte
 	CookieSecure bool
+	MeiliURL     string // пусто: поиск отключён
+	MeiliKey     string
 }
 
 func Load() (Config, error) {
@@ -20,6 +22,8 @@ func Load() (Config, error) {
 		HTTPPort:    getenv("HTTP_PORT", "8080"),
 		DatabaseURL: os.Getenv("DATABASE_URL"),
 		JWTSecret:   []byte(os.Getenv("JWT_SECRET")),
+		MeiliURL:    os.Getenv("MEILI_URL"),
+		MeiliKey:    os.Getenv("MEILI_MASTER_KEY"),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")

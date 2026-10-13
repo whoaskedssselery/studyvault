@@ -221,7 +221,8 @@ type RegisterRequest struct {
 type SearchHit struct {
 	Id openapi_types.UUID `json:"id"`
 
-	// Snippet Фрагмент текста с найденным словом, совпадение обёрнуто в `<mark>`
+	// Snippet HTML-фрагмент текста вокруг совпадения. Весь текст заметки экранирован, а найденные
+	// слова обёрнуты в `<mark>`, поэтому фрагмент можно безопасно вставлять как HTML.
 	Snippet   string                                `json:"snippet"`
 	SubjectId nullable.Nullable[openapi_types.UUID] `json:"subject_id"`
 	Title     string                                `json:"title"`
@@ -305,6 +306,9 @@ type Conflict = Error
 
 // NotFound defines model for NotFound.
 type NotFound = Error
+
+// ServiceUnavailable defines model for ServiceUnavailable.
+type ServiceUnavailable = Error
 
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = Error

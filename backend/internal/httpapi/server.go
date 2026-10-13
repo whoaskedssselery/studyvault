@@ -33,6 +33,7 @@ type Deps struct {
 	Subjects     SubjectService
 	Notes        NoteService
 	Tags         TagService
+	Search       SearchService
 	JWTSecret    []byte
 	CookieSecure bool
 }

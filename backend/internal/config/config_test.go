@@ -81,3 +81,24 @@ func TestLoad_CookieSecure(t *testing.T) {
 		t.Error("CookieSecure=true not honoured")
 	}
 }
+
+func TestLoad_Meilisearch_IsOptional(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("MEILI_URL", "")
+	t.Setenv("MEILI_MASTER_KEY", "")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("a missing Meilisearch must not stop the API from starting: %v", err)
+	}
+	if cfg.MeiliURL != "" {
+		t.Errorf("MeiliURL = %q, want empty (search disabled)", cfg.MeiliURL)
+	}
+
+	t.Setenv("MEILI_URL", "http://localhost:7700")
+	t.Setenv("MEILI_MASTER_KEY", "k")
+	cfg, _ = config.Load()
+	if cfg.MeiliURL != "http://localhost:7700" || cfg.MeiliKey != "k" {
+		t.Errorf("Meilisearch settings not loaded: %+v", cfg)
+	}
+}
