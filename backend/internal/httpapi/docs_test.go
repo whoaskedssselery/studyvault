@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -40,5 +41,32 @@ func TestOpenAPISpec_IsServedWithoutAuth(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.HasPrefix(body, "openapi: 3.0.3") || !strings.Contains(body, "/notes/{id}") {
 		t.Errorf("not the project's spec: %.80s", body)
+	}
+}
+
+func TestDocs_ExternalAssetsAreIntegrityChecked(t *testing.T) {
+	body := fetch("/docs").Body.String()
+
+	for _, tag := range []string{"<script", "<link"} {
+		for _, part := range strings.Split(body, tag)[1:] {
+			el, _, _ := strings.Cut(part, ">")
+			if !strings.Contains(el, "https://") {
+				continue // это встроенный скрипт, а не внешний файл
+			}
+			if !regexp.MustCompile(`integrity="sha384-[A-Za-z0-9+/]{64}"`).MatchString(el) {
+				t.Errorf("an external asset without a valid SRI hash:%s", el)
+			}
+			if !strings.Contains(el, `crossorigin="anonymous"`) {
+				t.Errorf("an SRI-checked asset needs crossorigin=anonymous:%s", el)
+			}
+		}
+	}
+}
+
+func TestDocs_DoesNotPersistTheToken(t *testing.T) {
+	body := fetch("/docs").Body.String()
+
+	if strings.Contains(body, "persistAuthorization: true") {
+		t.Error("the pasted access token must not be kept in localStorage")
 	}
 }

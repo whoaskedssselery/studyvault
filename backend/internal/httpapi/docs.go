@@ -6,7 +6,9 @@ import (
 	spec "github.com/whoaskedssselery/studyvault/backend/api"
 )
 
-// Swagger UI подгружается с CDN, а спецификацию отдаёт сам сервер: так API можно
+// Swagger UI подгружается с CDN с проверкой целостности (SRI): подменённый файл браузер не выполнит.
+// Версия и хеши зафиксированы, поэтому при смене версии хеши надо пересчитать. Токен не сохраняется
+// в localStorage. Спецификацию отдаёт сам сервер: так API можно
 // пощупать из браузера (кнопка Authorize принимает access-токен, Try it out шлёт запросы).
 const docsPage = `<!doctype html>
 <html lang="ru">
@@ -16,16 +18,18 @@ const docsPage = `<!doctype html>
   <meta name="color-scheme" content="light only">
   <style>html, body { background: #fff; color-scheme: light; }</style>
   <title>studyvault API</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css"
+        integrity="sha384-wxLW6kwyHktdDGr6Pv1zgm/VGJh99lfUbzSn6HNHBENZlCN7W602k9VkGdxuFvPn" crossorigin="anonymous">
 </head>
 <body>
   <div id="swagger-ui"></div>
-  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"
+          integrity="sha384-wmyclcVGX/WhUkdkATwhaK1X1JtiNrr2EoYJ+diV3vj4v6OC5yCeSu+yW13SYJep" crossorigin="anonymous"></script>
   <script>
     window.ui = SwaggerUIBundle({
       url: '/openapi.yaml',
       dom_id: '#swagger-ui',
-      persistAuthorization: true,
+      persistAuthorization: false,
       tryItOutEnabled: true,
     });
   </script>
