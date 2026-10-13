@@ -71,6 +71,8 @@ services:
       # Ссылки на загрузку и скачивание открывает браузер на хосте, а не контейнер.
       S3_PUBLIC_ENDPOINT: localhost:9000
       CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # Локальный запуск идёт по http, поэтому Secure выключен. В проде оставьте true.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
     ports:
       - "8080:8080"
     depends_on:

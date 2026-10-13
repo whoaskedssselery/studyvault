@@ -84,7 +84,7 @@ go run ./cmd/reindex                                                   # пер�
 | `DATABASE_URL` | строка подключения к Postgres (обязательна) |
 | `JWT_SECRET` | секрет подписи токенов, не короче 32 символов (обязателен) |
 | `HTTP_PORT` | порт API, по умолчанию 8080 |
-| `COOKIE_SECURE` | `true` для HTTPS: refresh-cookie получит флаг Secure |
+| `COOKIE_SECURE` | по умолчанию `true`: refresh-cookie уходит только по HTTPS. `false` нужен лишь для локальной работы по http |
 | `CORS_ORIGINS` | адреса фронтенда через запятую; только явные, без `*` |
 | `MEILI_URL`, `MEILI_MASTER_KEY` | поиск; без них `/search` отвечает 503, остальное работает |
 | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` | файлы; без них `/attachments` отвечает 503 |

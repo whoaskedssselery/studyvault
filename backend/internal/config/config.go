@@ -36,8 +36,12 @@ func Load() (Config, error) {
 	if len(cfg.JWTSecret) < minJWTSecretLen {
 		return Config{}, errors.New("JWT_SECRET is required and must be at least 32 characters")
 	}
-	// Для локальной разработки по http cookie с Secure не сохранится, поэтому по умолчанию выключено.
-	cfg.CookieSecure, _ = strconv.ParseBool(os.Getenv("COOKIE_SECURE"))
+	// Secure по умолчанию включён: refresh-cookie не уйдёт по голому http. Для локальной разработки
+	// по http его выключают явно (COOKIE_SECURE=false); непонятное значение защиту не ослабляет.
+	cfg.CookieSecure = true
+	if v, err := strconv.ParseBool(os.Getenv("COOKIE_SECURE")); err == nil {
+		cfg.CookieSecure = v
+	}
 
 	cfg.S3 = S3{
 		Endpoint:       os.Getenv("S3_ENDPOINT"),

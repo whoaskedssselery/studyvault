@@ -70,15 +70,25 @@ func TestLoad_JWTSecret_RequiredAnd32Chars(t *testing.T) {
 	}
 }
 
-func TestLoad_CookieSecure(t *testing.T) {
+func TestLoad_CookieSecure_IsOnUnlessExplicitlyDisabled(t *testing.T) {
 	setValidEnv(t)
 
-	if cfg, _ := config.Load(); cfg.CookieSecure {
-		t.Error("CookieSecure must default to false")
+	cases := map[string]bool{
+		"":      true, // по умолчанию безопасно: забыть включить в проде нельзя
+		"true":  true,
+		"false": false, // локальная разработка по http
+		"0":     false,
+		"junk":  true, // непонятное значение не должно ослаблять защиту
 	}
-	t.Setenv("COOKIE_SECURE", "true")
-	if cfg, _ := config.Load(); !cfg.CookieSecure {
-		t.Error("CookieSecure=true not honoured")
+	for value, want := range cases {
+		t.Setenv("COOKIE_SECURE", value)
+		cfg, err := config.Load()
+		if err != nil {
+			t.Fatalf("COOKIE_SECURE=%q: %v", value, err)
+		}
+		if cfg.CookieSecure != want {
+			t.Errorf("COOKIE_SECURE=%q: CookieSecure = %v, want %v", value, cfg.CookieSecure, want)
+		}
 	}
 }
 
