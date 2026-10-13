@@ -44,6 +44,8 @@ call GET /openapi.yaml;           expect 200 "GET /openapi.yaml"
 
 step "closed without a token"
 call GET /subjects;               expect 401 "GET /subjects without a token"
+grep -qi '^content-type: application/problem+json' "$tmp/headers" || fail "errors must be application/problem+json"
+grep -q '"code":"unauthorized"' "$tmp/body" || fail "the error body must carry a code: $(cat "$tmp/body")"
 
 step "registration and account"
 call POST /auth/register "{\"email\":\"$email\",\"password\":\"$password\",\"display_name\":\"Smoke Test\"}"

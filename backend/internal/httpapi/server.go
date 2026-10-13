@@ -68,6 +68,13 @@ func NewHandler(deps Deps) http.Handler {
 	r.Use(securityHeaders)
 	r.Use(limitAuthAttempts(deps.AuthRateLimit))
 	r.Use(corsMiddleware(deps.AllowedOrigins))
+	r.Use(authMiddleware(deps.JWTSecret))
+
+	// Неизвестный путь и неверный метод отвечают так же, как любая другая ошибка API, а не текстом chi.
+	r.NotFound(func(w http.ResponseWriter, _ *http.Request) { notFound(w, "no such route") })
+	r.MethodNotAllowed(func(w http.ResponseWriter, _ *http.Request) {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed for this route")
+	})
 
 	// Документация вне сгенерированных маршрутов, поэтому authMiddleware её не касается.
 	r.Get("/docs", serveDocs)
@@ -76,9 +83,8 @@ func NewHandler(deps Deps) http.Handler {
 	r.Get("/health", (&api{Deps: deps}).GetHealth)
 
 	return HandlerWithOptions(&api{Deps: deps}, ChiServerOptions{
-		BaseRouter:  r,
-		BaseURL:     apiPrefix,
-		Middlewares: []MiddlewareFunc{authMiddleware(deps.JWTSecret)},
+		BaseRouter: r,
+		BaseURL:    apiPrefix,
 		ErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
 			badRequest(w, err.Error())
 		},

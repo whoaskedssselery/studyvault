@@ -93,13 +93,23 @@ func newHandler(a httpapi.Authenticator) http.Handler {
 
 func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	t.Helper()
-	var body struct {
-		Error struct{ Code, Message string } `json:"error"`
+	return problem(t, rec).Code
+}
+
+// problem разбирает тело ответа как ошибку RFC 7807 и заодно проверяет всё, что должно быть верно для любой ошибки API.
+func problem(t *testing.T, rec *httptest.ResponseRecorder) httpapi.Problem {
+	t.Helper()
+	if ct := rec.Header().Get("Content-Type"); ct != "application/problem+json" {
+		t.Errorf("Content-Type = %q, want application/problem+json", ct)
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+	var p httpapi.Problem
+	if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil {
 		t.Fatalf("body is not an error JSON: %v (%s)", err, rec.Body.String())
 	}
-	return body.Error.Code
+	if p.Status != rec.Code || p.Title != http.StatusText(rec.Code) || p.Code == "" || p.Detail == "" || !strings.HasSuffix(p.Type, "#"+p.Code) {
+		t.Errorf("not a complete RFC 7807 problem for status %d: %+v", rec.Code, p)
+	}
+	return p
 }
 
 const validRegister = `{"email":"a@x.io","password":"password123","display_name":"Ann"}`
