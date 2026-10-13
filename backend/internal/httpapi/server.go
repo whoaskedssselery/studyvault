@@ -36,6 +36,7 @@ type Deps struct {
 	Search         SearchService
 	Attachments    AttachmentService
 	AllowedOrigins []string // источники для CORS; пусто: CORS выключен
+	AuthRateLimit  int      // попыток входа, регистрации и обновления токена с одного адреса в минуту; 0: без лимита
 	JWTSecret      []byte
 	CookieSecure   bool
 }
@@ -61,6 +62,7 @@ func NewHandler(deps Deps) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
 	r.Use(securityHeaders)
+	r.Use(limitAuthAttempts(deps.AuthRateLimit))
 	r.Use(corsMiddleware(deps.AllowedOrigins))
 
 	// Документация вне сгенерированных маршрутов, поэтому authMiddleware её не касается.

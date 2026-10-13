@@ -64,6 +64,7 @@ func run() error {
 		JWTSecret:      cfg.JWTSecret,
 		CookieSecure:   cfg.CookieSecure,
 		AllowedOrigins: cfg.CORSOrigins,
+		AuthRateLimit:  cfg.AuthRateLimit,
 	}
 
 	// Без Meilisearch API работает целиком, кроме /search (503).

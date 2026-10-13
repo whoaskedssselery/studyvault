@@ -178,3 +178,26 @@ func TestLoad_CORSOrigins_RejectsUnsafeOrMalformedEntries(t *testing.T) {
 		}
 	}
 }
+
+func TestLoad_AuthRateLimit(t *testing.T) {
+	setValidEnv(t)
+
+	t.Setenv("AUTH_RATE_LIMIT_PER_MIN", "")
+	if cfg, _ := config.Load(); cfg.AuthRateLimit != 20 {
+		t.Errorf("default = %d, want 20 attempts per minute", cfg.AuthRateLimit)
+	}
+	t.Setenv("AUTH_RATE_LIMIT_PER_MIN", "5")
+	if cfg, _ := config.Load(); cfg.AuthRateLimit != 5 {
+		t.Errorf("custom value not honoured: %d", cfg.AuthRateLimit)
+	}
+	t.Setenv("AUTH_RATE_LIMIT_PER_MIN", "0")
+	if cfg, err := config.Load(); err != nil || cfg.AuthRateLimit != 0 {
+		t.Errorf("0 must switch the limit off: %d, %v", cfg.AuthRateLimit, err)
+	}
+	for _, bad := range []string{"-1", "many", "1.5"} {
+		t.Setenv("AUTH_RATE_LIMIT_PER_MIN", bad)
+		if _, err := config.Load(); err == nil {
+			t.Errorf("AUTH_RATE_LIMIT_PER_MIN=%q must be rejected rather than silently ignored", bad)
+		}
+	}
+}

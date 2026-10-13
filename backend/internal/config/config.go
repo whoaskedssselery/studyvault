@@ -11,15 +11,19 @@ import (
 
 const minJWTSecretLen = 32
 
+// Попыток входа, регистрации и обновления токена в минуту с одного адреса.
+const defaultAuthRateLimit = 20
+
 type Config struct {
-	HTTPPort     string
-	DatabaseURL  string
-	JWTSecret    []byte
-	CookieSecure bool
-	MeiliURL     string // пусто: поиск отключён
-	MeiliKey     string
-	S3           S3       // Endpoint пуст: файлы отключены
-	CORSOrigins  []string // пусто: CORS выключен
+	HTTPPort      string
+	DatabaseURL   string
+	JWTSecret     []byte
+	CookieSecure  bool
+	MeiliURL      string // пусто: поиск отключён
+	MeiliKey      string
+	S3            S3       // Endpoint пуст: файлы отключены
+	CORSOrigins   []string // пусто: CORS выключен
+	AuthRateLimit int      // попыток входа в минуту с одного адреса; 0: без лимита
 }
 
 func Load() (Config, error) {
@@ -58,6 +62,15 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg.CORSOrigins = origins
+
+	cfg.AuthRateLimit = defaultAuthRateLimit
+	if v := os.Getenv("AUTH_RATE_LIMIT_PER_MIN"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return Config{}, fmt.Errorf("AUTH_RATE_LIMIT_PER_MIN must be a non-negative integer, got %q", v)
+		}
+		cfg.AuthRateLimit = n
+	}
 	return cfg, nil
 }
 
