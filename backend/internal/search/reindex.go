@@ -17,10 +17,10 @@ type IndexSource interface {
 // ReindexPages возвращает функцию для Meili.ReplaceAll: каждый вызов отдаёт следующую страницу
 // документов, а пустой список означает конец. Страницы идут по ключу id, поэтому ни одна
 // заметка не пропускается и не повторяется, даже если таблица меняется во время обхода.
-func ReindexPages(src IndexSource, pageSize int) func(context.Context) ([]Doc, error) {
+func ReindexPages(src IndexSource, pageSize int32) func(context.Context) ([]Doc, error) {
 	after := uuid.Nil
 	return func(ctx context.Context) ([]Doc, error) {
-		rows, err := src.ListNotesForIndex(ctx, db.ListNotesForIndexParams{After: after, PageSize: int32(pageSize)})
+		rows, err := src.ListNotesForIndex(ctx, db.ListNotesForIndexParams{After: after, PageSize: pageSize})
 		if err != nil {
 			return nil, fmt.Errorf("list notes for index: %w", err)
 		}

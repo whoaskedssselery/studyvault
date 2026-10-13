@@ -68,12 +68,17 @@ func (a *api) CreateSubject(w http.ResponseWriter, r *http.Request) {
 	}
 	_, color := optional(req.Color)
 	_, semester := optional(req.Semester)
-	if err := validColorAndSemester(color, semester); err != nil {
+	if err := validColor(color); err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	sem, err := validSemester(semester)
+	if err != nil {
 		badRequest(w, err.Error())
 		return
 	}
 
-	created, err := a.Subjects.Create(r.Context(), userID, subject.Input{Title: title, Color: color, Semester: toInt16(semester)})
+	created, err := a.Subjects.Create(r.Context(), userID, subject.Input{Title: title, Color: color, Semester: sem})
 	if err != nil {
 		slog.Error("create subject", "err", err)
 		internalError(w)
@@ -110,11 +115,16 @@ func (a *api) UpdateSubject(w http.ResponseWriter, r *http.Request, id Id) {
 	var semester *int
 	patch.SetColor, color = optional(req.Color)
 	patch.SetSemester, semester = optional(req.Semester)
-	if err := validColorAndSemester(color, semester); err != nil {
+	if err := validColor(color); err != nil {
 		badRequest(w, err.Error())
 		return
 	}
-	patch.Color, patch.Semester = color, toInt16(semester)
+	sem, err := validSemester(semester)
+	if err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	patch.Color, patch.Semester = color, sem
 
 	updated, err := a.Subjects.Update(r.Context(), userID, id, patch)
 	switch {
@@ -149,14 +159,23 @@ func validSubjectTitle(raw string) (string, error) {
 	return trimmedTitle(raw, maxSubjectTitleLen)
 }
 
-func validColorAndSemester(color *string, semester *int) error {
+func validColor(color *string) error {
 	if color != nil && !hexColor.MatchString(*color) {
 		return errors.New("color must look like #rrggbb")
 	}
-	if semester != nil && (*semester < minSemester || *semester > maxSemester) {
-		return errors.New("semester must be between 1 and 12")
-	}
 	return nil
+}
+
+// validSemester проверяет диапазон и сразу отдаёт значение нужного типа: непроверенного приведения int к int16 нет.
+func validSemester(n *int) (*int16, error) {
+	if n == nil {
+		return nil, nil
+	}
+	if *n < minSemester || *n > maxSemester {
+		return nil, errors.New("semester must be between 1 and 12")
+	}
+	v := int16(*n)
+	return &v, nil
 }
 
 // toSubject задаёт color и semester явно: незаданный Nullable сериализовался бы как нулевое значение, а не null.
@@ -194,12 +213,4 @@ func optional[T any](n nullable.Nullable[T]) (specified bool, value *T) {
 	}
 	v := n.MustGet()
 	return true, &v
-}
-
-func toInt16(n *int) *int16 {
-	if n == nil {
-		return nil
-	}
-	v := int16(*n)
-	return &v
 }
