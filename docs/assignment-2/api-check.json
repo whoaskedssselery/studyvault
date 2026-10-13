@@ -1,0 +1,48 @@
+{
+  "checkedAt": "2026-10-13T23:19:30.956Z",
+  "authenticated": false,
+  "results": [
+    {
+      "path": "/health",
+      "status": 502,
+      "contentType": "application/json; charset=utf-8",
+      "milliseconds": 28,
+      "body": {
+        "error": {
+          "code": "api_unavailable",
+          "message": "Start the API server or set STUDYVAULT_API_TARGET."
+        }
+      },
+      "ok": false,
+      "message": "API не запущен. Библиотека продолжает работать на mock.json."
+    },
+    {
+      "path": "/notes",
+      "status": 502,
+      "contentType": "application/json; charset=utf-8",
+      "milliseconds": 27,
+      "body": {
+        "error": {
+          "code": "api_unavailable",
+          "message": "Start the API server or set STUDYVAULT_API_TARGET."
+        }
+      },
+      "ok": false,
+      "message": "API не запущен. Библиотека продолжает работать на mock.json."
+    },
+    {
+      "path": "/subjects",
+      "status": 502,
+      "contentType": "application/json; charset=utf-8",
+      "milliseconds": 27,
+      "body": {
+        "error": {
+          "code": "api_unavailable",
+          "message": "Start the API server or set STUDYVAULT_API_TARGET."
+        }
+      },
+      "ok": false,
+      "message": "API не запущен. Библиотека продолжает работать на mock.json."
+    }
+  ]
+}
