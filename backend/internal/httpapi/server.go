@@ -58,6 +58,10 @@ func NewHandler(deps Deps) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
 
+	// Документация вне сгенерированных маршрутов, поэтому authMiddleware её не касается.
+	r.Get("/docs", serveDocs)
+	r.Get("/openapi.yaml", serveSpec)
+
 	return HandlerWithOptions(&api{Deps: deps}, ChiServerOptions{
 		BaseRouter:  r,
 		Middlewares: []MiddlewareFunc{authMiddleware(deps.JWTSecret)},
