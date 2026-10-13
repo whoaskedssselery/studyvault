@@ -3,9 +3,9 @@ name: backend
 on:
   push:
     branches: [main]
-    paths: ["backend/**", "docker-compose.yml", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "scripts/**", "docker-compose.yml", ".env.example", ".github/workflows/backend.yml"]
   pull_request:
-    paths: ["backend/**", "docker-compose.yml", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "scripts/**", "docker-compose.yml", ".env.example", ".github/workflows/backend.yml"]
 
 permissions:
   contents: read
