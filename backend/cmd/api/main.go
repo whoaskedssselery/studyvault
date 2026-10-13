@@ -66,9 +66,10 @@ func run() error {
 	noteOpts := []note.Option{note.WithTx(func(ctx context.Context, fn func(note.Store) error) error {
 		return db.InTx(ctx, pool, func(q *db.Queries) error { return fn(q) })
 	})}
+	authSvc := auth.NewService(queries, cfg.JWTSecret)
 	deps := httpapi.Deps{
 		DB:             pool,
-		Auth:           auth.NewService(queries, cfg.JWTSecret),
+		Auth:           authSvc,
 		Subjects:       subject.NewService(queries),
 		Tags:           tag.NewService(queries),
 		JWTSecret:      cfg.JWTSecret,
@@ -105,6 +106,9 @@ func run() error {
 	}
 
 	deps.Notes = note.NewService(queries, noteOpts...)
+
+	// Горутина живёт до сигнала остановки: ctx отменяется вместе с ним.
+	go authSvc.RunTokenPurge(ctx, time.Hour)
 
 	srv := httpapi.NewServer(cfg, deps)
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 	"unicode"
@@ -33,6 +34,7 @@ type Store interface {
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (db.RefreshToken, error)
 	RevokeRefreshToken(ctx context.Context, tokenHash string) (int64, error)
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
+	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time.Time) (int64, error)
 }
 
 // Tokens — пара токенов, которую получает клиент.
@@ -208,4 +210,41 @@ func sanitizeUserAgent(ua string) string {
 		}
 	}
 	return strings.TrimSpace(ua)
+}
+
+// PurgeExpiredTokens удаляет истёкшие refresh-токены и возвращает их число. Без этого таблица росла бы вечно:
+// каждый вход и каждое обновление добавляют строку. Отозванные, но ещё не истёкшие токены остаются,
+// потому что по ним распознаётся повторное предъявление уже использованного токена.
+func (s *Service) PurgeExpiredTokens(ctx context.Context) (int64, error) {
+	n, err := s.store.DeleteExpiredRefreshTokens(ctx, s.now())
+	if err != nil {
+		return 0, fmt.Errorf("purge expired refresh tokens: %w", err)
+	}
+	return n, nil
+}
+
+// RunTokenPurge чистит истёкшие токены сразу и затем каждые every, пока не отменён ctx. Ошибка очистки не
+// фатальна (следующий проход повторит), её видно только в логе.
+func (s *Service) RunTokenPurge(ctx context.Context, every time.Duration) {
+	purge := func() {
+		n, err := s.PurgeExpiredTokens(ctx)
+		switch {
+		case ctx.Err() != nil:
+		case err != nil:
+			slog.ErrorContext(ctx, "purge refresh tokens", "err", err)
+		case n > 0:
+			slog.InfoContext(ctx, "purged expired refresh tokens", "count", n)
+		}
+	}
+	purge()
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			purge()
+		}
+	}
 }

@@ -55,6 +55,17 @@ func (f *fakeStore) RevokeAllUserRefreshTokens(_ context.Context, userID uuid.UU
 	return nil
 }
 
+func (f *fakeStore) DeleteExpiredRefreshTokens(_ context.Context, before time.Time) (int64, error) {
+	var n int64
+	for h, t := range f.tokens {
+		if !t.ExpiresAt.After(before) {
+			delete(f.tokens, h)
+			n++
+		}
+	}
+	return n, nil
+}
+
 func (f *fakeStore) CreateUser(_ context.Context, a db.CreateUserParams) (db.User, error) {
 	key := lower(a.Email)
 	if _, ok := f.users[key]; ok {
@@ -315,5 +326,75 @@ func TestRegister_StrangeUserAgent_DoesNotLeaveAHalfCreatedAccount(t *testing.T)
 
 	if err != nil || res.AccessToken == "" {
 		t.Fatalf("register must succeed with a strange User-Agent: %v", err)
+	}
+}
+
+func TestPurgeExpiredTokens_RemovesOnlyExpired(t *testing.T) {
+	store := newFakeStore()
+	now := time.Now()
+	svc := auth.NewService(store, secret, auth.WithBcryptCost(bcrypt.MinCost), auth.WithClock(func() time.Time { return now }))
+	old := loggedIn(t, svc) // регистрация и вход выдали по токену, оба истекут через RefreshTokenTTL
+	now = now.Add(time.Hour)
+	fresh, err := svc.Login(context.Background(), "a@x.io", "password123", "") // истечёт на час позже
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(auth.RefreshTokenTTL - 30*time.Minute) // старые уже истекли, свежий ещё жив
+
+	n, err := svc.PurgeExpiredTokens(context.Background())
+
+	if err != nil || n != 2 {
+		t.Fatalf("purged %d (err %v), want the two expired tokens", n, err)
+	}
+	if _, ok := store.tokens[auth.HashRefreshToken(old.RefreshToken)]; ok {
+		t.Error("the expired token must be gone")
+	}
+	if _, ok := store.tokens[auth.HashRefreshToken(fresh.RefreshToken)]; !ok {
+		t.Error("a live token must stay")
+	}
+}
+
+type failingPurgeStore struct{ *fakeStore }
+
+func (failingPurgeStore) DeleteExpiredRefreshTokens(context.Context, time.Time) (int64, error) {
+	return 0, errors.New("db down")
+}
+
+func TestPurgeExpiredTokens_StoreError_IsReturned(t *testing.T) {
+	svc := newService(failingPurgeStore{newFakeStore()})
+	if _, err := svc.PurgeExpiredTokens(context.Background()); err == nil {
+		t.Fatal("a failing store must surface as an error")
+	}
+}
+
+type countingPurgeStore struct {
+	*fakeStore
+	calls chan struct{}
+}
+
+func (c countingPurgeStore) DeleteExpiredRefreshTokens(context.Context, time.Time) (int64, error) {
+	c.calls <- struct{}{}
+	return 0, nil
+}
+
+func TestRunTokenPurge_RunsAtStartAndOnEveryTick_ThenStopsWithItsContext(t *testing.T) {
+	calls := make(chan struct{}, 100)
+	svc := newService(countingPurgeStore{newFakeStore(), calls})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { svc.RunTokenPurge(ctx, 5*time.Millisecond); close(done) }()
+
+	for i := 0; i < 3; i++ { // первый проход сразу, остальные по таймеру
+		select {
+		case <-calls:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("only %d purge runs happened", i)
+		}
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("RunTokenPurge must return once its context is cancelled")
 	}
 }

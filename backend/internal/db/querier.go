@@ -6,6 +6,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -20,6 +21,9 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	// Возвращает удалённую строку: из неё берётся ключ объекта, который надо убрать из хранилища.
 	DeleteAttachment(ctx context.Context, arg DeleteAttachmentParams) (Attachment, error)
+	// Удаляются только истёкшие токены. Отозванные, но ещё не истёкшие должны остаться:
+	// по ним распознаётся повторное предъявление использованного токена.
+	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time.Time) (int64, error)
 	DeleteSubject(ctx context.Context, arg DeleteSubjectParams) (int64, error)
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	// Перепроверка результатов поиска в Postgres: Meilisearch лишь предлагает кандидатов, а решает БД.
