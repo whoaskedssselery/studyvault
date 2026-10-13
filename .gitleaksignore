@@ -1,0 +1,4 @@
+# Ложные срабатывания gitleaks. Каждая запись объяснена: тут нет настоящих секретов.
+
+# Тестовая константа goodSecret в config_test.go: заведомо вымышленные 32 символа для проверки длины JWT_SECRET.
+6a6d86f54afc570c970404b1e6e0a62121f74b25:backend/internal/config/config_test.go:generic-api-key:9
