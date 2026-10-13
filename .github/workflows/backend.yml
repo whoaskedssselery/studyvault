@@ -126,7 +126,7 @@ jobs:
           docker compose --profile app up -d --build
 
       - name: Wait for the API
-        run: curl --retry 60 --retry-connrefused --retry-delay 1 -fsS http://localhost:8080/health
+        run: curl --retry 60 --retry-all-errors --retry-delay 1 -fsS http://localhost:8080/health
 
       - name: Smoke test
         run: bash scripts/smoke.sh http://localhost:8080
