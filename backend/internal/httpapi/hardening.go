@@ -24,13 +24,21 @@ func corsMiddleware(origins []string) func(http.Handler) http.Handler {
 	})
 }
 
-// securityHeaders: nosniff для всех ответов; ответы API несут токены и личные данные, поэтому
+// securityHeaders: nosniff, запрет встраивания и строгая CSP для всех ответов; ответы API несут токены и личные данные, поэтому
 // их нельзя кэшировать. Страницы документации статичны и от этого правила освобождены.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		if r.URL.Path == "/docs" {
+			h.Set("Content-Security-Policy", docsCSP)
+		} else {
+			h.Set("Content-Security-Policy", apiCSP)
+		}
 		if !strings.HasPrefix(r.URL.Path, "/docs") && r.URL.Path != "/openapi.yaml" {
-			w.Header().Set("Cache-Control", "no-store")
+			h.Set("Cache-Control", "no-store")
 		}
 		next.ServeHTTP(w, r)
 	})

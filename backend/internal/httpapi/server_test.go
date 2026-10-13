@@ -19,7 +19,7 @@ func (f fakePinger) Ping(context.Context) error { return f.err }
 func getHealth(t *testing.T, db httpapi.Pinger) *httptest.ResponseRecorder {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
 	httpapi.NewHandler(httpapi.Deps{DB: db, JWTSecret: testSecret}).ServeHTTP(rec, req)
 	return rec
 }

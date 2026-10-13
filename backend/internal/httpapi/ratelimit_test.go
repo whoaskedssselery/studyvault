@@ -33,11 +33,11 @@ func TestAuthRateLimit_StopsPasswordGuessing(t *testing.T) {
 	h := limitedHandler(3)
 
 	for i := 1; i <= 3; i++ {
-		if rec := attempt(h, http.MethodPost, "/auth/login", "192.0.2.1:5000", ""); rec.Code != http.StatusUnauthorized {
+		if rec := attempt(h, http.MethodPost, "/v1/auth/login", "192.0.2.1:5000", ""); rec.Code != http.StatusUnauthorized {
 			t.Fatalf("attempt %d: status = %d, want 401 (a wrong password, not yet limited)", i, rec.Code)
 		}
 	}
-	rec := attempt(h, http.MethodPost, "/auth/login", "192.0.2.1:5000", "")
+	rec := attempt(h, http.MethodPost, "/v1/auth/login", "192.0.2.1:5000", "")
 
 	if rec.Code != http.StatusTooManyRequests || errorCode(t, rec) != "rate_limited" {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -51,31 +51,31 @@ func TestAuthRateLimit_StopsPasswordGuessing(t *testing.T) {
 func TestAuthRateLimit_BudgetIsSharedByLoginRegisterAndRefresh(t *testing.T) {
 	h := limitedHandler(2)
 
-	attempt(h, http.MethodPost, "/auth/login", "192.0.2.1:1", "")
-	attempt(h, http.MethodPost, "/auth/register", "192.0.2.1:2", "") // другой порт, тот же клиент
+	attempt(h, http.MethodPost, "/v1/auth/login", "192.0.2.1:1", "")
+	attempt(h, http.MethodPost, "/v1/auth/register", "192.0.2.1:2", "") // другой порт, тот же клиент
 
-	if rec := attempt(h, http.MethodPost, "/auth/refresh", "192.0.2.1:3", ""); rec.Code != http.StatusTooManyRequests {
+	if rec := attempt(h, http.MethodPost, "/v1/auth/refresh", "192.0.2.1:3", ""); rec.Code != http.StatusTooManyRequests {
 		t.Errorf("status = %d, want 429: a client must not get a fresh budget per endpoint or per source port", rec.Code)
 	}
 }
 
 func TestAuthRateLimit_OtherClientsAreNotAffected(t *testing.T) {
 	h := limitedHandler(1)
-	attempt(h, http.MethodPost, "/auth/login", "192.0.2.1:1", "")
+	attempt(h, http.MethodPost, "/v1/auth/login", "192.0.2.1:1", "")
 
-	if rec := attempt(h, http.MethodPost, "/auth/login", "192.0.2.1:2", ""); rec.Code != http.StatusTooManyRequests {
+	if rec := attempt(h, http.MethodPost, "/v1/auth/login", "192.0.2.1:2", ""); rec.Code != http.StatusTooManyRequests {
 		t.Fatal("the first client must be limited")
 	}
-	if rec := attempt(h, http.MethodPost, "/auth/login", "198.51.100.7:1", ""); rec.Code == http.StatusTooManyRequests {
+	if rec := attempt(h, http.MethodPost, "/v1/auth/login", "198.51.100.7:1", ""); rec.Code == http.StatusTooManyRequests {
 		t.Error("a different client must not be limited by someone else's attempts")
 	}
 }
 
 func TestAuthRateLimit_SpoofedForwardedHeaderGivesNoFreshBudget(t *testing.T) {
 	h := limitedHandler(1)
-	attempt(h, http.MethodPost, "/auth/login", "192.0.2.1:1", "")
+	attempt(h, http.MethodPost, "/v1/auth/login", "192.0.2.1:1", "")
 
-	rec := attempt(h, http.MethodPost, "/auth/login", "192.0.2.1:2", "203.0.113.99")
+	rec := attempt(h, http.MethodPost, "/v1/auth/login", "192.0.2.1:2", "203.0.113.99")
 
 	if rec.Code != http.StatusTooManyRequests {
 		t.Errorf("status = %d, want 429: the limit is keyed by the real connection, not by a header the client controls", rec.Code)
@@ -86,14 +86,14 @@ func TestAuthRateLimit_OnlyCountsTheAuthEndpoints(t *testing.T) {
 	h := limitedHandler(1)
 
 	for i := 0; i < 5; i++ {
-		if rec := attempt(h, http.MethodGet, "/health", "192.0.2.1:1", ""); rec.Code != http.StatusOK {
-			t.Fatalf("/health must never be limited, status = %d", rec.Code)
+		if rec := attempt(h, http.MethodGet, "/v1/health", "192.0.2.1:1", ""); rec.Code != http.StatusOK {
+			t.Fatalf("/v1/health must never be limited, status = %d", rec.Code)
 		}
 	}
-	if rec := attempt(h, http.MethodPost, "/auth/logout", "192.0.2.1:1", ""); rec.Code == http.StatusTooManyRequests {
+	if rec := attempt(h, http.MethodPost, "/v1/auth/logout", "192.0.2.1:1", ""); rec.Code == http.StatusTooManyRequests {
 		t.Error("logout is not a guessing target and must not be limited")
 	}
-	if rec := attempt(h, http.MethodPost, "/auth/login", "192.0.2.1:1", ""); rec.Code == http.StatusTooManyRequests {
+	if rec := attempt(h, http.MethodPost, "/v1/auth/login", "192.0.2.1:1", ""); rec.Code == http.StatusTooManyRequests {
 		t.Error("the other traffic must not have used up the login budget")
 	}
 }
@@ -102,7 +102,7 @@ func TestAuthRateLimit_ZeroDisablesIt(t *testing.T) {
 	h := limitedHandler(0)
 
 	for i := 0; i < 50; i++ {
-		if rec := attempt(h, http.MethodPost, "/auth/login", "192.0.2.1:1", ""); rec.Code == http.StatusTooManyRequests {
+		if rec := attempt(h, http.MethodPost, "/v1/auth/login", "192.0.2.1:1", ""); rec.Code == http.StatusTooManyRequests {
 			t.Fatalf("attempt %d was limited although the limit is off", i+1)
 		}
 	}

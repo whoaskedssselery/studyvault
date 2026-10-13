@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/auth"
 	"github.com/whoaskedssselery/studyvault/backend/internal/config"
 )
+
+// apiPrefix — версия API в пути. Несовместимые изменения выйдут под /v2, не ломая этих путей.
+const apiPrefix = "/v1"
 
 // Pinger is satisfied by *pgxpool.Pool.
 type Pinger interface {
@@ -30,6 +32,7 @@ type Authenticator interface {
 type Deps struct {
 	DB             Pinger
 	Auth           Authenticator
+	Account        AccountService
 	Subjects       SubjectService
 	Notes          NoteService
 	Tags           TagService
@@ -59,8 +62,9 @@ func NewServer(cfg config.Config, deps Deps) *http.Server {
 
 func NewHandler(deps Deps) http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID)
-	r.Use(middleware.Recoverer)
+	r.Use(requestID)
+	r.Use(accessLog)
+	r.Use(recoverer)
 	r.Use(securityHeaders)
 	r.Use(limitAuthAttempts(deps.AuthRateLimit))
 	r.Use(corsMiddleware(deps.AllowedOrigins))
@@ -68,9 +72,12 @@ func NewHandler(deps Deps) http.Handler {
 	// Документация вне сгенерированных маршрутов, поэтому authMiddleware её не касается.
 	r.Get("/docs", serveDocs)
 	r.Get("/openapi.yaml", serveSpec)
+	// Проба живости для оркестратора и прокси не привязана к версии API; тот же обработчик есть и в /v1/health.
+	r.Get("/health", (&api{Deps: deps}).GetHealth)
 
 	return HandlerWithOptions(&api{Deps: deps}, ChiServerOptions{
 		BaseRouter:  r,
+		BaseURL:     apiPrefix,
 		Middlewares: []MiddlewareFunc{authMiddleware(deps.JWTSecret)},
 		ErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
 			badRequest(w, err.Error())
@@ -83,7 +90,7 @@ func (a *api) GetHealth(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := a.DB.Ping(ctx); err != nil {
-		slog.Error("health check: database ping failed", "err", err)
+		slog.ErrorContext(ctx, "health check: database ping failed", "err", err)
 		writeJSON(w, http.StatusServiceUnavailable, Health{Status: Unavailable})
 		return
 	}

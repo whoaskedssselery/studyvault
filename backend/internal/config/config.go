@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"strconv"
@@ -21,9 +22,11 @@ type Config struct {
 	CookieSecure  bool
 	MeiliURL      string // пусто: поиск отключён
 	MeiliKey      string
-	S3            S3       // Endpoint пуст: файлы отключены
-	CORSOrigins   []string // пусто: CORS выключен
-	AuthRateLimit int      // попыток входа в минуту с одного адреса; 0: без лимита
+	S3            S3         // Endpoint пуст: файлы отключены
+	CORSOrigins   []string   // пусто: CORS выключен
+	AuthRateLimit int        // попыток входа в минуту с одного адреса; 0: без лимита
+	LogJSON       bool       // формат лога: JSON (по умолчанию) или текст для разработки
+	LogLevel      slog.Level // по умолчанию info
 }
 
 func Load() (Config, error) {
@@ -70,6 +73,18 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("AUTH_RATE_LIMIT_PER_MIN must be a non-negative integer, got %q", v)
 		}
 		cfg.AuthRateLimit = n
+	}
+	switch f := strings.ToLower(os.Getenv("LOG_FORMAT")); f {
+	case "", "json":
+		cfg.LogJSON = true
+	case "text":
+	default:
+		return Config{}, fmt.Errorf("LOG_FORMAT must be json or text, got %q", f)
+	}
+	if v := os.Getenv("LOG_LEVEL"); v != "" {
+		if err := cfg.LogLevel.UnmarshalText([]byte(v)); err != nil {
+			return Config{}, fmt.Errorf("LOG_LEVEL must be debug, info, warn or error, got %q", v)
+		}
 	}
 	return cfg, nil
 }

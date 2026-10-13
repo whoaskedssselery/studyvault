@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -17,6 +18,7 @@ services:
 
   meilisearch:
     image: getmeili/meilisearch:v1.12
+    restart: unless-stopped
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
       MEILI_ENV: development
@@ -29,6 +31,7 @@ services:
   # а клиент minio-go работает с любым S3.
   s3:
     image: rustfs/rustfs:latest
+    restart: unless-stopped
     environment:
       RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY}
       RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
@@ -73,6 +76,9 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       # Локальный запуск идёт по http, поэтому Secure выключен. В проде оставьте true.
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:

@@ -119,6 +119,17 @@ type AuthResponse struct {
 	User      User `json:"user"`
 }
 
+// ChangePasswordRequest defines model for ChangePasswordRequest.
+type ChangePasswordRequest struct {
+	// CurrentPassword Example: correct-horse-battery
+	CurrentPassword string `json:"current_password"`
+
+	// NewPassword Не длиннее 72 байт (ограничение bcrypt) и не совпадает с текущим
+	//
+	// Example: another-long-passphrase
+	NewPassword string `json:"new_password"`
+}
+
 // Error defines model for Error.
 type Error struct {
 	Error struct {
@@ -222,6 +233,12 @@ type NoteSummary struct {
 	Tags      []Tag                                 `json:"tags"`
 	Title     string                                `json:"title"`
 	UpdatedAt time.Time                             `json:"updated_at"`
+}
+
+// ProfilePatch defines model for ProfilePatch.
+type ProfilePatch struct {
+	// DisplayName Example: Анна Студентова
+	DisplayName string `json:"display_name"`
 }
 
 // RegisterRequest defines model for RegisterRequest.
@@ -348,6 +365,9 @@ type TooManyRequests = Error
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = Error
 
+// WrongPassword defines model for WrongPassword.
+type WrongPassword = Error
+
 // ListAttachmentsParams defines parameters for ListAttachments.
 type ListAttachmentsParams struct {
 	NoteId openapi_types.UUID `form:"note_id" json:"note_id"`
@@ -389,6 +409,12 @@ type LoginJSONRequestBody = LoginRequest
 
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
+
+// UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
+type UpdateMeJSONRequestBody = ProfilePatch
+
+// ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
+type ChangePasswordJSONRequestBody = ChangePasswordRequest
 
 // CreateNoteJSONRequestBody defines body for CreateNote for application/json ContentType.
 type CreateNoteJSONRequestBody = NoteInput
@@ -440,6 +466,15 @@ type ServerInterface interface {
 	// GetHealth Проверка живости сервиса и БД
 	// (GET /health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
+	// GetMe Мой аккаунт
+	// (GET /me)
+	GetMe(w http.ResponseWriter, r *http.Request)
+	// UpdateMe Изменить имя
+	// (PATCH /me)
+	UpdateMe(w http.ResponseWriter, r *http.Request)
+	// ChangePassword Сменить пароль
+	// (POST /me/password)
+	ChangePassword(w http.ResponseWriter, r *http.Request)
 	// ListNotes Список заметок (без содержимого)
 	// (GET /notes)
 	ListNotes(w http.ResponseWriter, r *http.Request, params ListNotesParams)
@@ -548,6 +583,24 @@ func (_ Unimplemented) GetGraph(w http.ResponseWriter, r *http.Request) {
 // GetHealth Проверка живости сервиса и БД
 // (GET /health)
 func (_ Unimplemented) GetHealth(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMe Мой аккаунт
+// (GET /me)
+func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdateMe Изменить имя
+// (PATCH /me)
+func (_ Unimplemented) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ChangePassword Сменить пароль
+// (POST /me/password)
+func (_ Unimplemented) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -824,6 +877,48 @@ func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetHealth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMe operation middleware
+func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateMe operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ChangePassword operation middleware
+func (siw *ServerInterfaceWrapper) ChangePassword(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ChangePassword(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1395,6 +1490,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/logout", wrapper.Logout)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me", wrapper.GetMe)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/me", wrapper.UpdateMe)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/password", wrapper.ChangePassword)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/subjects", wrapper.ListSubjects)

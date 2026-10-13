@@ -56,7 +56,7 @@ func (a *api) ListNotes(w http.ResponseWriter, r *http.Request, params ListNotes
 	case errors.Is(err, note.ErrInvalidCursor):
 		badRequest(w, "cursor is not valid")
 	case err != nil:
-		slog.Error("list notes", "err", err)
+		slog.ErrorContext(r.Context(), "list notes", "err", err)
 		internalError(w)
 	default:
 		writeJSON(w, http.StatusOK, toNotePage(page))
@@ -90,7 +90,7 @@ func (a *api) CreateNote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	created, err := a.Notes.Create(r.Context(), userID, in)
-	a.respondNote(w, http.StatusCreated, created, err, "create note")
+	a.respondNote(w, r, http.StatusCreated, created, err, "create note")
 }
 
 func (a *api) GetNote(w http.ResponseWriter, r *http.Request, id Id) {
@@ -99,7 +99,7 @@ func (a *api) GetNote(w http.ResponseWriter, r *http.Request, id Id) {
 		return
 	}
 	found, err := a.Notes.Get(r.Context(), userID, id)
-	a.respondNote(w, http.StatusOK, found, err, "get note")
+	a.respondNote(w, r, http.StatusOK, found, err, "get note")
 }
 
 func (a *api) UpdateNote(w http.ResponseWriter, r *http.Request, id Id) {
@@ -137,7 +137,7 @@ func (a *api) UpdateNote(w http.ResponseWriter, r *http.Request, id Id) {
 	patch.SetSubject, patch.SubjectID = optional(req.SubjectId)
 
 	updated, err := a.Notes.Update(r.Context(), userID, id, patch)
-	a.respondNote(w, http.StatusOK, updated, err, "update note")
+	a.respondNote(w, r, http.StatusOK, updated, err, "update note")
 }
 
 func (a *api) DeleteNote(w http.ResponseWriter, r *http.Request, id Id) {
@@ -150,7 +150,7 @@ func (a *api) DeleteNote(w http.ResponseWriter, r *http.Request, id Id) {
 	case errors.Is(err, note.ErrNotFound):
 		notFound(w, "note not found")
 	case err != nil:
-		slog.Error("delete note", "err", err)
+		slog.ErrorContext(r.Context(), "delete note", "err", err)
 		internalError(w)
 	default:
 		w.WriteHeader(http.StatusNoContent)
@@ -158,19 +158,19 @@ func (a *api) DeleteNote(w http.ResponseWriter, r *http.Request, id Id) {
 }
 
 // respondNote общий для create, get и update: они возвращают заметку и одинаково разбирают ошибки.
-func (a *api) respondNote(w http.ResponseWriter, status int, n note.Note, err error, op string) {
+func (a *api) respondNote(w http.ResponseWriter, r *http.Request, status int, n note.Note, err error, op string) {
 	switch {
 	case errors.Is(err, note.ErrNotFound):
 		notFound(w, "note not found")
 	case errors.Is(err, note.ErrInvalidSubject):
 		badRequest(w, "subject does not exist")
 	case err != nil:
-		slog.Error(op, "err", err)
+		slog.ErrorContext(r.Context(), op, "err", err)
 		internalError(w)
 	default:
 		body, convErr := toNote(n)
 		if convErr != nil {
-			slog.Error(op+": stored document is not valid JSON", "err", convErr)
+			slog.ErrorContext(r.Context(), op+": stored document is not valid JSON", "err", convErr)
 			internalError(w)
 			return
 		}
@@ -254,7 +254,7 @@ func (a *api) ListBacklinks(w http.ResponseWriter, r *http.Request, id Id) {
 	case errors.Is(err, note.ErrNotFound):
 		notFound(w, "note not found")
 	case err != nil:
-		slog.Error("list backlinks", "err", err)
+		slog.ErrorContext(r.Context(), "list backlinks", "err", err)
 		internalError(w)
 	default:
 		items := make([]NoteSummary, 0, len(linked))
@@ -274,7 +274,7 @@ func (a *api) GetGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	g, err := a.Notes.Graph(r.Context(), userID)
 	if err != nil {
-		slog.Error("get graph", "err", err)
+		slog.ErrorContext(r.Context(), "get graph", "err", err)
 		internalError(w)
 		return
 	}

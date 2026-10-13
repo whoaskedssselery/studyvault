@@ -10,11 +10,11 @@ import (
 
 // Всё, чего нет в этом списке, требует access-токен: новый маршрут по умолчанию закрыт.
 var publicPaths = map[string]bool{
-	"/health":        true,
-	"/auth/register": true,
-	"/auth/login":    true,
-	"/auth/refresh":  true,
-	"/auth/logout":   true,
+	apiPrefix + "/health":        true,
+	apiPrefix + "/auth/register": true,
+	apiPrefix + "/auth/login":    true,
+	apiPrefix + "/auth/refresh":  true,
+	apiPrefix + "/auth/logout":   true,
 }
 
 func authMiddleware(secret []byte) MiddlewareFunc {

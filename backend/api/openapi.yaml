@@ -2,6 +2,9 @@ openapi: 3.0.3
 info:
   title: studyvault API
   version: 1.0.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
   description: |
     REST API базы знаний студента: заметки со ссылками `[[Название]]`, предметы, теги, поиск и файлы.
 
@@ -16,7 +19,7 @@ info:
     |---|---|---|
     | `validation_failed` | 400 | неверные входные данные, неизвестное поле, неправильный id или курсор |
     | `unauthorized` | 401 | нет токена, он неверный или просрочен |
-    | `invalid_credentials` | 401 | неверная почта или пароль |
+    | `invalid_credentials` | 401, 403 | неверная почта или пароль (401); неверный текущий пароль при смене (403) |
     | `invalid_token` | 401 | refresh-токен отсутствует, просрочен или уже использован |
     | `not_found` | 404 | объект не найден (или принадлежит другому пользователю) |
     | `email_taken` | 409 | почта уже зарегистрирована |
@@ -27,22 +30,25 @@ info:
     | `search_unavailable` | 503 | поиск недоступен, остальное API работает |
     | `storage_unavailable` | 503 | хранилище файлов недоступно, остальное API работает |
 
-    **Лимиты.** Вход, регистрация и обновление токена: 20 попыток в минуту с одного адреса, дальше 429.
+    **Лимиты.** Вход, регистрация, обновление токена и смена пароля: 20 попыток в минуту с одного адреса, дальше 429.
 
     **Страницы.** Список заметок отдаётся страницами по курсору: `next_cursor` из ответа передают в `?cursor=`,
     `null` значит, что страница последняя. Остальные списки небольшие и приходят целиком.
 
-    **Версии.** Нынешние пути соответствуют версии 1. Совместимые изменения (новые поля и эндпоинты) выходят
-    без смены версии. Несовместимые выйдут под префиксом `/v2`, а пути без префикса какое-то время продолжат
-    работать как v1.
+    **Версии.** Версия указана в пути: все эндпоинты живут под `/v1` (пути в этой документации даны относительно
+    него). Совместимые изменения (новые поля и эндпоинты) выходят без смены версии. Несовместимые выйдут под
+    `/v2`, а `/v1` какое-то время продолжит работать. Проба живости `GET /health` есть и без префикса: она для
+    оркестратора и не привязана к версии. Refresh-cookie выдаётся с путём `/v1/auth`.
 
 servers:
-  - url: /
-    description: тот же адрес, с которого открыта документация
+  - url: /v1
+    description: версия 1 на том же адресе, с которого открыта документация
 
 tags:
   - name: auth
     description: Регистрация, вход и токены
+  - name: account
+    description: Профиль и пароль текущего пользователя
   - name: subjects
     description: Предметы студента
   - name: notes
@@ -168,6 +174,77 @@ paths:
       responses:
         "204":
           description: Готово. Cookie `refresh_token` сбрасывается.
+
+  /me:
+    get:
+      tags: [account]
+      operationId: getMe
+      summary: Мой аккаунт
+      responses:
+        "200":
+          description: Текущий пользователь
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      tags: [account]
+      operationId: updateMe
+      summary: Изменить имя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfilePatch"
+      responses:
+        "200":
+          description: Обновлённый аккаунт
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /me/password:
+    post:
+      tags: [account]
+      operationId: changePassword
+      summary: Сменить пароль
+      description: |
+        Проверяет текущий пароль и сохраняет новый. Все сессии пользователя на других устройствах
+        завершаются, а этому клиенту выдаются новый access-токен и новый refresh-токен (cookie).
+        Неверный текущий пароль даёт 403 `invalid_credentials`, а не 401, чтобы клиент не принял его
+        за просроченный access-токен и не пытался обновить сессию.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Пароль сменён
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WrongPassword"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /subjects:
     get:
@@ -695,6 +772,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    WrongPassword:
+      description: Неверный текущий пароль (`invalid_credentials`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     NotFound:
       description: Не найдено (или принадлежит другому пользователю)
       content:
@@ -708,7 +791,7 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     TooManyRequests:
-      description: Слишком много попыток входа, регистрации или обновления токена с этого адреса
+      description: Слишком много попыток входа, регистрации, обновления токена или смены пароля с этого адреса
       headers:
         Retry-After:
           description: Через сколько секунд можно повторить запрос
@@ -796,6 +879,30 @@ components:
         password:
           example: correct-horse-battery
           type: string
+
+    ProfilePatch:
+      type: object
+      required: [display_name]
+      properties:
+        display_name:
+          example: Анна Студентова
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          example: correct-horse-battery
+          type: string
+        new_password:
+          example: another-long-passphrase
+          type: string
+          minLength: 8
+          maxLength: 72
+          description: Не длиннее 72 байт (ограничение bcrypt) и не совпадает с текущим
 
     TokenResponse:
       type: object

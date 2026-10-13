@@ -84,7 +84,7 @@ func (e tagsEnv) do(method, path, body string) *httptest.ResponseRecorder {
 
 func TestListTags_Empty_ReturnsEmptyArray(t *testing.T) {
 	e := newTagsEnv(&fakeTags{}, &fakeNotes{})
-	rec := e.do(http.MethodGet, "/tags", "")
+	rec := e.do(http.MethodGet, "/v1/tags", "")
 
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"items":[]}` {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -96,7 +96,7 @@ func TestListTags_Empty_ReturnsEmptyArray(t *testing.T) {
 
 func TestListTags_ReturnsIDAndNameOnly(t *testing.T) {
 	e := newTagsEnv(&fakeTags{items: []db.Tag{{ID: uuid.New(), UserID: uuid.New(), Name: "exam"}}}, &fakeNotes{})
-	rec := e.do(http.MethodGet, "/tags", "")
+	rec := e.do(http.MethodGet, "/v1/tags", "")
 
 	item := decode(t, rec)["items"].([]any)[0].(map[string]any)
 	if item["name"] != "exam" || item["id"] == nil {
@@ -109,7 +109,7 @@ func TestListTags_ReturnsIDAndNameOnly(t *testing.T) {
 
 func TestCreateTag_OK_Returns201(t *testing.T) {
 	e := newTagsEnv(&fakeTags{}, &fakeNotes{})
-	rec := e.do(http.MethodPost, "/tags", `{"name":"  exam "}`)
+	rec := e.do(http.MethodPost, "/v1/tags", `{"name":"  exam "}`)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -134,7 +134,7 @@ func TestCreateTag_Invalid_Returns400AndSkipsService(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			e := newTagsEnv(&fakeTags{}, &fakeNotes{})
-			rec := e.do(http.MethodPost, "/tags", body)
+			rec := e.do(http.MethodPost, "/v1/tags", body)
 
 			if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "validation_failed" {
 				t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -149,14 +149,14 @@ func TestCreateTag_Invalid_Returns400AndSkipsService(t *testing.T) {
 func TestCreateTag_Name50Runes_IsAllowed(t *testing.T) {
 	e := newTagsEnv(&fakeTags{}, &fakeNotes{})
 
-	if rec := e.do(http.MethodPost, "/tags", `{"name":"`+strings.Repeat("я", 50)+`"}`); rec.Code != http.StatusCreated {
+	if rec := e.do(http.MethodPost, "/v1/tags", `{"name":"`+strings.Repeat("я", 50)+`"}`); rec.Code != http.StatusCreated {
 		t.Fatalf("50 runes (100 bytes) must pass, status = %d", rec.Code)
 	}
 }
 
 func TestCreateTag_Duplicate_Returns409(t *testing.T) {
 	e := newTagsEnv(&fakeTags{err: tag.ErrNameTaken}, &fakeNotes{})
-	rec := e.do(http.MethodPost, "/tags", `{"name":"exam"}`)
+	rec := e.do(http.MethodPost, "/v1/tags", `{"name":"exam"}`)
 
 	if rec.Code != http.StatusConflict || errorCode(t, rec) != "tag_exists" {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -167,7 +167,7 @@ func TestDeleteTag(t *testing.T) {
 	id := uuid.New()
 
 	e := newTagsEnv(&fakeTags{}, &fakeNotes{})
-	rec := e.do(http.MethodDelete, "/tags/"+id.String(), "")
+	rec := e.do(http.MethodDelete, "/v1/tags/"+id.String(), "")
 	if rec.Code != http.StatusNoContent || rec.Body.Len() != 0 {
 		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body)
 	}
@@ -176,13 +176,13 @@ func TestDeleteTag(t *testing.T) {
 	}
 
 	e = newTagsEnv(&fakeTags{err: tag.ErrNotFound}, &fakeNotes{})
-	rec = e.do(http.MethodDelete, "/tags/"+id.String(), "")
+	rec = e.do(http.MethodDelete, "/v1/tags/"+id.String(), "")
 	if rec.Code != http.StatusNotFound || errorCode(t, rec) != "not_found" {
 		t.Errorf("missing tag: status = %d, body = %s", rec.Code, rec.Body)
 	}
 
 	e = newTagsEnv(&fakeTags{}, &fakeNotes{})
-	if rec := e.do(http.MethodDelete, "/tags/nope", ""); rec.Code != http.StatusBadRequest || e.tags.calls != 0 {
+	if rec := e.do(http.MethodDelete, "/v1/tags/nope", ""); rec.Code != http.StatusBadRequest || e.tags.calls != 0 {
 		t.Errorf("bad uuid: status = %d, calls = %d", rec.Code, e.tags.calls)
 	}
 }
@@ -192,7 +192,7 @@ func TestSetNoteTags_OK_ReplacesAndReturnsTheNote(t *testing.T) {
 	e := newTagsEnv(&fakeTags{}, &fakeNotes{note: n})
 	a, b := uuid.New(), uuid.New()
 
-	rec := e.do(http.MethodPut, "/notes/"+n.ID.String()+"/tags", `{"tag_ids":["`+a.String()+`","`+b.String()+`"]}`)
+	rec := e.do(http.MethodPut, "/v1/notes/"+n.ID.String()+"/tags", `{"tag_ids":["`+a.String()+`","`+b.String()+`"]}`)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -211,7 +211,7 @@ func TestSetNoteTags_OK_ReplacesAndReturnsTheNote(t *testing.T) {
 
 func TestSetNoteTags_EmptyArray_IsAllowedAndClears(t *testing.T) {
 	e := newTagsEnv(&fakeTags{}, &fakeNotes{note: sampleNote()})
-	rec := e.do(http.MethodPut, "/notes/"+uuid.NewString()+"/tags", `{"tag_ids":[]}`)
+	rec := e.do(http.MethodPut, "/v1/notes/"+uuid.NewString()+"/tags", `{"tag_ids":[]}`)
 
 	if rec.Code != http.StatusOK || !e.tags.setCalled || len(e.tags.gotTagIDs) != 0 {
 		t.Fatalf("status = %d, called = %v", rec.Code, e.tags.setCalled)
@@ -235,7 +235,7 @@ func TestSetNoteTags_Invalid_Returns400AndSkipsService(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			e := newTagsEnv(&fakeTags{}, &fakeNotes{note: sampleNote()})
-			rec := e.do(http.MethodPut, "/notes/"+uuid.NewString()+"/tags", body)
+			rec := e.do(http.MethodPut, "/v1/notes/"+uuid.NewString()+"/tags", body)
 
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400 (%s)", rec.Code, rec.Body)
@@ -261,7 +261,7 @@ func TestSetNoteTags_ServiceErrors(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTagsEnv(&fakeTags{setBy: c.err}, &fakeNotes{note: sampleNote()})
-			rec := e.do(http.MethodPut, "/notes/"+uuid.NewString()+"/tags", `{"tag_ids":[]}`)
+			rec := e.do(http.MethodPut, "/v1/notes/"+uuid.NewString()+"/tags", `{"tag_ids":[]}`)
 
 			if rec.Code != c.want || errorCode(t, rec) != c.code {
 				t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -280,9 +280,9 @@ func TestTags_ServiceError_Returns500WithoutLeak(t *testing.T) {
 	e := newTagsEnv(&fakeTags{err: errors.New("pq: secret internal detail")}, &fakeNotes{})
 
 	for _, c := range []struct{ method, path, body string }{
-		{http.MethodGet, "/tags", ""},
-		{http.MethodPost, "/tags", `{"name":"a"}`},
-		{http.MethodDelete, "/tags/" + uuid.NewString(), ""},
+		{http.MethodGet, "/v1/tags", ""},
+		{http.MethodPost, "/v1/tags", `{"name":"a"}`},
+		{http.MethodDelete, "/v1/tags/" + uuid.NewString(), ""},
 	} {
 		rec := e.do(c.method, c.path, c.body)
 		if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "secret internal detail") {
@@ -296,10 +296,10 @@ func TestTags_RequireAuth(t *testing.T) {
 	e.auth = ""
 
 	for _, c := range []struct{ method, path string }{
-		{http.MethodGet, "/tags"},
-		{http.MethodPost, "/tags"},
-		{http.MethodDelete, "/tags/" + uuid.NewString()},
-		{http.MethodPut, "/notes/" + uuid.NewString() + "/tags"},
+		{http.MethodGet, "/v1/tags"},
+		{http.MethodPost, "/v1/tags"},
+		{http.MethodDelete, "/v1/tags/" + uuid.NewString()},
+		{http.MethodPut, "/v1/notes/" + uuid.NewString() + "/tags"},
 	} {
 		if rec := e.do(c.method, c.path, `{}`); rec.Code != http.StatusUnauthorized {
 			t.Errorf("%s %s: status = %d, want 401", c.method, c.path, rec.Code)

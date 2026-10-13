@@ -97,7 +97,7 @@ func TestCreateAttachment_OK_Returns201WithAnUploadLink(t *testing.T) {
 	row := sampleRow()
 	e := newAttEnv(&fakeAttachments{upload: attachment.Upload{Attachment: row, URL: "https://s3.test/put/x?sig=1"}})
 
-	rec := e.do(http.MethodPost, "/attachments", validAttachment)
+	rec := e.do(http.MethodPost, "/v1/attachments", validAttachment)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -127,7 +127,7 @@ func TestCreateAttachment_PassesTheNoteAndDeclaredValues(t *testing.T) {
 	nid := uuid.New()
 	e := newAttEnv(&fakeAttachments{})
 
-	e.do(http.MethodPost, "/attachments", `{"note_id":"`+nid.String()+`","file_name":"  scan.png ","mime_type":"image/png","size_bytes":99}`)
+	e.do(http.MethodPost, "/v1/attachments", `{"note_id":"`+nid.String()+`","file_name":"  scan.png ","mime_type":"image/png","size_bytes":99}`)
 
 	in := e.f.gotInput
 	if in.NoteID == nil || *in.NoteID != nid || in.FileName != "scan.png" || in.MimeType != "image/png" || in.SizeBytes != 99 {
@@ -146,7 +146,7 @@ func TestCreateAttachment_FileNameIsReducedToABaseName(t *testing.T) {
 	for in, want := range cases {
 		e := newAttEnv(&fakeAttachments{})
 		body := `{"file_name":` + jsonString(in) + `,"mime_type":"application/pdf","size_bytes":1}`
-		if rec := e.do(http.MethodPost, "/attachments", body); rec.Code != http.StatusCreated {
+		if rec := e.do(http.MethodPost, "/v1/attachments", body); rec.Code != http.StatusCreated {
 			t.Errorf("%q: status = %d, body = %s", in, rec.Code, rec.Body)
 			continue
 		}
@@ -178,7 +178,7 @@ func TestCreateAttachment_Invalid_Returns400(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			e := newAttEnv(&fakeAttachments{err: attachment.ErrInvalid})
-			rec := e.do(http.MethodPost, "/attachments", body)
+			rec := e.do(http.MethodPost, "/v1/attachments", body)
 
 			if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "validation_failed" {
 				t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -189,7 +189,7 @@ func TestCreateAttachment_Invalid_Returns400(t *testing.T) {
 
 func TestCreateAttachment_ServiceRejects_Returns400(t *testing.T) {
 	e := newAttEnv(&fakeAttachments{err: errors.Join(attachment.ErrInvalid, errors.New(`file type "text/html" is not allowed`))})
-	rec := e.do(http.MethodPost, "/attachments", `{"file_name":"a.html","mime_type":"text/html","size_bytes":5}`)
+	rec := e.do(http.MethodPost, "/v1/attachments", `{"file_name":"a.html","mime_type":"text/html","size_bytes":5}`)
 
 	if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "validation_failed" {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -206,17 +206,17 @@ func TestAttachments_ErrorMapping(t *testing.T) {
 		wantStatus   int
 		wantCode     string
 	}{
-		{"create: note not found", attachment.ErrNoteNotFound, http.MethodPost, "/attachments", validAttachment, http.StatusNotFound, "not_found"},
-		{"create: storage down", storage.ErrUnavailable, http.MethodPost, "/attachments", validAttachment, http.StatusServiceUnavailable, "storage_unavailable"},
-		{"create: internal", errors.New("pq: secret internal detail"), http.MethodPost, "/attachments", validAttachment, http.StatusInternalServerError, "internal"},
-		{"get: not found", attachment.ErrNotFound, http.MethodGet, "/attachments/" + id, "", http.StatusNotFound, "not_found"},
-		{"get: not uploaded", attachment.ErrNotUploaded, http.MethodGet, "/attachments/" + id, "", http.StatusConflict, "not_uploaded"},
-		{"get: storage down", storage.ErrUnavailable, http.MethodGet, "/attachments/" + id, "", http.StatusServiceUnavailable, "storage_unavailable"},
-		{"get: internal", errors.New("pq: secret internal detail"), http.MethodGet, "/attachments/" + id, "", http.StatusInternalServerError, "internal"},
-		{"list: note not found", attachment.ErrNoteNotFound, http.MethodGet, "/attachments?note_id=" + id, "", http.StatusNotFound, "not_found"},
-		{"list: internal", errors.New("pq: secret internal detail"), http.MethodGet, "/attachments?note_id=" + id, "", http.StatusInternalServerError, "internal"},
-		{"delete: not found", attachment.ErrNotFound, http.MethodDelete, "/attachments/" + id, "", http.StatusNotFound, "not_found"},
-		{"delete: internal", errors.New("pq: secret internal detail"), http.MethodDelete, "/attachments/" + id, "", http.StatusInternalServerError, "internal"},
+		{"create: note not found", attachment.ErrNoteNotFound, http.MethodPost, "/v1/attachments", validAttachment, http.StatusNotFound, "not_found"},
+		{"create: storage down", storage.ErrUnavailable, http.MethodPost, "/v1/attachments", validAttachment, http.StatusServiceUnavailable, "storage_unavailable"},
+		{"create: internal", errors.New("pq: secret internal detail"), http.MethodPost, "/v1/attachments", validAttachment, http.StatusInternalServerError, "internal"},
+		{"get: not found", attachment.ErrNotFound, http.MethodGet, "/v1/attachments/" + id, "", http.StatusNotFound, "not_found"},
+		{"get: not uploaded", attachment.ErrNotUploaded, http.MethodGet, "/v1/attachments/" + id, "", http.StatusConflict, "not_uploaded"},
+		{"get: storage down", storage.ErrUnavailable, http.MethodGet, "/v1/attachments/" + id, "", http.StatusServiceUnavailable, "storage_unavailable"},
+		{"get: internal", errors.New("pq: secret internal detail"), http.MethodGet, "/v1/attachments/" + id, "", http.StatusInternalServerError, "internal"},
+		{"list: note not found", attachment.ErrNoteNotFound, http.MethodGet, "/v1/attachments?note_id=" + id, "", http.StatusNotFound, "not_found"},
+		{"list: internal", errors.New("pq: secret internal detail"), http.MethodGet, "/v1/attachments?note_id=" + id, "", http.StatusInternalServerError, "internal"},
+		{"delete: not found", attachment.ErrNotFound, http.MethodDelete, "/v1/attachments/" + id, "", http.StatusNotFound, "not_found"},
+		{"delete: internal", errors.New("pq: secret internal detail"), http.MethodDelete, "/v1/attachments/" + id, "", http.StatusInternalServerError, "internal"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -236,7 +236,7 @@ func TestGetAttachment_OK_ReturnsADownloadLink(t *testing.T) {
 	row := sampleRow()
 	e := newAttEnv(&fakeAttachments{download: attachment.Download{Attachment: row, URL: "https://s3.test/get/x?sig=2"}})
 
-	rec := e.do(http.MethodGet, "/attachments/"+row.ID.String(), "")
+	rec := e.do(http.MethodGet, "/v1/attachments/"+row.ID.String(), "")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -258,7 +258,7 @@ func TestListAttachments(t *testing.T) {
 	row.NoteID = uuid.NullUUID{UUID: nid, Valid: true}
 	e := newAttEnv(&fakeAttachments{list: []db.Attachment{row}})
 
-	rec := e.do(http.MethodGet, "/attachments?note_id="+nid.String(), "")
+	rec := e.do(http.MethodGet, "/v1/attachments?note_id="+nid.String(), "")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
@@ -271,7 +271,7 @@ func TestListAttachments(t *testing.T) {
 		t.Error("service must get the note id and the token's user id")
 	}
 
-	empty := newAttEnv(&fakeAttachments{}).do(http.MethodGet, "/attachments?note_id="+nid.String(), "")
+	empty := newAttEnv(&fakeAttachments{}).do(http.MethodGet, "/v1/attachments?note_id="+nid.String(), "")
 	if strings.TrimSpace(empty.Body.String()) != `{"items":[]}` {
 		t.Errorf("an empty list must be an empty array: %s", empty.Body)
 	}
@@ -280,7 +280,7 @@ func TestListAttachments(t *testing.T) {
 func TestListAttachments_BadNoteID_Returns400(t *testing.T) {
 	for _, q := range []string{"", "?note_id=", "?note_id=nope"} {
 		e := newAttEnv(&fakeAttachments{})
-		if rec := e.do(http.MethodGet, "/attachments"+q, ""); rec.Code != http.StatusBadRequest || e.f.calls != 0 {
+		if rec := e.do(http.MethodGet, "/v1/attachments"+q, ""); rec.Code != http.StatusBadRequest || e.f.calls != 0 {
 			t.Errorf("%q: status = %d, calls = %d", q, rec.Code, e.f.calls)
 		}
 	}
@@ -290,7 +290,7 @@ func TestDeleteAttachment_OK_Returns204(t *testing.T) {
 	e := newAttEnv(&fakeAttachments{})
 	id := uuid.New()
 
-	rec := e.do(http.MethodDelete, "/attachments/"+id.String(), "")
+	rec := e.do(http.MethodDelete, "/v1/attachments/"+id.String(), "")
 
 	if rec.Code != http.StatusNoContent || rec.Body.Len() != 0 {
 		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body)
@@ -304,7 +304,7 @@ func TestAttachments_InvalidUUID_Returns400(t *testing.T) {
 	e := newAttEnv(&fakeAttachments{})
 
 	for _, method := range []string{http.MethodGet, http.MethodDelete} {
-		if rec := e.do(method, "/attachments/nope", ""); rec.Code != http.StatusBadRequest {
+		if rec := e.do(method, "/v1/attachments/nope", ""); rec.Code != http.StatusBadRequest {
 			t.Errorf("%s: status = %d, want 400", method, rec.Code)
 		}
 	}
@@ -318,10 +318,10 @@ func TestAttachments_NotConfigured_Returns503(t *testing.T) {
 	id := uuid.NewString()
 
 	for _, c := range []struct{ method, path, body string }{
-		{http.MethodPost, "/attachments", validAttachment},
-		{http.MethodGet, "/attachments/" + id, ""},
-		{http.MethodGet, "/attachments?note_id=" + id, ""},
-		{http.MethodDelete, "/attachments/" + id, ""},
+		{http.MethodPost, "/v1/attachments", validAttachment},
+		{http.MethodGet, "/v1/attachments/" + id, ""},
+		{http.MethodGet, "/v1/attachments?note_id=" + id, ""},
+		{http.MethodDelete, "/v1/attachments/" + id, ""},
 	} {
 		rec := e.do(c.method, c.path, c.body)
 		if rec.Code != http.StatusServiceUnavailable || errorCode(t, rec) != "storage_unavailable" {
@@ -336,10 +336,10 @@ func TestAttachments_RequireAuth(t *testing.T) {
 	id := uuid.NewString()
 
 	for _, c := range []struct{ method, path string }{
-		{http.MethodPost, "/attachments"},
-		{http.MethodGet, "/attachments/" + id},
-		{http.MethodGet, "/attachments?note_id=" + id},
-		{http.MethodDelete, "/attachments/" + id},
+		{http.MethodPost, "/v1/attachments"},
+		{http.MethodGet, "/v1/attachments/" + id},
+		{http.MethodGet, "/v1/attachments?note_id=" + id},
+		{http.MethodDelete, "/v1/attachments/" + id},
 	} {
 		if rec := e.do(c.method, c.path, `{}`); rec.Code != http.StatusUnauthorized {
 			t.Errorf("%s %s: status = %d, want 401", c.method, c.path, rec.Code)

@@ -35,6 +35,31 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 	return err
 }
 
+const deleteExpiredRefreshTokens = `-- name: DeleteExpiredRefreshTokens :execrows
+DELETE FROM refresh_tokens WHERE expires_at <= $1
+`
+
+// Удаляются только истёкшие токены. Отозванные, но ещё не истёкшие должны остаться:
+// по ним распознаётся повторное предъявление использованного токена.
+func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredRefreshTokens, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteUserRefreshTokens = `-- name: DeleteUserRefreshTokens :exec
+DELETE FROM refresh_tokens WHERE user_id = $1
+`
+
+// Смена пароля стирает сессии, а не отзывает их: устаревшее устройство, предъявив старый токен, получит
+// обычный отказ, а не срабатывание защиты от кражи, которое закрыло бы и новую сессию.
+func (q *Queries) DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserRefreshTokens, userID)
+	return err
+}
+
 const getRefreshTokenByHash = `-- name: GetRefreshTokenByHash :one
 SELECT id, user_id, token_hash, user_agent, expires_at, revoked_at, created_at FROM refresh_tokens WHERE token_hash = $1
 `

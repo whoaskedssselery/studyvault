@@ -6,6 +6,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -20,8 +21,14 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	// Возвращает удалённую строку: из неё берётся ключ объекта, который надо убрать из хранилища.
 	DeleteAttachment(ctx context.Context, arg DeleteAttachmentParams) (Attachment, error)
+	// Удаляются только истёкшие токены. Отозванные, но ещё не истёкшие должны остаться:
+	// по ним распознаётся повторное предъявление использованного токена.
+	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time.Time) (int64, error)
 	DeleteSubject(ctx context.Context, arg DeleteSubjectParams) (int64, error)
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
+	// Смена пароля стирает сессии, а не отзывает их: устаревшее устройство, предъявив старый токен, получит
+	// обычный отказ, а не срабатывание защиты от кражи, которое закрыло бы и новую сессию.
+	DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	// Перепроверка результатов поиска в Postgres: Meilisearch лишь предлагает кандидатов, а решает БД.
 	// Чужие и удалённые заметки отсекаются здесь, даже если индекс устарел.
 	FilterLiveNotes(ctx context.Context, arg FilterLiveNotesParams) ([]FilterLiveNotesRow, error)
@@ -29,6 +36,7 @@ type Querier interface {
 	GetNote(ctx context.Context, arg GetNoteParams) (Note, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, lower string) (User, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	ListAttachmentsByNote(ctx context.Context, arg ListAttachmentsByNoteParams) ([]Attachment, error)
 	ListBacklinks(ctx context.Context, arg ListBacklinksParams) ([]ListBacklinksRow, error)
 	ListGraphEdges(ctx context.Context, userID uuid.UUID) ([]NoteLink, error)
@@ -69,6 +77,8 @@ type Querier interface {
 	// Частичное обновление. title: NULL значит «не менять». Для color и semester NULL тоже
 	// осмысленное значение (очистить поле), поэтому «менять или нет» передаётся отдельным флагом.
 	UpdateSubject(ctx context.Context, arg UpdateSubjectParams) (Subject, error)
+	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error)
+	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)
