@@ -55,7 +55,7 @@ func (a *api) CreateAttachment(w http.ResponseWriter, r *http.Request) {
 		SizeBytes: req.SizeBytes,
 	})
 	if err != nil {
-		a.attachmentError(w, err, "create attachment")
+		a.attachmentError(w, r, err, "create attachment")
 		return
 	}
 	writeJSON(w, http.StatusCreated, AttachmentUpload{Attachment: toAttachment(up.Attachment), UploadUrl: up.URL})
@@ -72,7 +72,7 @@ func (a *api) GetAttachment(w http.ResponseWriter, r *http.Request, id Id) {
 	}
 	dl, err := a.Attachments.Get(r.Context(), userID, id)
 	if err != nil {
-		a.attachmentError(w, err, "get attachment")
+		a.attachmentError(w, r, err, "get attachment")
 		return
 	}
 	writeJSON(w, http.StatusOK, AttachmentDownload{Attachment: toAttachment(dl.Attachment), DownloadUrl: dl.URL})
@@ -89,7 +89,7 @@ func (a *api) ListAttachments(w http.ResponseWriter, r *http.Request, params Lis
 	}
 	rows, err := a.Attachments.List(r.Context(), userID, params.NoteId)
 	if err != nil {
-		a.attachmentError(w, err, "list attachments")
+		a.attachmentError(w, r, err, "list attachments")
 		return
 	}
 	items := make([]Attachment, 0, len(rows))
@@ -111,13 +111,13 @@ func (a *api) DeleteAttachment(w http.ResponseWriter, r *http.Request, id Id) {
 		return
 	}
 	if err := a.Attachments.Delete(r.Context(), userID, id); err != nil {
-		a.attachmentError(w, err, "delete attachment")
+		a.attachmentError(w, r, err, "delete attachment")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (a *api) attachmentError(w http.ResponseWriter, err error, op string) {
+func (a *api) attachmentError(w http.ResponseWriter, r *http.Request, err error, op string) {
 	switch {
 	case errors.Is(err, attachment.ErrNotFound):
 		notFound(w, "attachment not found")
@@ -128,10 +128,10 @@ func (a *api) attachmentError(w http.ResponseWriter, err error, op string) {
 	case errors.Is(err, attachment.ErrInvalid):
 		badRequest(w, err.Error())
 	case errors.Is(err, storage.ErrUnavailable):
-		slog.Warn(op+": storage is unavailable", "err", err)
+		slog.WarnContext(r.Context(), op+": storage is unavailable", "err", err)
 		storageUnavailable(w)
 	default:
-		slog.Error(op, "err", err)
+		slog.ErrorContext(r.Context(), op, "err", err)
 		internalError(w)
 	}
 }

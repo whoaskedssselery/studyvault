@@ -54,10 +54,10 @@ func (a *api) SearchNotes(w http.ResponseWriter, r *http.Request, params SearchN
 	results, err := a.Search.Search(r.Context(), userID, q)
 	switch {
 	case errors.Is(err, search.ErrUnavailable):
-		slog.Warn("search is unavailable", "err", err)
+		slog.WarnContext(r.Context(), "search is unavailable", "err", err)
 		searchUnavailable(w)
 	case err != nil:
-		slog.Error("search", "err", err)
+		slog.ErrorContext(r.Context(), "search", "err", err)
 		internalError(w)
 	default:
 		items := make([]SearchHit, 0, len(results))

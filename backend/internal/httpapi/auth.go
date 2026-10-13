@@ -42,7 +42,7 @@ func (a *api) Register(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, auth.ErrEmailTaken):
 		writeError(w, http.StatusConflict, "email_taken", "email is already registered")
 	case err != nil:
-		slog.Error("register", "err", err)
+		slog.ErrorContext(r.Context(), "register", "err", err)
 		internalError(w)
 	default:
 		a.respondWithSession(w, http.StatusCreated, res)
@@ -65,7 +65,7 @@ func (a *api) Login(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid email or password")
 	case err != nil:
-		slog.Error("login", "err", err)
+		slog.ErrorContext(r.Context(), "login", "err", err)
 		internalError(w)
 	default:
 		a.respondWithSession(w, http.StatusOK, res)
@@ -85,7 +85,7 @@ func (a *api) Refresh(w http.ResponseWriter, r *http.Request) {
 		a.clearRefreshCookie(w)
 		writeError(w, http.StatusUnauthorized, "invalid_token", "refresh token is invalid or expired")
 	case err != nil:
-		slog.Error("refresh", "err", err)
+		slog.ErrorContext(r.Context(), "refresh", "err", err)
 		internalError(w)
 	default:
 		a.setRefreshCookie(w, tokens.RefreshToken)
@@ -99,7 +99,7 @@ func (a *api) Refresh(w http.ResponseWriter, r *http.Request) {
 func (a *api) Logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(refreshCookieName); err == nil {
 		if err := a.Auth.Logout(r.Context(), cookie.Value); err != nil {
-			slog.Error("logout", "err", err)
+			slog.ErrorContext(r.Context(), "logout", "err", err)
 			internalError(w)
 			return
 		}

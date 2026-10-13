@@ -33,6 +33,14 @@ func main() {
 	}
 }
 
+func newLogHandler(cfg config.Config) slog.Handler {
+	opts := &slog.HandlerOptions{Level: cfg.LogLevel}
+	if cfg.LogJSON {
+		return slog.NewJSONHandler(os.Stdout, opts)
+	}
+	return slog.NewTextHandler(os.Stdout, opts)
+}
+
 func run() error {
 	// .env лежит в корне репозитория, а сервис запускается из backend/.
 	// Файла может не быть (например, в контейнере), это не ошибка.
@@ -42,6 +50,8 @@ func run() error {
 	if err != nil {
 		return err
 	}
+
+	slog.SetDefault(slog.New(httpapi.NewLogHandler(newLogHandler(cfg))))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

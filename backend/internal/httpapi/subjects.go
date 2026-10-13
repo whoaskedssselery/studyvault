@@ -38,7 +38,7 @@ func (a *api) ListSubjects(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := a.Subjects.List(r.Context(), userID)
 	if err != nil {
-		slog.Error("list subjects", "err", err)
+		slog.ErrorContext(r.Context(), "list subjects", "err", err)
 		internalError(w)
 		return
 	}
@@ -80,7 +80,7 @@ func (a *api) CreateSubject(w http.ResponseWriter, r *http.Request) {
 
 	created, err := a.Subjects.Create(r.Context(), userID, subject.Input{Title: title, Color: color, Semester: sem})
 	if err != nil {
-		slog.Error("create subject", "err", err)
+		slog.ErrorContext(r.Context(), "create subject", "err", err)
 		internalError(w)
 		return
 	}
@@ -131,7 +131,7 @@ func (a *api) UpdateSubject(w http.ResponseWriter, r *http.Request, id Id) {
 	case errors.Is(err, subject.ErrNotFound):
 		notFound(w, "subject not found")
 	case err != nil:
-		slog.Error("update subject", "err", err)
+		slog.ErrorContext(r.Context(), "update subject", "err", err)
 		internalError(w)
 	default:
 		writeJSON(w, http.StatusOK, toSubject(updated))
@@ -148,7 +148,7 @@ func (a *api) DeleteSubject(w http.ResponseWriter, r *http.Request, id Id) {
 	case errors.Is(err, subject.ErrNotFound):
 		notFound(w, "subject not found")
 	case err != nil:
-		slog.Error("delete subject", "err", err)
+		slog.ErrorContext(r.Context(), "delete subject", "err", err)
 		internalError(w)
 	default:
 		w.WriteHeader(http.StatusNoContent)

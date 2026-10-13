@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"log/slog"
 	"testing"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/config"
@@ -198,6 +199,31 @@ func TestLoad_AuthRateLimit(t *testing.T) {
 		t.Setenv("AUTH_RATE_LIMIT_PER_MIN", bad)
 		if _, err := config.Load(); err == nil {
 			t.Errorf("AUTH_RATE_LIMIT_PER_MIN=%q must be rejected rather than silently ignored", bad)
+		}
+	}
+}
+
+func TestLoad_Logging(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("LOG_FORMAT", "")
+	t.Setenv("LOG_LEVEL", "")
+	cfg, err := config.Load()
+	if err != nil || !cfg.LogJSON || cfg.LogLevel != slog.LevelInfo {
+		t.Fatalf("defaults: json=%v level=%v err=%v, want json at info", cfg.LogJSON, cfg.LogLevel, err)
+	}
+
+	t.Setenv("LOG_FORMAT", "TEXT")
+	t.Setenv("LOG_LEVEL", "debug")
+	cfg, err = config.Load()
+	if err != nil || cfg.LogJSON || cfg.LogLevel != slog.LevelDebug {
+		t.Errorf("text/debug: json=%v level=%v err=%v", cfg.LogJSON, cfg.LogLevel, err)
+	}
+
+	for _, bad := range [][2]string{{"xml", ""}, {"", "chatty"}} {
+		t.Setenv("LOG_FORMAT", bad[0])
+		t.Setenv("LOG_LEVEL", bad[1])
+		if _, err := config.Load(); err == nil {
+			t.Errorf("LOG_FORMAT=%q LOG_LEVEL=%q must be rejected", bad[0], bad[1])
 		}
 	}
 }

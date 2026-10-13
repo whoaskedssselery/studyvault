@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/auth"
 	"github.com/whoaskedssselery/studyvault/backend/internal/config"
@@ -59,8 +58,9 @@ func NewServer(cfg config.Config, deps Deps) *http.Server {
 
 func NewHandler(deps Deps) http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID)
-	r.Use(middleware.Recoverer)
+	r.Use(requestID)
+	r.Use(accessLog)
+	r.Use(recoverer)
 	r.Use(securityHeaders)
 	r.Use(limitAuthAttempts(deps.AuthRateLimit))
 	r.Use(corsMiddleware(deps.AllowedOrigins))
@@ -83,7 +83,7 @@ func (a *api) GetHealth(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := a.DB.Ping(ctx); err != nil {
-		slog.Error("health check: database ping failed", "err", err)
+		slog.ErrorContext(ctx, "health check: database ping failed", "err", err)
 		writeJSON(w, http.StatusServiceUnavailable, Health{Status: Unavailable})
 		return
 	}

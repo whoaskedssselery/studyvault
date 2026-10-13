@@ -32,7 +32,7 @@ func (a *api) ListTags(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := a.Tags.List(r.Context(), userID)
 	if err != nil {
-		slog.Error("list tags", "err", err)
+		slog.ErrorContext(r.Context(), "list tags", "err", err)
 		internalError(w)
 		return
 	}
@@ -66,7 +66,7 @@ func (a *api) CreateTag(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, tag.ErrNameTaken):
 		writeError(w, http.StatusConflict, "tag_exists", "a tag with this name already exists")
 	case err != nil:
-		slog.Error("create tag", "err", err)
+		slog.ErrorContext(r.Context(), "create tag", "err", err)
 		internalError(w)
 	default:
 		writeJSON(w, http.StatusCreated, Tag{Id: created.ID, Name: created.Name})
@@ -83,7 +83,7 @@ func (a *api) DeleteTag(w http.ResponseWriter, r *http.Request, id Id) {
 	case errors.Is(err, tag.ErrNotFound):
 		notFound(w, "tag not found")
 	case err != nil:
-		slog.Error("delete tag", "err", err)
+		slog.ErrorContext(r.Context(), "delete tag", "err", err)
 		internalError(w)
 	default:
 		w.WriteHeader(http.StatusNoContent)
@@ -118,11 +118,11 @@ func (a *api) SetNoteTags(w http.ResponseWriter, r *http.Request, id Id) {
 		badRequest(w, "unknown tag id")
 		return
 	case err != nil:
-		slog.Error("set note tags", "err", err)
+		slog.ErrorContext(r.Context(), "set note tags", "err", err)
 		internalError(w)
 		return
 	}
 
 	updated, err := a.Notes.Get(r.Context(), userID, id)
-	a.respondNote(w, http.StatusOK, updated, err, "set note tags")
+	a.respondNote(w, r, http.StatusOK, updated, err, "set note tags")
 }
