@@ -2,8 +2,13 @@ package search_test
 
 import (
 	"context"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -251,5 +256,103 @@ func TestMeili_ReplaceAll_DropsStaleDocuments(t *testing.T) {
 	hits, _ := m.Search(ctx, uid, "ghost", 20)
 	if got := ids(hits); len(got) != 1 || got[0] != fresh.ID {
 		t.Errorf("only the fresh document may remain, got %v", got)
+	}
+}
+
+// hungServer принимает соединения и молчит: так выглядит перегруженный или «зависший» Meilisearch.
+func hungServer(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var held []net.Conn
+	var mu sync.Mutex
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			held = append(held, c)
+			mu.Unlock()
+		}
+	}()
+	t.Cleanup(func() {
+		_ = ln.Close()
+		mu.Lock()
+		for _, c := range held {
+			_ = c.Close()
+		}
+		mu.Unlock()
+	})
+	return "http://" + ln.Addr().String()
+}
+
+func TestMeili_HungServer_DoesNotStallEveryCaller(t *testing.T) {
+	m := search.NewMeili(hungServer(t), "k", "notes", search.WithTimeout(300*time.Millisecond))
+	ctx := context.Background()
+
+	start := time.Now()
+	var wg sync.WaitGroup
+	errs := make(chan error, 6)
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := m.Search(ctx, uuid.New(), "x", 5)
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	elapsed := time.Since(start)
+
+	for err := range errs {
+		if err == nil {
+			t.Fatal("a hung server cannot answer")
+		}
+	}
+	// Один таймаут настройки индекса (две сетевые операции по 300 мс) на всех, а не по таймауту на каждого.
+	if elapsed > 1500*time.Millisecond {
+		t.Errorf("6 concurrent callers took %v: they queued behind each other instead of failing fast", elapsed)
+	}
+
+	begin := time.Now()
+	if err := m.Upsert(ctx, doc(uuid.New(), "T", "x")); err == nil {
+		t.Error("Upsert must fail while the server is hung")
+	}
+	if d := time.Since(begin); d > 100*time.Millisecond {
+		t.Errorf("a call right after a failure took %v, it must fail immediately", d)
+	}
+}
+
+func TestMeili_RetriesSetupAfterTheCooldown(t *testing.T) {
+	var requests atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	m := search.NewMeili(srv.URL, "k", "notes", search.WithClock(func() time.Time { return now }))
+	ctx := context.Background()
+
+	_, _ = m.Search(ctx, uuid.New(), "x", 5)
+	first := requests.Load()
+	if first == 0 {
+		t.Fatal("the first call must try the server")
+	}
+
+	_, _ = m.Search(ctx, uuid.New(), "x", 5)
+	if requests.Load() != first {
+		t.Error("within the cooldown there must be no new network attempts")
+	}
+
+	now = now.Add(time.Minute)
+	_, _ = m.Search(ctx, uuid.New(), "x", 5)
+	if requests.Load() == first {
+		t.Error("after the cooldown the server must be tried again, otherwise a short outage would disable search for good")
 	}
 }

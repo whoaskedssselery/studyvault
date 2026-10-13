@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -19,7 +18,6 @@ import (
 
 // memStorage — хранилище в памяти: «загрузить» файл значит положить ключ в objects.
 type memStorage struct {
-	mu        sync.Mutex
 	objects   map[string]int64
 	putCalls  []putCall
 	removed   []string

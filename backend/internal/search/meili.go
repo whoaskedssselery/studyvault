@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -19,8 +20,14 @@ const (
 	primaryKey    = "id"
 	cropLength    = 25 // слов в сниппете
 	taskPollEvery = 20 * time.Millisecond
+	// requestTimeout короткий: индексация идёт прямо во время запроса пользователя.
+	requestTimeout = 3 * time.Second
+	// setupCooldown: пауза между попытками настроить индекс, пока Meilisearch не отвечает.
+	setupCooldown = 5 * time.Second
 	reindexBatch  = 500
 )
+
+var errCoolingDown = errors.New("meilisearch setup failed recently, not retrying yet")
 
 // Doc — документ индекса. Индекс лишь ускоряет поиск: источник правды — Postgres.
 type Doc struct {
@@ -36,18 +43,33 @@ type Meili struct {
 	client meilisearch.ServiceManager
 	uid    string
 
-	mu    sync.Mutex
-	ready bool
+	mu      sync.Mutex
+	ready   bool
+	timeout time.Duration
 
 	lastTask atomic.Int64 // самая свежая из поставленных в очередь задач, для Wait
+
+	now     func() time.Time
+	retryAt time.Time // до этого момента настройку индекса не повторяем: прошлая попытка провалилась
 }
 
-func NewMeili(url, apiKey, indexUID string) *Meili {
-	httpClient := &http.Client{Timeout: 10 * time.Second}
-	return &Meili{
-		client: meilisearch.New(url, meilisearch.WithAPIKey(apiKey), meilisearch.WithCustomClient(httpClient)),
-		uid:    indexUID,
+// MeiliOption настраивает адаптер; нужен в основном тестам.
+type MeiliOption func(*Meili)
+
+// WithTimeout задаёт предел ожидания ответа Meilisearch на один запрос.
+func WithTimeout(d time.Duration) MeiliOption { return func(m *Meili) { m.timeout = d } }
+
+// WithClock подменяет часы: так проверяется повтор настройки после паузы.
+func WithClock(now func() time.Time) MeiliOption { return func(m *Meili) { m.now = now } }
+
+func NewMeili(url, apiKey, indexUID string, opts ...MeiliOption) *Meili {
+	m := &Meili{uid: indexUID, now: time.Now, timeout: requestTimeout}
+	for _, o := range opts {
+		o(m)
 	}
+	httpClient := &http.Client{Timeout: m.timeout}
+	m.client = meilisearch.New(url, meilisearch.WithAPIKey(apiKey), meilisearch.WithCustomClient(httpClient))
+	return m
 }
 
 func (m *Meili) ensure(ctx context.Context) error {
@@ -56,7 +78,21 @@ func (m *Meili) ensure(ctx context.Context) error {
 	if m.ready {
 		return nil
 	}
+	// Пока Meilisearch не отвечает, не заставляем каждый запрос ждать таймаут заново: запись заметок
+	// и поиск не должны зависеть от скорости чужого сервиса. Настройку повторим после паузы.
+	if m.now().Before(m.retryAt) {
+		return errCoolingDown
+	}
+	err := m.setup(ctx)
+	if err != nil {
+		m.retryAt = m.now().Add(setupCooldown)
+		return err
+	}
+	m.ready = true
+	return nil
+}
 
+func (m *Meili) setup(ctx context.Context) error {
 	// Первичный ключ задаём явно: Meilisearch не угадает его, раз id и user_id оба похожи на ключ.
 	// Если индекс уже есть, задача завершится ошибкой, и это нормально.
 	if task, err := m.client.CreateIndex(&meilisearch.IndexConfig{Uid: m.uid, PrimaryKey: primaryKey}); err == nil {
@@ -73,7 +109,6 @@ func (m *Meili) ensure(ctx context.Context) error {
 	if err := m.waitFor(ctx, task.TaskUID); err != nil {
 		return fmt.Errorf("apply index settings: %w", err)
 	}
-	m.ready = true
 	return nil
 }
 
@@ -125,7 +160,7 @@ func (m *Meili) Search(ctx context.Context, userID uuid.UUID, query string, limi
 				ContentText string `json:"content_text"`
 			} `json:"_formatted"`
 		}
-		if err := raw.Decode(&h); err != nil {
+		if err := raw.DecodeInto(&h); err != nil {
 			return nil, fmt.Errorf("decode hit: %w", err)
 		}
 		id, err := uuid.Parse(h.ID)
