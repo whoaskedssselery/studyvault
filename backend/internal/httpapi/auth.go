@@ -23,7 +23,6 @@ const (
 	minPasswordLen    = 8
 	maxPasswordBytes  = 72 // предел bcrypt
 	maxDisplayNameLen = 100
-	maxUserAgentLen   = 255
 )
 
 func (a *api) Register(w http.ResponseWriter, r *http.Request) {
@@ -171,10 +170,5 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	return nil
 }
 
-func userAgent(r *http.Request) string {
-	ua := r.UserAgent()
-	if len(ua) > maxUserAgentLen {
-		ua = ua[:maxUserAgentLen]
-	}
-	return ua
-}
+// userAgent отдаёт заголовок как есть: очищает и ограничивает его auth.Service, прямо перед записью в базу.
+func userAgent(r *http.Request) string { return r.UserAgent() }

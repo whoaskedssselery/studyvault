@@ -3,8 +3,10 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -262,5 +264,56 @@ func TestLogout_UnknownOrEmptyToken_IsNoError(t *testing.T) {
 		if err := svc.Logout(context.Background(), tok); err != nil {
 			t.Errorf("token %q: %v", tok, err)
 		}
+	}
+}
+
+func TestLogin_UserAgentIsMadeSafeForStorage(t *testing.T) {
+	cases := map[string]struct {
+		ua      string
+		wantNil bool
+	}{
+		"invalid utf-8":      {ua: "bad\xff\xfeagent"},
+		"only invalid bytes": {ua: "\xff\xfe", wantNil: true},
+		"cut in a multibyte": {ua: strings.Repeat("a", 254) + "я"}, // «я» занимает 2 байта и режется пополам на границе 255
+		"very long":          {ua: strings.Repeat("Mozilla/5.0 ", 200)},
+		"long and multibyte": {ua: strings.Repeat("я", 400)},
+		"empty":              {ua: "", wantNil: true},
+		"control characters": {ua: "evil\x00agent\r\n"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			store := newFakeStore()
+			svc := newService(store)
+			_, _ = svc.Register(context.Background(), "a@x.io", "password123", "Ann", "")
+			store.refresh = nil
+
+			if _, err := svc.Login(context.Background(), "a@x.io", "password123", c.ua); err != nil {
+				t.Fatalf("a strange User-Agent must never fail the login: %v", err)
+			}
+
+			got := store.refresh[0].UserAgent
+			if c.wantNil {
+				if got.Valid {
+					t.Errorf("nothing usable left, want NULL, got %q", got.String)
+				}
+				return
+			}
+			if !got.Valid || !utf8.ValidString(got.String) || len(got.String) > 255 {
+				t.Errorf("stored %d bytes, valid utf-8: %v", len(got.String), utf8.ValidString(got.String))
+			}
+			if strings.ContainsAny(got.String, "\x00\r\n") {
+				t.Errorf("control characters must be stripped, got %q", got.String)
+			}
+		})
+	}
+}
+
+func TestRegister_StrangeUserAgent_DoesNotLeaveAHalfCreatedAccount(t *testing.T) {
+	store := newFakeStore()
+
+	res, err := newService(store).Register(context.Background(), "a@x.io", "password123", "Ann", "bad\xff\xfeagent")
+
+	if err != nil || res.AccessToken == "" {
+		t.Fatalf("register must succeed with a strange User-Agent: %v", err)
 	}
 }

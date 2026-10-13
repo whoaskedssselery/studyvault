@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -161,6 +163,7 @@ func (s *Service) startSession(ctx context.Context, user db.User, userAgent stri
 
 func (s *Service) issue(ctx context.Context, userID uuid.UUID, userAgent string) (Tokens, error) {
 	now := s.now()
+	ua := sanitizeUserAgent(userAgent)
 	access, err := NewAccessToken(s.secret, userID, now)
 	if err != nil {
 		return Tokens{}, fmt.Errorf("sign access token: %w", err)
@@ -172,7 +175,7 @@ func (s *Service) issue(ctx context.Context, userID uuid.UUID, userAgent string)
 	err = s.store.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
 		UserID:    userID,
 		TokenHash: hash,
-		UserAgent: pgtype.Text{String: userAgent, Valid: userAgent != ""},
+		UserAgent: pgtype.Text{String: ua, Valid: ua != ""},
 		ExpiresAt: now.Add(RefreshTokenTTL),
 	})
 	if err != nil {
@@ -183,4 +186,26 @@ func (s *Service) issue(ctx context.Context, userID uuid.UUID, userAgent string)
 
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+const maxUserAgentBytes = 255
+
+// sanitizeUserAgent делает заголовок безопасным для текстовой колонки: User-Agent присылает клиент и
+// может содержать что угодно, а невалидный UTF-8 Postgres отвергает, и вход падал бы с ошибкой 500.
+// Битые байты и управляющие символы убираются, длина ограничивается по границе символа.
+func sanitizeUserAgent(ua string) string {
+	ua = strings.ToValidUTF8(ua, "")
+	ua = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, ua)
+	if len(ua) > maxUserAgentBytes {
+		ua = ua[:maxUserAgentBytes]
+		for !utf8.ValidString(ua) { // срез мог попасть внутрь многобайтового символа
+			ua = ua[:len(ua)-1]
+		}
+	}
+	return strings.TrimSpace(ua)
 }
