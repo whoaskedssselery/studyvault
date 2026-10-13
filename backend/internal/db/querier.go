@@ -11,17 +11,28 @@ import (
 )
 
 type Querier interface {
+	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSubject(ctx context.Context, arg CreateSubjectParams) (Subject, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteSubject(ctx context.Context, arg DeleteSubjectParams) (int64, error)
+	GetNote(ctx context.Context, arg GetNoteParams) (Note, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, lower string) (User, error)
+	ListNoteTags(ctx context.Context, noteIds []uuid.UUID) ([]ListNoteTagsRow, error)
+	// Список без содержимого. Страницы по ключу (updated_at, id): курсор — это последняя строка
+	// предыдущей страницы. Все фильтры необязательные: NULL значит «не фильтровать».
+	ListNotes(ctx context.Context, arg ListNotesParams) ([]ListNotesRow, error)
 	ListSubjects(ctx context.Context, userID uuid.UUID) ([]Subject, error)
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	// Возвращает число изменённых строк: 0 значит, что токен уже отозван (или его нет).
 	// Это делает ротацию атомарной: из двух параллельных запросов выиграет только один.
 	RevokeRefreshToken(ctx context.Context, tokenHash string) (int64, error)
+	SoftDeleteNote(ctx context.Context, arg SoftDeleteNoteParams) (int64, error)
+	SubjectOwnedByUser(ctx context.Context, arg SubjectOwnedByUserParams) (bool, error)
+	// Частичное обновление. NULL в title, content, content_text и is_pinned значит «не менять».
+	// subject_id может быть очищен, поэтому «менять или нет» передаётся флагом set_subject.
+	UpdateNote(ctx context.Context, arg UpdateNoteParams) (Note, error)
 	// Частичное обновление. title: NULL значит «не менять». Для color и semester NULL тоже
 	// осмысленное значение (очистить поле), поэтому «менять или нет» передаётся отдельным флагом.
 	UpdateSubject(ctx context.Context, arg UpdateSubjectParams) (Subject, error)

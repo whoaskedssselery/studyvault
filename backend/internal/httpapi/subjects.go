@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -148,11 +146,7 @@ func (a *api) DeleteSubject(w http.ResponseWriter, r *http.Request, id Id) {
 }
 
 func validSubjectTitle(raw string) (string, error) {
-	title := strings.TrimSpace(raw)
-	if n := utf8.RuneCountInString(title); n < 1 || n > maxSubjectTitleLen {
-		return "", errors.New("title must be 1 to 200 characters")
-	}
-	return title, nil
+	return trimmedTitle(raw, maxSubjectTitleLen)
 }
 
 func validColorAndSemester(color *string, semester *int) error {

@@ -31,6 +31,7 @@ type Deps struct {
 	DB           Pinger
 	Auth         Authenticator
 	Subjects     SubjectService
+	Notes        NoteService
 	JWTSecret    []byte
 	CookieSecure bool
 }

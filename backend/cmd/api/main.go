@@ -17,6 +17,7 @@ import (
 	"github.com/whoaskedssselery/studyvault/backend/internal/config"
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/httpapi"
+	"github.com/whoaskedssselery/studyvault/backend/internal/note"
 	"github.com/whoaskedssselery/studyvault/backend/internal/subject"
 )
 
@@ -51,6 +52,7 @@ func run() error {
 		DB:           pool,
 		Auth:         auth.NewService(queries, cfg.JWTSecret),
 		Subjects:     subject.NewService(queries),
+		Notes:        note.NewService(queries),
 		JWTSecret:    cfg.JWTSecret,
 		CookieSecure: cfg.CookieSecure,
 	})
