@@ -26,6 +26,8 @@ type NoteService interface {
 	Update(ctx context.Context, userID, id uuid.UUID, p note.Patch) (note.Note, error)
 	Delete(ctx context.Context, userID, id uuid.UUID) error
 	List(ctx context.Context, userID uuid.UUID, f note.ListFilter) (note.Page, error)
+	Backlinks(ctx context.Context, userID, id uuid.UUID) ([]note.Summary, error)
+	Graph(ctx context.Context, userID uuid.UUID) (note.Graph, error)
 }
 
 func (a *api) ListNotes(w http.ResponseWriter, r *http.Request, params ListNotesParams) {
@@ -240,4 +242,63 @@ func nullableUUID(id *uuid.UUID) nullable.Nullable[uuid.UUID] {
 		return nullable.NewNullNullable[uuid.UUID]()
 	}
 	return nullable.NewNullableWithValue(*id)
+}
+
+func (a *api) ListBacklinks(w http.ResponseWriter, r *http.Request, id Id) {
+	userID, ok := currentUser(w, r)
+	if !ok {
+		return
+	}
+	linked, err := a.Notes.Backlinks(r.Context(), userID, id)
+	switch {
+	case errors.Is(err, note.ErrNotFound):
+		notFound(w, "note not found")
+	case err != nil:
+		slog.Error("list backlinks", "err", err)
+		internalError(w)
+	default:
+		items := make([]NoteSummary, 0, len(linked))
+		for _, s := range linked {
+			items = append(items, toNoteSummary(s))
+		}
+		writeJSON(w, http.StatusOK, struct {
+			Items []NoteSummary `json:"items"`
+		}{Items: items})
+	}
+}
+
+func (a *api) GetGraph(w http.ResponseWriter, r *http.Request) {
+	userID, ok := currentUser(w, r)
+	if !ok {
+		return
+	}
+	g, err := a.Notes.Graph(r.Context(), userID)
+	if err != nil {
+		slog.Error("get graph", "err", err)
+		internalError(w)
+		return
+	}
+
+	var out Graph
+	out.Nodes = make([]struct {
+		Id    uuid.UUID `json:"id"`
+		Title string    `json:"title"`
+	}, 0, len(g.Nodes))
+	out.Edges = make([]struct {
+		Source uuid.UUID `json:"source"`
+		Target uuid.UUID `json:"target"`
+	}, 0, len(g.Edges))
+	for _, n := range g.Nodes {
+		out.Nodes = append(out.Nodes, struct {
+			Id    uuid.UUID `json:"id"`
+			Title string    `json:"title"`
+		}{Id: n.ID, Title: n.Title})
+	}
+	for _, e := range g.Edges {
+		out.Edges = append(out.Edges, struct {
+			Source uuid.UUID `json:"source"`
+			Target uuid.UUID `json:"target"`
+		}{Source: e.Source, Target: e.Target})
+	}
+	writeJSON(w, http.StatusOK, out)
 }

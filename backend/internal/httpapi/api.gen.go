@@ -86,15 +86,20 @@ type AttachmentDownload struct {
 
 // AttachmentInput defines model for AttachmentInput.
 type AttachmentInput struct {
-	FileName string                                `json:"file_name"`
+	// FileName Example: Лекция 1.pdf
+	FileName string `json:"file_name"`
+
+	// MimeType Example: application/pdf
 	MimeType AttachmentInputMimeType               `json:"mime_type"`
 	NoteId   nullable.Nullable[openapi_types.UUID] `json:"note_id,omitempty"`
 
 	// SizeBytes До 20 МБ
+	//
+	// Example: 183204
 	SizeBytes int64 `json:"size_bytes"`
 }
 
-// AttachmentInputMimeType defines model for AttachmentInput.MimeType.
+// AttachmentInputMimeType Example: application/pdf
 type AttachmentInputMimeType string
 
 // AttachmentUpload defines model for AttachmentUpload.
@@ -148,8 +153,11 @@ type HealthStatus string
 
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
-	Email    openapi_types.Email `json:"email"`
-	Password string              `json:"password"`
+	// Email Example: anna@example.com
+	Email openapi_types.Email `json:"email"`
+
+	// Password Example: correct-horse-battery
+	Password string `json:"password"`
 }
 
 // Note defines model for Note.
@@ -172,10 +180,14 @@ type NoteInput struct {
 	// Content Документ редактора Tiptap (ProseMirror JSON). Бэкенд хранит как есть.
 	//
 	// Example: {"content":[{"content":[{"text":"Привет, [[Другая заметка]]","type":"text"}],"type":"paragraph"}],"type":"doc"}
-	Content   TiptapDoc                             `json:"content"`
+	Content TiptapDoc `json:"content"`
+
+	// IsPinned Example: false
 	IsPinned  *bool                                 `json:"is_pinned,omitempty"`
 	SubjectId nullable.Nullable[openapi_types.UUID] `json:"subject_id,omitempty"`
-	Title     string                                `json:"title"`
+
+	// Title Example: Пределы функций
+	Title string `json:"title"`
 }
 
 // NotePage defines model for NotePage.
@@ -191,10 +203,14 @@ type NotePatch struct {
 	// Content Документ редактора Tiptap (ProseMirror JSON). Бэкенд хранит как есть.
 	//
 	// Example: {"content":[{"content":[{"text":"Привет, [[Другая заметка]]","type":"text"}],"type":"paragraph"}],"type":"doc"}
-	Content   *TiptapDoc                            `json:"content,omitempty"`
+	Content *TiptapDoc `json:"content,omitempty"`
+
+	// IsPinned Example: true
 	IsPinned  *bool                                 `json:"is_pinned,omitempty"`
 	SubjectId nullable.Nullable[openapi_types.UUID] `json:"subject_id,omitempty"`
-	Title     *string                               `json:"title,omitempty"`
+
+	// Title Example: Пределы функций (конспект)
+	Title *string `json:"title,omitempty"`
 }
 
 // NoteSummary defines model for NoteSummary.
@@ -210,10 +226,15 @@ type NoteSummary struct {
 
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
-	DisplayName string              `json:"display_name"`
-	Email       openapi_types.Email `json:"email"`
+	// DisplayName Example: Анна Студентова
+	DisplayName string `json:"display_name"`
+
+	// Email Example: anna@example.com
+	Email openapi_types.Email `json:"email"`
 
 	// Password Не длиннее 72 байт (ограничение bcrypt)
+	//
+	// Example: correct-horse-battery
 	Password string `json:"password"`
 }
 
@@ -221,7 +242,8 @@ type RegisterRequest struct {
 type SearchHit struct {
 	Id openapi_types.UUID `json:"id"`
 
-	// Snippet Фрагмент текста с найденным словом, совпадение обёрнуто в `<mark>`
+	// Snippet HTML-фрагмент текста вокруг совпадения. Весь текст заметки экранирован, а найденные
+	// слова обёрнуты в `<mark>`, поэтому фрагмент можно безопасно вставлять как HTML.
 	Snippet   string                                `json:"snippet"`
 	SubjectId nullable.Nullable[openapi_types.UUID] `json:"subject_id"`
 	Title     string                                `json:"title"`
@@ -242,16 +264,26 @@ type Subject struct {
 
 // SubjectInput defines model for SubjectInput.
 type SubjectInput struct {
-	Color    nullable.Nullable[string] `json:"color,omitempty"`
-	Semester nullable.Nullable[int]    `json:"semester,omitempty"`
-	Title    string                    `json:"title"`
+	// Color Example: #4f46e5
+	Color nullable.Nullable[string] `json:"color,omitempty"`
+
+	// Semester Example: 2
+	Semester nullable.Nullable[int] `json:"semester,omitempty"`
+
+	// Title Example: Математический анализ
+	Title string `json:"title"`
 }
 
 // SubjectPatch defines model for SubjectPatch.
 type SubjectPatch struct {
-	Color    nullable.Nullable[string] `json:"color,omitempty"`
-	Semester nullable.Nullable[int]    `json:"semester,omitempty"`
-	Title    *string                   `json:"title,omitempty"`
+	// Color Example: #4f46e5
+	Color nullable.Nullable[string] `json:"color,omitempty"`
+
+	// Semester Example: 2
+	Semester nullable.Nullable[int] `json:"semester,omitempty"`
+
+	// Title Example: Математический анализ
+	Title *string `json:"title,omitempty"`
 }
 
 // Tag defines model for Tag.
@@ -262,6 +294,7 @@ type Tag struct {
 
 // TagInput defines model for TagInput.
 type TagInput struct {
+	// Name Example: экзамен
 	Name string `json:"name"`
 }
 
@@ -305,6 +338,12 @@ type Conflict = Error
 
 // NotFound defines model for NotFound.
 type NotFound = Error
+
+// ServiceUnavailable defines model for ServiceUnavailable.
+type ServiceUnavailable = Error
+
+// TooManyRequests defines model for TooManyRequests.
+type TooManyRequests = Error
 
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = Error

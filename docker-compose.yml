@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5440:5432" # 5432 и 5433 обычно заняты локальными Postgres
+      - "127.0.0.1:5440:5432" # только с этой машины; 5432 и 5433 обычно заняты локальными Postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +21,7 @@ services:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
       MEILI_ENV: development
     ports:
-      - "7700:7700"
+      - "127.0.0.1:7700:7700"
     volumes:
       - meili_data:/meili_data
 
@@ -34,10 +34,54 @@ services:
       RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
       RUSTFS_CONSOLE_ENABLE: "true"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - s3_data:/data
+
+  # Само приложение. Запускается только с профилем: docker compose --profile app up --build
+  # Без профиля поднимается одна инфраструктура, а API гоняют локально (go run ./cmd/api).
+  migrate:
+    profiles: ["app"]
+    build: ./backend
+    image: studyvault-api:local
+    entrypoint: ["/goose"]
+    command: ["up"]
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      GOOSE_MIGRATION_DIR: /migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    profiles: ["app"]
+    build: ./backend
+    image: studyvault-api:local
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      MEILI_URL: http://meilisearch:7700
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      S3_ENDPOINT: s3:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET:-attachments}
+      # Ссылки на загрузку и скачивание открывает браузер на хосте, а не контейнер.
+      S3_PUBLIC_ENDPOINT: localhost:9000
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # Локальный запуск идёт по http, поэтому Secure выключен. В проде оставьте true.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      meilisearch:
+        condition: service_started
+      s3:
+        condition: service_started
 
 volumes:
   postgres_data:

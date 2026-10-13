@@ -22,7 +22,7 @@ func TestAuthMiddleware_PutsUserIDInContext(t *testing.T) {
 		got, ok = auth.UserID(r.Context())
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/tags", nil)
+	req := httptest.NewRequest(http.MethodGet, "/subjects", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
 	h.ServeHTTP(httptest.NewRecorder(), req)
 

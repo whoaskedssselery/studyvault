@@ -50,6 +50,7 @@ Table notes {
   indexes {
     (user_id, updated_at)
     subject_id
+    (user_id, `lower(title)`) [note: "поиск заметки по названию при разрешении ссылок"]
   }
 }
 
@@ -69,6 +70,16 @@ Table note_tags {
 
   indexes {
     (note_id, tag_id) [pk]
+  }
+}
+
+Table note_mentions {
+  note_id uuid [not null, ref: > notes.id]
+  title_key text [not null, note: 'название из [[...]] в нижнем регистре, без подписи после |']
+
+  indexes {
+    (note_id, title_key) [pk]
+    title_key
   }
 }
 

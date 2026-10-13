@@ -2,19 +2,57 @@ openapi: 3.0.3
 info:
   title: studyvault API
   version: 1.0.0
-  description: REST API базы знаний студента.
+  description: |
+    REST API базы знаний студента: заметки со ссылками `[[Название]]`, предметы, теги, поиск и файлы.
+
+    **Авторизация.** `POST /auth/register` и `POST /auth/login` возвращают `access_token` (живёт 15 минут).
+    Его передают в заголовке `Authorization: Bearer <токен>`. Refresh-токен приходит в httpOnly cookie
+    `refresh_token`, а `POST /auth/refresh` меняет его на новую пару.
+
+    **Ошибки.** Всегда один формат: `{"error": {"code": "...", "message": "..."}}`. Клиент ориентируется на `code`,
+    `message` написан для человека. Чужие и несуществующие объекты неотличимы: оба дают `not_found`.
+
+    | code | HTTP | Когда |
+    |---|---|---|
+    | `validation_failed` | 400 | неверные входные данные, неизвестное поле, неправильный id или курсор |
+    | `unauthorized` | 401 | нет токена, он неверный или просрочен |
+    | `invalid_credentials` | 401 | неверная почта или пароль |
+    | `invalid_token` | 401 | refresh-токен отсутствует, просрочен или уже использован |
+    | `not_found` | 404 | объект не найден (или принадлежит другому пользователю) |
+    | `email_taken` | 409 | почта уже зарегистрирована |
+    | `tag_exists` | 409 | у пользователя уже есть тег с таким именем |
+    | `not_uploaded` | 409 | файл зарегистрирован, но ещё не загружен |
+    | `rate_limited` | 429 | слишком много попыток входа; заголовок `Retry-After` в секундах |
+    | `internal` | 500 | непредвиденная ошибка сервера (подробности только в его логе) |
+    | `search_unavailable` | 503 | поиск недоступен, остальное API работает |
+    | `storage_unavailable` | 503 | хранилище файлов недоступно, остальное API работает |
+
+    **Лимиты.** Вход, регистрация и обновление токена: 20 попыток в минуту с одного адреса, дальше 429.
+
+    **Страницы.** Список заметок отдаётся страницами по курсору: `next_cursor` из ответа передают в `?cursor=`,
+    `null` значит, что страница последняя. Остальные списки небольшие и приходят целиком.
+
+    **Версии.** Нынешние пути соответствуют версии 1. Совместимые изменения (новые поля и эндпоинты) выходят
+    без смены версии. Несовместимые выйдут под префиксом `/v2`, а пути без префикса какое-то время продолжат
+    работать как v1.
 
 servers:
-  - url: http://localhost:8080
-    description: local
+  - url: /
+    description: тот же адрес, с которого открыта документация
 
 tags:
   - name: auth
+    description: Регистрация, вход и токены
   - name: subjects
+    description: Предметы студента
   - name: notes
+    description: Заметки, ссылки между ними и граф связей
   - name: tags
+    description: Теги заметок
   - name: search
+    description: Полнотекстовый поиск
   - name: attachments
+    description: Файлы к заметкам
 
 security:
   - bearerAuth: []
@@ -65,6 +103,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "409":
           $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/login:
     post:
@@ -92,6 +132,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/refresh:
     post:
@@ -114,6 +156,8 @@ paths:
                 $ref: "#/components/schemas/TokenResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/logout:
     post:
@@ -500,6 +544,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /attachments:
     get:
@@ -537,8 +583,11 @@ paths:
       operationId: createAttachment
       summary: Зарегистрировать файл и получить ссылку для загрузки
       description: |
-        Создаёт запись и возвращает presigned PUT URL. Клиент загружает байты напрямую в S3
-        с тем же `Content-Type`, который указал в `mime_type`.
+        Создаёт запись и возвращает presigned PUT URL (действует 15 минут). Клиент загружает байты
+        напрямую в хранилище запросом `PUT` на этот адрес, **не передавая токен**, и обязан отправить
+        ровно те `Content-Type` (`mime_type`) и `Content-Length` (`size_bytes`), которые заявил здесь:
+        они входят в подпись ссылки, и при любом расхождении хранилище ответит 403.
+        Разрешены PDF, PNG, JPEG, WebP, GIF, обычный текст и Markdown, до 20 МБ.
       requestBody:
         required: true
         content:
@@ -558,6 +607,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /attachments/{id}:
     parameters:
@@ -566,6 +617,7 @@ paths:
       tags: [attachments]
       operationId: getAttachment
       summary: Метаданные файла и временная ссылка для скачивания
+      description: Ссылка действует 15 минут, файл по ней скачивается как вложение.
       responses:
         "200":
           description: Файл
@@ -577,6 +629,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     delete:
       tags: [attachments]
       operationId: deleteAttachment
@@ -645,8 +701,25 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    ServiceUnavailable:
+      description: Поиск или хранилище файлов временно недоступны (остальное API работает)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    TooManyRequests:
+      description: Слишком много попыток входа, регистрации или обновления токена с этого адреса
+      headers:
+        Retry-After:
+          description: Через сколько секунд можно повторить запрос
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     Conflict:
-      description: Конфликт (дубликат)
+      description: Конфликт (дубликат) или файл ещё не загружен (`not_uploaded`)
       content:
         application/json:
           schema:
@@ -696,15 +769,18 @@ components:
       required: [email, password, display_name]
       properties:
         email:
+          example: anna@example.com
           type: string
           format: email
           maxLength: 254
         password:
+          example: correct-horse-battery
           type: string
           minLength: 8
           maxLength: 72
           description: Не длиннее 72 байт (ограничение bcrypt)
         display_name:
+          example: Анна Студентова
           type: string
           minLength: 1
           maxLength: 100
@@ -714,9 +790,11 @@ components:
       required: [email, password]
       properties:
         email:
+          example: anna@example.com
           type: string
           format: email
         password:
+          example: correct-horse-battery
           type: string
 
     TokenResponse:
@@ -768,14 +846,17 @@ components:
       required: [title]
       properties:
         title:
+          example: Математический анализ
           type: string
           minLength: 1
           maxLength: 200
         color:
+          example: "#4f46e5"
           type: string
           nullable: true
           pattern: "^#[0-9a-fA-F]{6}$"
         semester:
+          example: 2
           type: integer
           nullable: true
           minimum: 1
@@ -786,14 +867,17 @@ components:
       minProperties: 1
       properties:
         title:
+          example: Математический анализ
           type: string
           minLength: 1
           maxLength: 200
         color:
+          example: "#4f46e5"
           type: string
           nullable: true
           pattern: "^#[0-9a-fA-F]{6}$"
         semester:
+          example: 2
           type: integer
           nullable: true
           minimum: 1
@@ -814,6 +898,7 @@ components:
       required: [name]
       properties:
         name:
+          example: экзамен
           type: string
           minLength: 1
           maxLength: 50
@@ -883,6 +968,7 @@ components:
       required: [title, content]
       properties:
         title:
+          example: Пределы функций
           type: string
           minLength: 1
           maxLength: 300
@@ -893,6 +979,7 @@ components:
           format: uuid
           nullable: true
         is_pinned:
+          example: false
           type: boolean
           default: false
 
@@ -901,6 +988,7 @@ components:
       minProperties: 1
       properties:
         title:
+          example: Пределы функций (конспект)
           type: string
           minLength: 1
           maxLength: 300
@@ -911,6 +999,7 @@ components:
           format: uuid
           nullable: true
         is_pinned:
+          example: true
           type: boolean
 
     Graph:
@@ -954,7 +1043,9 @@ components:
           type: string
         snippet:
           type: string
-          description: Фрагмент текста с найденным словом, совпадение обёрнуто в `<mark>`
+          description: |
+            HTML-фрагмент текста вокруг совпадения. Весь текст заметки экранирован, а найденные
+            слова обёрнуты в `<mark>`, поэтому фрагмент можно безопасно вставлять как HTML.
         subject_id:
           type: string
           format: uuid
@@ -994,10 +1085,12 @@ components:
           format: uuid
           nullable: true
         file_name:
+          example: Лекция 1.pdf
           type: string
           minLength: 1
           maxLength: 255
         mime_type:
+          example: application/pdf
           type: string
           enum:
             - application/pdf
@@ -1008,6 +1101,7 @@ components:
             - text/plain
             - text/markdown
         size_bytes:
+          example: 183204
           type: integer
           format: int64
           minimum: 1

@@ -11,19 +11,52 @@ import (
 )
 
 type Querier interface {
+	CountUserTags(ctx context.Context, arg CountUserTagsParams) (int64, error)
+	CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (Attachment, error)
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSubject(ctx context.Context, arg CreateSubjectParams) (Subject, error)
+	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	// Возвращает удалённую строку: из неё берётся ключ объекта, который надо убрать из хранилища.
+	DeleteAttachment(ctx context.Context, arg DeleteAttachmentParams) (Attachment, error)
 	DeleteSubject(ctx context.Context, arg DeleteSubjectParams) (int64, error)
+	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
+	// Перепроверка результатов поиска в Postgres: Meilisearch лишь предлагает кандидатов, а решает БД.
+	// Чужие и удалённые заметки отсекаются здесь, даже если индекс устарел.
+	FilterLiveNotes(ctx context.Context, arg FilterLiveNotesParams) ([]FilterLiveNotesRow, error)
+	GetAttachment(ctx context.Context, arg GetAttachmentParams) (Attachment, error)
 	GetNote(ctx context.Context, arg GetNoteParams) (Note, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, lower string) (User, error)
+	ListAttachmentsByNote(ctx context.Context, arg ListAttachmentsByNoteParams) ([]Attachment, error)
+	ListBacklinks(ctx context.Context, arg ListBacklinksParams) ([]ListBacklinksRow, error)
+	ListGraphEdges(ctx context.Context, userID uuid.UUID) ([]NoteLink, error)
+	ListGraphNodes(ctx context.Context, userID uuid.UUID) ([]ListGraphNodesRow, error)
 	ListNoteTags(ctx context.Context, noteIds []uuid.UUID) ([]ListNoteTagsRow, error)
 	// Список без содержимого. Страницы по ключу (updated_at, id): курсор — это последняя строка
 	// предыдущей страницы. Все фильтры необязательные: NULL значит «не фильтровать».
 	ListNotes(ctx context.Context, arg ListNotesParams) ([]ListNotesRow, error)
+	// Постраничная выгрузка живых заметок для полной пересборки индекса.
+	ListNotesForIndex(ctx context.Context, arg ListNotesForIndexParams) ([]ListNotesForIndexRow, error)
 	ListSubjects(ctx context.Context, userID uuid.UUID) ([]Subject, error)
+	ListTags(ctx context.Context, userID uuid.UUID) ([]Tag, error)
+	NoteOwnedByUser(ctx context.Context, arg NoteOwnedByUserParams) (bool, error)
+	// Входящие связи заметки: кто из живых заметок пользователя упоминает её текущее название.
+	// Нужно, когда заметка создана или переименована позже, чем на неё сослались. Поиск идёт по индексу
+	// упоминаний. Устаревшие рёбра (текст больше не содержит такого названия) удаляются.
+	ReplaceIncomingLinks(ctx context.Context, arg ReplaceIncomingLinksParams) error
+	// Что заметка упоминает как [[Название]]: хранится отдельно, чтобы входящие связи искать по индексу.
+	// Названия приходят как написаны в тексте, ключом становится нижний регистр. Устаревшие записи удаляются.
+	ReplaceNoteMentions(ctx context.Context, arg ReplaceNoteMentionsParams) error
+	// Заменяет набор тегов заметки одним запросом, поэтому либо применяется целиком, либо нет:
+	// лишние связи удаляются, недостающие добавляются. Теги чужих пользователей не вставятся
+	// даже при ошибке в вызывающем коде.
+	ReplaceNoteTags(ctx context.Context, arg ReplaceNoteTagsParams) error
+	// Исходящие связи заметки: ссылки [[Название]] из её текста, разрешённые по названию среди живых
+	// заметок того же пользователя (без регистра, без самой заметки). Одним запросом: лишние рёбра
+	// удаляются, недостающие добавляются. Пустой список названий снимает все исходящие связи.
+	ReplaceOutgoingLinks(ctx context.Context, arg ReplaceOutgoingLinksParams) error
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	// Возвращает число изменённых строк: 0 значит, что токен уже отозван (или его нет).
 	// Это делает ротацию атомарной: из двух параллельных запросов выиграет только один.

@@ -70,14 +70,134 @@ func TestLoad_JWTSecret_RequiredAnd32Chars(t *testing.T) {
 	}
 }
 
-func TestLoad_CookieSecure(t *testing.T) {
+func TestLoad_CookieSecure_IsOnUnlessExplicitlyDisabled(t *testing.T) {
 	setValidEnv(t)
 
-	if cfg, _ := config.Load(); cfg.CookieSecure {
-		t.Error("CookieSecure must default to false")
+	cases := map[string]bool{
+		"":      true, // по умолчанию безопасно: забыть включить в проде нельзя
+		"true":  true,
+		"false": false, // локальная разработка по http
+		"0":     false,
+		"junk":  true, // непонятное значение не должно ослаблять защиту
 	}
-	t.Setenv("COOKIE_SECURE", "true")
-	if cfg, _ := config.Load(); !cfg.CookieSecure {
-		t.Error("CookieSecure=true not honoured")
+	for value, want := range cases {
+		t.Setenv("COOKIE_SECURE", value)
+		cfg, err := config.Load()
+		if err != nil {
+			t.Fatalf("COOKIE_SECURE=%q: %v", value, err)
+		}
+		if cfg.CookieSecure != want {
+			t.Errorf("COOKIE_SECURE=%q: CookieSecure = %v, want %v", value, cfg.CookieSecure, want)
+		}
+	}
+}
+
+func TestLoad_Meilisearch_IsOptional(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("MEILI_URL", "")
+	t.Setenv("MEILI_MASTER_KEY", "")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("a missing Meilisearch must not stop the API from starting: %v", err)
+	}
+	if cfg.MeiliURL != "" {
+		t.Errorf("MeiliURL = %q, want empty (search disabled)", cfg.MeiliURL)
+	}
+
+	t.Setenv("MEILI_URL", "http://localhost:7700")
+	t.Setenv("MEILI_MASTER_KEY", "k")
+	cfg, _ = config.Load()
+	if cfg.MeiliURL != "http://localhost:7700" || cfg.MeiliKey != "k" {
+		t.Errorf("Meilisearch settings not loaded: %+v", cfg)
+	}
+}
+
+func TestLoad_S3_IsOptionalAndHasDefaults(t *testing.T) {
+	setValidEnv(t)
+	for _, k := range []string{"S3_ENDPOINT", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_BUCKET", "S3_REGION", "S3_USE_SSL", "S3_PUBLIC_ENDPOINT"} {
+		t.Setenv(k, "")
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("a missing storage must not stop the API from starting: %v", err)
+	}
+	if cfg.S3.Endpoint != "" {
+		t.Errorf("Endpoint = %q, want empty (attachments disabled)", cfg.S3.Endpoint)
+	}
+	if cfg.S3.Bucket != "attachments" || cfg.S3.UseSSL || cfg.S3.PublicEndpoint != "" {
+		t.Errorf("defaults: %+v", cfg.S3)
+	}
+
+	t.Setenv("S3_ENDPOINT", "localhost:9000")
+	t.Setenv("S3_ACCESS_KEY", "ak")
+	t.Setenv("S3_SECRET_KEY", "sk")
+	t.Setenv("S3_BUCKET", "files")
+	t.Setenv("S3_USE_SSL", "true")
+	t.Setenv("S3_PUBLIC_ENDPOINT", "cdn.example.org")
+	cfg, _ = config.Load()
+	want := config.S3{Endpoint: "localhost:9000", AccessKey: "ak", SecretKey: "sk", Bucket: "files", UseSSL: true, PublicEndpoint: "cdn.example.org"}
+	if cfg.S3 != want {
+		t.Errorf("S3 = %+v, want %+v", cfg.S3, want)
+	}
+}
+
+func TestLoad_CORSOrigins(t *testing.T) {
+	setValidEnv(t)
+
+	t.Setenv("CORS_ORIGINS", "")
+	if cfg, _ := config.Load(); len(cfg.CORSOrigins) != 0 {
+		t.Errorf("CORS is off by default, got %v", cfg.CORSOrigins)
+	}
+
+	t.Setenv("CORS_ORIGINS", " http://localhost:5173 , https://app.example.org,, ")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.CORSOrigins) != 2 || cfg.CORSOrigins[0] != "http://localhost:5173" || cfg.CORSOrigins[1] != "https://app.example.org" {
+		t.Errorf("origins = %q", cfg.CORSOrigins)
+	}
+}
+
+func TestLoad_CORSOrigins_RejectsUnsafeOrMalformedEntries(t *testing.T) {
+	setValidEnv(t)
+
+	for _, bad := range []string{
+		"*", // с cookie допустимы только явные источники
+		"http://localhost:5173,*",
+		"localhost:5173",            // без схемы
+		"http://localhost:5173/app", // источник — это схема и хост, без пути
+		"ftp://example.org",         // не http(s)
+		"http://",
+	} {
+		t.Setenv("CORS_ORIGINS", bad)
+		if _, err := config.Load(); err == nil {
+			t.Errorf("CORS_ORIGINS=%q must be rejected", bad)
+		}
+	}
+}
+
+func TestLoad_AuthRateLimit(t *testing.T) {
+	setValidEnv(t)
+
+	t.Setenv("AUTH_RATE_LIMIT_PER_MIN", "")
+	if cfg, _ := config.Load(); cfg.AuthRateLimit != 20 {
+		t.Errorf("default = %d, want 20 attempts per minute", cfg.AuthRateLimit)
+	}
+	t.Setenv("AUTH_RATE_LIMIT_PER_MIN", "5")
+	if cfg, _ := config.Load(); cfg.AuthRateLimit != 5 {
+		t.Errorf("custom value not honoured: %d", cfg.AuthRateLimit)
+	}
+	t.Setenv("AUTH_RATE_LIMIT_PER_MIN", "0")
+	if cfg, err := config.Load(); err != nil || cfg.AuthRateLimit != 0 {
+		t.Errorf("0 must switch the limit off: %d, %v", cfg.AuthRateLimit, err)
+	}
+	for _, bad := range []string{"-1", "many", "1.5"} {
+		t.Setenv("AUTH_RATE_LIMIT_PER_MIN", bad)
+		if _, err := config.Load(); err == nil {
+			t.Errorf("AUTH_RATE_LIMIT_PER_MIN=%q must be rejected rather than silently ignored", bad)
+		}
 	}
 }

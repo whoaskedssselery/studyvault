@@ -242,7 +242,7 @@ func TestLogin_MissingFields_Returns400(t *testing.T) {
 }
 
 func TestProtectedRoute_RequiresValidAccessToken(t *testing.T) {
-	h := newHandler(&fakeAuth{})
+	h := httpapi.NewHandler(httpapi.Deps{DB: fakePinger{}, Auth: &fakeAuth{}, Subjects: &fakeSubjects{}, JWTSecret: testSecret})
 	valid, _ := auth.NewAccessToken(testSecret, uuid.New(), time.Now())
 	expired, _ := auth.NewAccessToken(testSecret, uuid.New(), time.Now().Add(-time.Hour))
 	foreign, _ := auth.NewAccessToken([]byte("another-secret-another-secret-123"), uuid.New(), time.Now())
@@ -256,11 +256,11 @@ func TestProtectedRoute_RequiresValidAccessToken(t *testing.T) {
 		{"garbage", "Bearer garbage", http.StatusUnauthorized},
 		{"expired", "Bearer " + expired, http.StatusUnauthorized},
 		{"wrong secret", "Bearer " + foreign, http.StatusUnauthorized},
-		{"valid passes the middleware", "Bearer " + valid, http.StatusNotImplemented},
+		{"valid passes the middleware", "Bearer " + valid, http.StatusOK},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			rec := get(h, "/tags", c.header) // маршрут, который пока не реализован (501)
+			rec := get(h, "/subjects", c.header)
 			if rec.Code != c.want {
 				t.Fatalf("status = %d, want %d", rec.Code, c.want)
 			}
@@ -394,5 +394,47 @@ func TestLogout_ServiceError_Returns500(t *testing.T) {
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+}
+
+func TestRequestBody_TrailingDataAndOversizeAreRejected(t *testing.T) {
+	huge := `{"email":"a@x.io","password":"password123","display_name":"` + strings.Repeat("я", 700_000) + `"}` // около 1,4 МБ
+	cases := map[string]string{
+		"second json object":   validRegister + validRegister,
+		"garbage after json":   validRegister + " garbage",
+		"extra closing brace":  validRegister + "}",
+		"over the 1 MiB limit": huge,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := &fakeAuth{}
+			rec := post(t, newHandler(f), "/auth/register", body)
+
+			if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "validation_failed" {
+				t.Fatalf("status = %d, body = %.120s", rec.Code, rec.Body)
+			}
+			if f.calls != 0 {
+				t.Error("the service must not see a request that was not a single clean JSON object")
+			}
+		})
+	}
+}
+
+func TestRequestBody_TrailingWhitespaceIsFine(t *testing.T) {
+	rec := post(t, newHandler(&fakeAuth{}), "/auth/register", validRegister+"\n\n  \t")
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("whitespace after the object is normal (editors add a newline), status = %d", rec.Code)
+	}
+}
+
+func TestLogin_InternalError_Returns500WithoutLeak(t *testing.T) {
+	rec := post(t, newHandler(&fakeAuth{loginErr: errors.New("pq: secret internal detail")}), "/auth/login", `{"email":"a@x.io","password":"password123"}`)
+
+	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "secret internal detail") {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
+	}
+	if len(rec.Result().Cookies()) != 0 {
+		t.Error("no session cookie may be set on a failure")
 	}
 }

@@ -28,17 +28,21 @@ type Authenticator interface {
 }
 
 type Deps struct {
-	DB           Pinger
-	Auth         Authenticator
-	Subjects     SubjectService
-	Notes        NoteService
-	JWTSecret    []byte
-	CookieSecure bool
+	DB             Pinger
+	Auth           Authenticator
+	Subjects       SubjectService
+	Notes          NoteService
+	Tags           TagService
+	Search         SearchService
+	Attachments    AttachmentService
+	AllowedOrigins []string // источники для CORS; пусто: CORS выключен
+	AuthRateLimit  int      // попыток входа, регистрации и обновления токена с одного адреса в минуту; 0: без лимита
+	JWTSecret      []byte
+	CookieSecure   bool
 }
 
-// api реализует ServerInterface; ещё не готовые методы отвечают 501 через Unimplemented.
+// api реализует ServerInterface целиком: пропущенный метод контракта не даст собрать проект.
 type api struct {
-	Unimplemented
 	Deps
 }
 
@@ -57,6 +61,13 @@ func NewHandler(deps Deps) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
+	r.Use(securityHeaders)
+	r.Use(limitAuthAttempts(deps.AuthRateLimit))
+	r.Use(corsMiddleware(deps.AllowedOrigins))
+
+	// Документация вне сгенерированных маршрутов, поэтому authMiddleware её не касается.
+	r.Get("/docs", serveDocs)
+	r.Get("/openapi.yaml", serveSpec)
 
 	return HandlerWithOptions(&api{Deps: deps}, ChiServerOptions{
 		BaseRouter:  r,

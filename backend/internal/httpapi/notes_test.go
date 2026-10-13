@@ -18,9 +18,11 @@ import (
 )
 
 type fakeNotes struct {
-	note note.Note
-	page note.Page
-	err  error
+	note      note.Note
+	page      note.Page
+	backlinks []note.Summary
+	graph     note.Graph
+	err       error
 
 	calls    int
 	gotUser  uuid.UUID
