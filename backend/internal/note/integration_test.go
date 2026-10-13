@@ -333,3 +333,253 @@ func TestDB_TagsAreReturnedWithNotes(t *testing.T) {
 		t.Errorf("list items must carry tags too: %+v", page.Items)
 	}
 }
+
+func (e env) noteWith(t *testing.T, uid uuid.UUID, title, text string) note.Note {
+	t.Helper()
+	n, err := e.notes.Create(context.Background(), uid, note.Input{Title: title, Content: docOf(paragraph(text))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func (e env) setText(t *testing.T, uid, id uuid.UUID, text string) {
+	t.Helper()
+	if _, err := e.notes.Update(context.Background(), uid, id, note.Patch{Content: docOf(paragraph(text))}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (e env) rename(t *testing.T, uid, id uuid.UUID, title string) {
+	t.Helper()
+	if _, err := e.notes.Update(context.Background(), uid, id, note.Patch{Title: &title}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (e env) backlinkTitles(t *testing.T, uid, id uuid.UUID) []string {
+	t.Helper()
+	items, err := e.notes.Backlinks(context.Background(), uid, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var titles []string
+	for _, it := range items {
+		titles = append(titles, it.Title)
+	}
+	sort.Strings(titles)
+	return titles
+}
+
+func equal(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestDB_Links_OutgoingAreResolvedByTitle(t *testing.T) {
+	e := newEnv(t)
+	uid := e.user(t, "a@x.io")
+	algebra := e.noteWith(t, uid, "Algebra", "")
+	calculus := e.noteWith(t, uid, "Calculus", "")
+
+	src := e.noteWith(t, uid, "Notes", "see [[algebra]], [[Missing]] and [[Notes]]")
+
+	if got := e.backlinkTitles(t, uid, algebra.ID); !equal(got, []string{"Notes"}) {
+		t.Errorf("case-insensitive link must resolve: %v", got)
+	}
+	if got := e.backlinkTitles(t, uid, calculus.ID); len(got) != 0 {
+		t.Errorf("unrelated note got a backlink: %v", got)
+	}
+	if got := e.backlinkTitles(t, uid, src.ID); len(got) != 0 {
+		t.Errorf("a link to a missing note and a self link must not create edges: %v", got)
+	}
+
+	e.setText(t, uid, src.ID, "now about [[Calculus]]")
+	if got := e.backlinkTitles(t, uid, algebra.ID); len(got) != 0 {
+		t.Errorf("the old edge must be removed: %v", got)
+	}
+	if got := e.backlinkTitles(t, uid, calculus.ID); !equal(got, []string{"Notes"}) {
+		t.Errorf("the new edge must appear: %v", got)
+	}
+
+	e.setText(t, uid, src.ID, "no links any more")
+	if got := e.backlinkTitles(t, uid, calculus.ID); len(got) != 0 {
+		t.Errorf("removing the link from the text must remove the edge: %v", got)
+	}
+}
+
+func TestDB_Links_ForwardReferencesResolveWhenTheTargetAppears(t *testing.T) {
+	e := newEnv(t)
+	uid := e.user(t, "a@x.io")
+	src := e.noteWith(t, uid, "Source", "waiting for [[Later]]")
+
+	later := e.noteWith(t, uid, "Later", "")
+	if got := e.backlinkTitles(t, uid, later.ID); !equal(got, []string{"Source"}) {
+		t.Fatalf("a note created after the link must pick it up: %v", got)
+	}
+
+	e.rename(t, uid, later.ID, "Renamed")
+	if got := e.backlinkTitles(t, uid, later.ID); len(got) != 0 {
+		t.Errorf("after the rename the text no longer points here: %v", got)
+	}
+
+	e.rename(t, uid, later.ID, "later") // регистр не важен
+	if got := e.backlinkTitles(t, uid, later.ID); !equal(got, []string{"Source"}) {
+		t.Errorf("renaming back must restore the edge: %v", got)
+	}
+	_ = src
+}
+
+func TestDB_Links_NeverCrossUsers(t *testing.T) {
+	e := newEnv(t)
+	alice, bob := e.user(t, "alice@x.io"), e.user(t, "bob@x.io")
+	bobsAlgebra := e.noteWith(t, bob, "Algebra", "")
+
+	alicesSource := e.noteWith(t, alice, "Mine", "[[Algebra]]")
+
+	if got := e.backlinkTitles(t, bob, bobsAlgebra.ID); len(got) != 0 {
+		t.Errorf("alice's link must not point at bob's note: %v", got)
+	}
+	g, _ := e.notes.Graph(context.Background(), alice)
+	if len(g.Edges) != 0 {
+		t.Errorf("alice's graph must have no edges yet: %+v", g.Edges)
+	}
+
+	// Когда у самой Алисы появляется «Algebra», ссылка находит именно её заметку.
+	alicesAlgebra := e.noteWith(t, alice, "Algebra", "")
+	if got := e.backlinkTitles(t, alice, alicesAlgebra.ID); !equal(got, []string{"Mine"}) {
+		t.Errorf("link must resolve to alice's own note: %v", got)
+	}
+	if got := e.backlinkTitles(t, bob, bobsAlgebra.ID); len(got) != 0 {
+		t.Errorf("bob's note must stay unlinked: %v", got)
+	}
+	_ = alicesSource
+}
+
+func TestDB_Links_DuplicateTitles_LinkToEveryMatch(t *testing.T) {
+	e := newEnv(t)
+	uid := e.user(t, "a@x.io")
+	first, second := e.noteWith(t, uid, "Twin", "one"), e.noteWith(t, uid, "twin", "two")
+
+	e.noteWith(t, uid, "Source", "[[Twin]]")
+
+	for _, n := range []note.Note{first, second} {
+		if got := e.backlinkTitles(t, uid, n.ID); !equal(got, []string{"Source"}) {
+			t.Errorf("note %q must be linked: %v", n.Title, got)
+		}
+	}
+}
+
+func TestDB_Links_SoftDeletedNotesDisappearFromGraphAndBacklinks(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	uid := e.user(t, "a@x.io")
+	b := e.noteWith(t, uid, "B", "")
+	a := e.noteWith(t, uid, "A", "[[B]]")
+
+	g, _ := e.notes.Graph(ctx, uid)
+	if len(g.Nodes) != 2 || len(g.Edges) != 1 || g.Edges[0].Source != a.ID || g.Edges[0].Target != b.ID {
+		t.Fatalf("graph before deletion: %+v", g)
+	}
+
+	if err := e.notes.Delete(ctx, uid, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.notes.Backlinks(ctx, uid, b.ID); !errors.Is(err, note.ErrNotFound) {
+		t.Errorf("backlinks of a deleted note: err = %v, want ErrNotFound", err)
+	}
+	g, _ = e.notes.Graph(ctx, uid)
+	if len(g.Nodes) != 1 || g.Nodes[0].ID != a.ID || len(g.Edges) != 0 {
+		t.Errorf("a deleted target must leave the graph with its edges: %+v", g)
+	}
+
+	// Новая заметка с тем же названием подхватывает старую ссылку.
+	b2 := e.noteWith(t, uid, "B", "")
+	if got := e.backlinkTitles(t, uid, b2.ID); !equal(got, []string{"A"}) {
+		t.Errorf("a re-created target must be linked: %v", got)
+	}
+
+	// Удалённый источник не показывается в обратных ссылках.
+	if err := e.notes.Delete(ctx, uid, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.backlinkTitles(t, uid, b2.ID); len(got) != 0 {
+		t.Errorf("a deleted source must not be listed: %v", got)
+	}
+}
+
+func TestDB_Backlinks_ForeignNote_IsNotFound(t *testing.T) {
+	e := newEnv(t)
+	alice, bob := e.user(t, "alice@x.io"), e.user(t, "bob@x.io")
+	alices := e.noteWith(t, alice, "Private", "")
+
+	if _, err := e.notes.Backlinks(context.Background(), bob, alices.ID); !errors.Is(err, note.ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestDB_Graph_ContainsOnlyOwnNotes(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	alice, bob := e.user(t, "alice@x.io"), e.user(t, "bob@x.io")
+	e.noteWith(t, alice, "A1", "[[A2]]")
+	e.noteWith(t, alice, "A2", "")
+	e.noteWith(t, bob, "B1", "[[B2]]")
+	e.noteWith(t, bob, "B2", "")
+
+	g, err := e.notes.Graph(ctx, alice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var titles []string
+	for _, n := range g.Nodes {
+		titles = append(titles, n.Title)
+	}
+	sort.Strings(titles)
+	if !equal(titles, []string{"A1", "A2"}) || len(g.Edges) != 1 {
+		t.Errorf("alice's graph: nodes %v, edges %d", titles, len(g.Edges))
+	}
+}
+
+// В таблице note_links не должно быть рёбер между заметками разных пользователей, даже таких,
+// которые запросы чтения всё равно спрятали бы.
+func (e env) crossUserEdges(t *testing.T) int {
+	t.Helper()
+	var n int
+	err := e.tx.QueryRow(context.Background(), `
+		SELECT count(*) FROM note_links l
+		JOIN notes s ON s.id = l.source_note_id
+		JOIN notes t ON t.id = l.target_note_id
+		WHERE s.user_id <> t.user_id`).Scan(&n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestDB_Links_NothingIsStoredAcrossUsers(t *testing.T) {
+	e := newEnv(t)
+	alice, bob := e.user(t, "alice@x.io"), e.user(t, "bob@x.io")
+
+	// Исходящие: у Боба уже есть «Algebra», ссылается Алиса.
+	e.noteWith(t, bob, "Algebra", "")
+	e.noteWith(t, alice, "Mine", "[[Algebra]]")
+	if n := e.crossUserEdges(t); n != 0 {
+		t.Errorf("outgoing resolution stored %d cross-user edge(s)", n)
+	}
+
+	// Входящие: Алиса сослалась на «Zeta» раньше, чем Боб создал заметку с таким названием.
+	e.noteWith(t, alice, "Waiting", "[[Zeta]]")
+	zeta := e.noteWith(t, bob, "Zeta", "")
+	e.rename(t, bob, zeta.ID, "Zeta")
+	if n := e.crossUserEdges(t); n != 0 {
+		t.Errorf("incoming resolution stored %d cross-user edge(s)", n)
+	}
+}

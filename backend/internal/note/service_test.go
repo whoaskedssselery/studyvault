@@ -14,6 +14,14 @@ import (
 )
 
 type fakeStore struct {
+	noteOwned bool // чем ответит NoteOwnedByUser
+	linkErr   error
+	outgoing  []db.ReplaceOutgoingLinksParams
+	incoming  []db.ReplaceIncomingLinksParams
+	backlinks []db.ListBacklinksRow
+	nodes     []db.ListGraphNodesRow
+	edges     []db.NoteLink
+
 	owned     bool // чем ответит SubjectOwnedByUser
 	subjectQs int  // сколько раз проверяли владельца предмета
 
@@ -255,5 +263,167 @@ func TestList_AttachesTagsToTheirNotes(t *testing.T) {
 	}
 	if len(page.Items[1].Tags) != 2 || page.Items[1].Tags[0].Name != "exam" {
 		t.Errorf("tags not attached: %#v", page.Items[1].Tags)
+	}
+}
+
+func (f *fakeStore) NoteOwnedByUser(context.Context, db.NoteOwnedByUserParams) (bool, error) {
+	return f.noteOwned, f.err
+}
+
+func (f *fakeStore) ReplaceOutgoingLinks(_ context.Context, a db.ReplaceOutgoingLinksParams) error {
+	f.outgoing = append(f.outgoing, a)
+	return f.linkErr
+}
+
+func (f *fakeStore) ReplaceIncomingLinks(_ context.Context, a db.ReplaceIncomingLinksParams) error {
+	f.incoming = append(f.incoming, a)
+	return f.linkErr
+}
+
+func (f *fakeStore) ListBacklinks(context.Context, db.ListBacklinksParams) ([]db.ListBacklinksRow, error) {
+	return f.backlinks, f.err
+}
+
+func (f *fakeStore) ListGraphNodes(context.Context, uuid.UUID) ([]db.ListGraphNodesRow, error) {
+	return f.nodes, f.err
+}
+
+func (f *fakeStore) ListGraphEdges(context.Context, uuid.UUID) ([]db.NoteLink, error) {
+	return f.edges, f.err
+}
+
+// countingTx запускает fn сразу на том же хранилище и считает, сколько транзакций открыли.
+func countingTx(f *fakeStore, runs *int) note.Option {
+	return note.WithTx(func(_ context.Context, fn func(note.Store) error) error {
+		*runs++
+		return fn(f)
+	})
+}
+
+func TestCreate_RebuildsBothDirectionsOfLinksInOneTransaction(t *testing.T) {
+	f := &fakeStore{}
+	runs := 0
+	svc := note.NewService(f, countingTx(f, &runs))
+	uid := uuid.New()
+
+	n, err := svc.Create(context.Background(), uid, note.Input{Title: "Calculus", Content: docOf(paragraph("[[Algebra]] and [[algebra]] and [[Logic]]"))})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if runs != 1 {
+		t.Errorf("transactions opened = %d, want exactly 1", runs)
+	}
+	if len(f.outgoing) != 1 || f.outgoing[0].SourceID != n.ID || f.outgoing[0].UserID != uid ||
+		len(f.outgoing[0].Titles) != 2 || f.outgoing[0].Titles[0] != "Algebra" || f.outgoing[0].Titles[1] != "Logic" {
+		t.Errorf("outgoing: %+v", f.outgoing)
+	}
+	if len(f.incoming) != 1 || f.incoming[0].TargetID != n.ID || f.incoming[0].Title != "Calculus" || f.incoming[0].UserID != uid {
+		t.Errorf("incoming (notes that already mention this title): %+v", f.incoming)
+	}
+}
+
+func TestCreate_NoLinksInText_StillSendsAnEmptyNonNilTitleList(t *testing.T) {
+	f := &fakeStore{}
+	_, _ = note.NewService(f).Create(context.Background(), uuid.New(), note.Input{Title: "T", Content: docOf(paragraph("plain"))})
+
+	if len(f.outgoing) != 1 || f.outgoing[0].Titles == nil || len(f.outgoing[0].Titles) != 0 {
+		t.Errorf("an empty list must be sent as an empty array, not NULL: %#v", f.outgoing)
+	}
+}
+
+func TestUpdate_LinkRebuildDependsOnWhatChanged(t *testing.T) {
+	uid, id := uuid.New(), uuid.New()
+	title, pinned := "Renamed", true
+	cases := map[string]struct {
+		patch           note.Patch
+		wantOut, wantIn int
+	}{
+		"content only": {note.Patch{Content: docOf(paragraph("[[X]]"))}, 1, 0},
+		"title only":   {note.Patch{Title: &title}, 0, 1},
+		"both":         {note.Patch{Title: &title, Content: docOf(paragraph("[[X]]"))}, 1, 1},
+		"pin only":     {note.Patch{IsPinned: &pinned}, 0, 0},
+		"subject only": {note.Patch{SetSubject: true}, 0, 0},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := &fakeStore{}
+			if _, err := note.NewService(f).Update(context.Background(), uid, id, c.patch); err != nil {
+				t.Fatal(err)
+			}
+			if len(f.outgoing) != c.wantOut || len(f.incoming) != c.wantIn {
+				t.Errorf("outgoing rebuilds = %d (want %d), incoming = %d (want %d)", len(f.outgoing), c.wantOut, len(f.incoming), c.wantIn)
+			}
+		})
+	}
+}
+
+func TestUpdate_RenameUsesTheNewTitleForIncomingLinks(t *testing.T) {
+	f := &fakeStore{}
+	title := "Brand new"
+	_, _ = note.NewService(f).Update(context.Background(), uuid.New(), uuid.New(), note.Patch{Title: &title})
+
+	// Фейк возвращает заметку без названия, поэтому важно, что берётся именно переданное.
+	if len(f.incoming) != 1 || f.incoming[0].Title != "Brand new" {
+		t.Errorf("incoming: %+v", f.incoming)
+	}
+}
+
+func TestLinkRebuildFailure_FailsTheWholeOperation(t *testing.T) {
+	boom := errors.New("links broke")
+	f := &fakeStore{linkErr: boom}
+	svc := note.NewService(f)
+
+	if _, err := svc.Create(context.Background(), uuid.New(), note.Input{Title: "T", Content: docOf(paragraph("x"))}); !errors.Is(err, boom) {
+		t.Errorf("Create: err = %v, want the link error (so the transaction rolls back)", err)
+	}
+	title := "x"
+	if _, err := svc.Update(context.Background(), uuid.New(), uuid.New(), note.Patch{Title: &title}); !errors.Is(err, boom) {
+		t.Errorf("Update: err = %v, want the link error", err)
+	}
+}
+
+func TestBacklinks_NoteNotOwned_ReturnsErrNotFound(t *testing.T) {
+	_, err := note.NewService(&fakeStore{noteOwned: false}).Backlinks(context.Background(), uuid.New(), uuid.New())
+
+	if !errors.Is(err, note.ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestBacklinks_ReturnsSummariesWithTags(t *testing.T) {
+	f := &fakeStore{noteOwned: true, backlinks: []db.ListBacklinksRow{{ID: uuid.New(), Title: "A"}, {ID: uuid.New(), Title: "B"}}}
+	f.tags = []db.ListNoteTagsRow{{NoteID: f.backlinks[1].ID, TagID: uuid.New(), Name: "exam"}}
+
+	got, err := note.NewService(f).Backlinks(context.Background(), uuid.New(), uuid.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Tags == nil || len(got[0].Tags) != 0 || len(got[1].Tags) != 1 {
+		t.Errorf("got %+v", got)
+	}
+}
+
+func TestGraph_EmptyIsNonNil(t *testing.T) {
+	g, err := note.NewService(&fakeStore{}).Graph(context.Background(), uuid.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.Nodes == nil || g.Edges == nil {
+		t.Errorf("empty graph must hold empty slices, not nil: %+v", g)
+	}
+}
+
+func TestGraph_MapsRows(t *testing.T) {
+	a, b := uuid.New(), uuid.New()
+	f := &fakeStore{
+		nodes: []db.ListGraphNodesRow{{ID: a, Title: "A"}, {ID: b, Title: "B"}},
+		edges: []db.NoteLink{{SourceNoteID: a, TargetNoteID: b}},
+	}
+
+	g, _ := note.NewService(f).Graph(context.Background(), uuid.New())
+
+	if len(g.Nodes) != 2 || g.Nodes[1].Title != "B" || len(g.Edges) != 1 || g.Edges[0].Source != a || g.Edges[0].Target != b {
+		t.Errorf("graph: %+v", g)
 	}
 }

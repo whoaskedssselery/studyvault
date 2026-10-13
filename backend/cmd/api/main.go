@@ -50,10 +50,12 @@ func run() error {
 
 	queries := db.New(pool)
 	srv := httpapi.NewServer(cfg, httpapi.Deps{
-		DB:           pool,
-		Auth:         auth.NewService(queries, cfg.JWTSecret),
-		Subjects:     subject.NewService(queries),
-		Notes:        note.NewService(queries),
+		DB:       pool,
+		Auth:     auth.NewService(queries, cfg.JWTSecret),
+		Subjects: subject.NewService(queries),
+		Notes: note.NewService(queries, note.WithTx(func(ctx context.Context, fn func(note.Store) error) error {
+			return db.InTx(ctx, pool, func(q *db.Queries) error { return fn(q) })
+		})),
 		Tags:         tag.NewService(queries),
 		JWTSecret:    cfg.JWTSecret,
 		CookieSecure: cfg.CookieSecure,
