@@ -1,0 +1,1668 @@
+{
+  "version": 1,
+  "users": [
+    {
+      "id": "demo",
+      "name": "Алексей Смирнов",
+      "initials": "АС",
+      "faculty": "Информационные технологии · 2 курс",
+      "color": "purple",
+      "email": "alexey@example.test"
+    },
+    {
+      "id": "anna",
+      "name": "Анна Ковалева",
+      "initials": "АК",
+      "faculty": "Прикладная математика · 3 курс",
+      "color": "pink"
+    },
+    {
+      "id": "max",
+      "name": "Максим Волков",
+      "initials": "МВ",
+      "faculty": "Информационные технологии · 2 курс",
+      "color": "blue"
+    },
+    {
+      "id": "daria",
+      "name": "Дарья Соколова",
+      "initials": "ДС",
+      "faculty": "Физический факультет · 2 курс",
+      "color": "green"
+    },
+    {
+      "id": "ivan",
+      "name": "Иван Петров",
+      "initials": "ИП",
+      "faculty": "Информационные технологии · 3 курс",
+      "color": "orange"
+    }
+  ],
+  "notes": [
+    {
+      "id": "note-1",
+      "title": "Производные: от определения к практике",
+      "description": "Все правила дифференцирования, понятные примеры и разбор типичных ошибок. То, что нужно перед контрольной.",
+      "subject": "Математика",
+      "type": "Конспект",
+      "authorId": "anna",
+      "semester": 2,
+      "tags": [
+        "производные",
+        "матан",
+        "2 семестр"
+      ],
+      "createdAt": "2026-10-08T00:00:00.000Z",
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Все правила дифференцирования, понятные примеры и разбор типичных ошибок. То, что нужно перед контрольной."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Что такое производная"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Производная показывает, как быстро изменяется функция в выбранной точке. Геометрически это угловой коэффициент касательной к графику."
+              }
+            ]
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "f′(x) = lim [f(x + h) − f(x)] / h, при h → 0"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Основные правила"
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "(C)′ = 0 — производная постоянной равна нулю."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "(xⁿ)′ = n · xⁿ⁻¹ — правило для степенной функции."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "(f + g)′ = f′ + g′ — сумму дифференцируем по частям."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "(f · g)′ = f′ · g + f · g′ — правило произведения."
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Разбираем пример"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Пусть f(x) = 3x² + 2x − 7. По правилу суммы: f′(x) = 6x + 2. В точке x = 1 получаем f′(1) = 8 — это наклон касательной."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Частая ошибка"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "При дифференцировании сложной функции не забывайте про внутреннюю производную. Например, (sin(2x))′ = 2cos(2x), а не просто cos(2x)."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Проверьте себя"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Найдите производную f(x) = x³ − 4x. Ответ: f′(x) = 3x² − 4. Попробуйте объяснить каждое действие одногруппнику."
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Производные: от определения к практике Все правила дифференцирования, понятные примеры и разбор типичных ошибок. То, что нужно перед контрольной. Все правила дифференцирования, понятные примеры и разбор типичных ошибок. То, что нужно перед контрольной. Что такое производная Производная показывает, как быстро изменяется функция в выбранной точке. Геометрически это угловой коэффициент касательной к графику. f′(x) = lim [f(x + h) − f(x)] / h, при h → 0 Основные правила (C)′ = 0 — производная постоянной равна нулю. (xⁿ)′ = n · xⁿ⁻¹ — правило для степенной функции. (f + g)′ = f′ + g′ — сумму дифференцируем по частям. (f · g)′ = f′ · g + f · g′ — правило произведения. Разбираем пример Пусть f(x) = 3x² + 2x − 7. По правилу суммы: f′(x) = 6x + 2. В точке x = 1 получаем f′(1) = 8 — это наклон касательной. Частая ошибка При дифференцировании сложной функции не забывайте про внутреннюю производную. Например, (sin(2x))′ = 2cos(2x), а не просто cos(2x). Проверьте себя Найдите производную f(x) = x³ − 4x. Ответ: f′(x) = 3x² − 4. Попробуйте объяснить каждое действие одногруппнику.",
+      "status": "published",
+      "ratings": {
+        "seed1": 4.9,
+        "seed2": 4.9
+      },
+      "saves": [
+        "demo"
+      ],
+      "comments": [
+        {
+          "id": "c1",
+          "userId": "max",
+          "text": "Наконец-то понял геометрический смысл производной. Спасибо за понятное объяснение!",
+          "createdAt": "2026-10-08T12:00:00Z"
+        },
+        {
+          "id": "c2",
+          "userId": "demo",
+          "text": "Очень пригодилось для подготовки к семинару. Добавил в избранное 🙌",
+          "createdAt": "2026-10-08T14:00:00Z"
+        }
+      ],
+      "attachments": [],
+      "views": 128
+    },
+    {
+      "id": "note-2",
+      "title": "SQL без паники: JOIN, GROUP BY и подзапросы",
+      "description": "Наглядная шпаргалка по SQL с примерами запросов. Разбираемся, чем LEFT JOIN отличается от INNER JOIN.",
+      "subject": "Базы данных",
+      "type": "Шпаргалка",
+      "authorId": "max",
+      "semester": 2,
+      "tags": [
+        "SQL",
+        "базы данных",
+        "экзамен"
+      ],
+      "createdAt": "2026-10-07T00:00:00.000Z",
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Наглядная шпаргалка по SQL с примерами запросов. Разбираемся, чем LEFT JOIN отличается от INNER JOIN."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Соединяем таблицы"
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "INNER JOIN возвращает строки, для которых нашлась пара в обеих таблицах."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "LEFT JOIN сохраняет все строки левой таблицы. Если пары нет, поля правой таблицы будут NULL."
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "codeBlock",
+            "content": [
+              {
+                "type": "text",
+                "text": "SELECT u.display_name, n.title\nFROM users AS u\nLEFT JOIN notes AS n ON n.user_id = u.id;"
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Группировка и агрегаты"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "GROUP BY объединяет строки в группы. COUNT, SUM и AVG вычисляют значения для каждой группы. WHERE фильтрует исходные строки, HAVING — результат группировки."
+              }
+            ]
+          },
+          {
+            "type": "codeBlock",
+            "content": [
+              {
+                "type": "text",
+                "text": "SELECT user_id, COUNT(*) AS note_count\nFROM notes\nGROUP BY user_id\nHAVING COUNT(*) >= 3;"
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Подзапрос"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Подзапрос — запрос внутри другого SQL-запроса. Например, можно выбрать авторов, которые создали хотя бы один конспект."
+              }
+            ]
+          },
+          {
+            "type": "codeBlock",
+            "content": [
+              {
+                "type": "text",
+                "text": "SELECT display_name FROM users\nWHERE id IN (SELECT user_id FROM notes);"
+              }
+            ]
+          }
+        ]
+      },
+      "text": "SQL без паники: JOIN, GROUP BY и подзапросы Наглядная шпаргалка по SQL с примерами запросов. Разбираемся, чем LEFT JOIN отличается от INNER JOIN. Наглядная шпаргалка по SQL с примерами запросов. Разбираемся, чем LEFT JOIN отличается от INNER JOIN. Соединяем таблицы INNER JOIN возвращает строки, для которых нашлась пара в обеих таблицах. LEFT JOIN сохраняет все строки левой таблицы. Если пары нет, поля правой таблицы будут NULL. SELECT u.display_name, n.title\nFROM users AS u\nLEFT JOIN notes AS n ON n.user_id = u.id; Группировка и агрегаты GROUP BY объединяет строки в группы. COUNT, SUM и AVG вычисляют значения для каждой группы. WHERE фильтрует исходные строки, HAVING — результат группировки. SELECT user_id, COUNT(*) AS note_count\nFROM notes\nGROUP BY user_id\nHAVING COUNT(*) >= 3; Подзапрос Подзапрос — запрос внутри другого SQL-запроса. Например, можно выбрать авторов, которые создали хотя бы один конспект. SELECT display_name FROM users\nWHERE id IN (SELECT user_id FROM notes);",
+      "status": "published",
+      "ratings": {
+        "seed1": 4.8,
+        "seed2": 4.8
+      },
+      "saves": [],
+      "comments": [],
+      "attachments": [],
+      "views": 96
+    },
+    {
+      "id": "note-3",
+      "title": "Алгоритмы сортировки: сравнение и сложность",
+      "description": "От пузырька до быстрой сортировки. Принципы работы, примеры на Python и таблица сложности алгоритмов.",
+      "subject": "Программирование",
+      "type": "Конспект",
+      "authorId": "ivan",
+      "semester": 2,
+      "tags": [
+        "алгоритмы",
+        "Python",
+        "структуры данных"
+      ],
+      "createdAt": "2026-10-06T00:00:00.000Z",
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "От пузырька до быстрой сортировки. Принципы работы, примеры на Python и таблица сложности алгоритмов."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Что значит сложность"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Сложность описывает рост числа операций при увеличении размера входных данных. Для сортировок важно различать худший и средний случаи."
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Пузырьковая сортировка: O(n²) в среднем и в худшем случае."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Сортировка слиянием: O(n log n), но требует дополнительной памяти."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Быстрая сортировка: в среднем O(n log n), в худшем случае O(n²)."
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Сортировка слиянием на Python"
+              }
+            ]
+          },
+          {
+            "type": "codeBlock",
+            "content": [
+              {
+                "type": "text",
+                "text": "def merge_sort(items):\n    if len(items) <= 1:\n        return items\n    middle = len(items) // 2\n    left = merge_sort(items[:middle])\n    right = merge_sort(items[middle:])\n    result = []\n    i = j = 0\n    while i < len(left) and j < len(right):\n        if left[i] <= right[j]:\n            result.append(left[i]); i += 1\n        else:\n            result.append(right[j]); j += 1\n    return result + left[i:] + right[j:]"
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Проверьте себя"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Почему деление массива пополам даёт логарифмическую глубину? Чем стабильная сортировка отличается от нестабильной?"
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Алгоритмы сортировки: сравнение и сложность От пузырька до быстрой сортировки. Принципы работы, примеры на Python и таблица сложности алгоритмов. От пузырька до быстрой сортировки. Принципы работы, примеры на Python и таблица сложности алгоритмов. Что значит сложность Сложность описывает рост числа операций при увеличении размера входных данных. Для сортировок важно различать худший и средний случаи. Пузырьковая сортировка: O(n²) в среднем и в худшем случае. Сортировка слиянием: O(n log n), но требует дополнительной памяти. Быстрая сортировка: в среднем O(n log n), в худшем случае O(n²). Сортировка слиянием на Python def merge_sort(items):\n    if len(items) <= 1:\n        return items\n    middle = len(items) // 2\n    left = merge_sort(items[:middle])\n    right = merge_sort(items[middle:])\n    result = []\n    i = j = 0\n    while i < len(left) and j < len(right):\n        if left[i] <= right[j]:\n            result.append(left[i]); i += 1\n        else:\n            result.append(right[j]); j += 1\n    return result + left[i:] + right[j:] Проверьте себя Почему деление массива пополам даёт логарифмическую глубину? Чем стабильная сортировка отличается от нестабильной?",
+      "status": "published",
+      "ratings": {
+        "seed1": 4.9,
+        "seed2": 4.9
+      },
+      "saves": [
+        "demo"
+      ],
+      "comments": [],
+      "attachments": [],
+      "views": 84
+    },
+    {
+      "id": "note-4",
+      "title": "Термодинамика: главное в одном конспекте",
+      "description": "Первое и второе начала термодинамики, идеальный газ и основные формулы с пояснениями.",
+      "subject": "Физика",
+      "type": "Конспект",
+      "authorId": "daria",
+      "semester": 2,
+      "tags": [
+        "термодинамика",
+        "формулы",
+        "физика"
+      ],
+      "createdAt": "2026-10-05T00:00:00.000Z",
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Первое и второе начала термодинамики, идеальный газ и основные формулы с пояснениями."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Идеальный газ"
+              }
+            ]
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "pV = νRT"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "p — давление, V — объём, ν — количество вещества, R — универсальная газовая постоянная, T — абсолютная температура в кельвинах."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Первое начало термодинамики"
+              }
+            ]
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Q = ΔU + A"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Здесь A — работа, совершённая газом. Подведённая теплота расходуется на изменение внутренней энергии и выполнение работы."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Основные процессы"
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Изохорный: объём постоянен, работа газа равна нулю."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Изобарный: давление постоянно, A = p · ΔV."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Изотермический: температура постоянна, для идеального газа ΔU = 0."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Адиабатный: нет теплообмена с окружающей средой, Q = 0."
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Второе начало"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Теплота не переходит самопроизвольно от холодного тела к горячему. В циклическом процессе нельзя полностью превратить полученную теплоту в работу без других изменений."
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Термодинамика: главное в одном конспекте Первое и второе начала термодинамики, идеальный газ и основные формулы с пояснениями. Первое и второе начала термодинамики, идеальный газ и основные формулы с пояснениями. Идеальный газ pV = νRT p — давление, V — объём, ν — количество вещества, R — универсальная газовая постоянная, T — абсолютная температура в кельвинах. Первое начало термодинамики Q = ΔU + A Здесь A — работа, совершённая газом. Подведённая теплота расходуется на изменение внутренней энергии и выполнение работы. Основные процессы Изохорный: объём постоянен, работа газа равна нулю. Изобарный: давление постоянно, A = p · ΔV. Изотермический: температура постоянна, для идеального газа ΔU = 0. Адиабатный: нет теплообмена с окружающей средой, Q = 0. Второе начало Теплота не переходит самопроизвольно от холодного тела к горячему. В циклическом процессе нельзя полностью превратить полученную теплоту в работу без других изменений.",
+      "status": "published",
+      "ratings": {
+        "seed1": 4.7,
+        "seed2": 4.7
+      },
+      "saves": [],
+      "comments": [],
+      "attachments": [],
+      "views": 67
+    },
+    {
+      "id": "note-5",
+      "title": "Времена английского языка — на одной странице",
+      "description": "Двенадцать времён, слова-маркеры и примеры. Компактная таблица для быстрого повторения.",
+      "subject": "Английский язык",
+      "type": "Шпаргалка",
+      "authorId": "anna",
+      "semester": 2,
+      "tags": [
+        "грамматика",
+        "English",
+        "таблица"
+      ],
+      "createdAt": "2026-10-04T00:00:00.000Z",
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Двенадцать времён, слова-маркеры и примеры. Компактная таблица для быстрого повторения."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Present: настоящее"
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Present Simple — привычки и общие факты: I study every day."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Present Continuous — процесс сейчас: I am studying now."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Present Perfect — результат к настоящему моменту: I have finished my notes."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Present Perfect Continuous — длительность до настоящего момента: I have been studying for two hours."
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Past: прошлое"
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Past Simple — завершённое событие: I studied yesterday."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Past Continuous — процесс в момент в прошлом: I was studying at 6 pm."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Past Perfect — действие до другого прошлого события: I had finished before they arrived."
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Future: будущее"
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Future Simple — решение или прогноз: I will study tomorrow."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Future Continuous — процесс в будущем: I will be studying at 6 pm."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Future Perfect — завершение к сроку: I will have finished by Friday."
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Сначала определите смысл: факт, процесс, результат или длительность. Затем выберите временную точку."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Времена английского языка — на одной странице Двенадцать времён, слова-маркеры и примеры. Компактная таблица для быстрого повторения. Двенадцать времён, слова-маркеры и примеры. Компактная таблица для быстрого повторения. Present: настоящее Present Simple — привычки и общие факты: I study every day. Present Continuous — процесс сейчас: I am studying now. Present Perfect — результат к настоящему моменту: I have finished my notes. Present Perfect Continuous — длительность до настоящего момента: I have been studying for two hours. Past: прошлое Past Simple — завершённое событие: I studied yesterday. Past Continuous — процесс в момент в прошлом: I was studying at 6 pm. Past Perfect — действие до другого прошлого события: I had finished before they arrived. Future: будущее Future Simple — решение или прогноз: I will study tomorrow. Future Continuous — процесс в будущем: I will be studying at 6 pm. Future Perfect — завершение к сроку: I will have finished by Friday. Сначала определите смысл: факт, процесс, результат или длительность. Затем выберите временную точку.",
+      "status": "published",
+      "ratings": {
+        "seed1": 4.8,
+        "seed2": 4.8
+      },
+      "saves": [],
+      "comments": [],
+      "attachments": [],
+      "views": 112
+    },
+    {
+      "id": "note-6",
+      "title": "ООП: классы, наследование и полиморфизм",
+      "description": "Четыре принципа объектно-ориентированного программирования на простых примерах из жизни и кода.",
+      "subject": "Программирование",
+      "type": "Конспект",
+      "authorId": "demo",
+      "semester": 2,
+      "tags": [
+        "ООП",
+        "Java",
+        "программирование"
+      ],
+      "createdAt": "2026-10-03T00:00:00.000Z",
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Четыре принципа объектно-ориентированного программирования на простых примерах из жизни и кода."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Четыре принципа"
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Инкапсуляция — скрываем внутреннюю реализацию и открываем понятный интерфейс."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Абстракция — выделяем существенные свойства объекта."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Наследование — строим новый класс на основе существующего."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Полиморфизм — используем один интерфейс для объектов разных типов."
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Простой пример на Java"
+              }
+            ]
+          },
+          {
+            "type": "codeBlock",
+            "content": [
+              {
+                "type": "text",
+                "text": "interface Shape {\n    double area();\n}\n\nclass Square implements Shape {\n    private final double side;\n    Square(double side) { this.side = side; }\n    public double area() { return side * side; }\n}"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Код, который работает с Shape, может вызывать area(), не зная конкретного типа фигуры. Это пример полиморфизма через интерфейс."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Проверьте себя"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Почему поле side закрыто? Можно ли добавить Circle без изменения кода, работающего с Shape?"
+              }
+            ]
+          }
+        ]
+      },
+      "text": "ООП: классы, наследование и полиморфизм Четыре принципа объектно-ориентированного программирования на простых примерах из жизни и кода. Четыре принципа объектно-ориентированного программирования на простых примерах из жизни и кода. Четыре принципа Инкапсуляция — скрываем внутреннюю реализацию и открываем понятный интерфейс. Абстракция — выделяем существенные свойства объекта. Наследование — строим новый класс на основе существующего. Полиморфизм — используем один интерфейс для объектов разных типов. Простой пример на Java interface Shape {\n    double area();\n}\n\nclass Square implements Shape {\n    private final double side;\n    Square(double side) { this.side = side; }\n    public double area() { return side * side; }\n} Код, который работает с Shape, может вызывать area(), не зная конкретного типа фигуры. Это пример полиморфизма через интерфейс. Проверьте себя Почему поле side закрыто? Можно ли добавить Circle без изменения кода, работающего с Shape?",
+      "status": "published",
+      "ratings": {
+        "seed1": 4.6,
+        "seed2": 4.6
+      },
+      "saves": [],
+      "comments": [],
+      "attachments": [],
+      "views": 53
+    },
+    {
+      "id": "note-7",
+      "title": "Линейная алгебра: матрицы и определители",
+      "description": "Операции с матрицами, метод Гаусса и вычисление определителей второго и третьего порядка.",
+      "subject": "Математика",
+      "type": "Конспект",
+      "authorId": "max",
+      "semester": 2,
+      "tags": [
+        "матрицы",
+        "линейная алгебра"
+      ],
+      "createdAt": "2026-10-02T00:00:00.000Z",
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Операции с матрицами, метод Гаусса и вычисление определителей второго и третьего порядка."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Матрица и её размер"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Матрица — прямоугольная таблица чисел. Матрица размера m × n содержит m строк и n столбцов."
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Складывать можно матрицы одинакового размера."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "При умножении A · B число столбцов A должно совпадать с числом строк B."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "В общем случае A · B не равно B · A."
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Определитель 2 × 2"
+              }
+            ]
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "det [[a, b], [c, d]] = ad − bc"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Например, для матрицы [[2, 1], [3, 4]] определитель равен 2 · 4 − 1 · 3 = 5."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Метод Гаусса"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Приведите систему к ступенчатому виду с помощью элементарных преобразований строк, затем найдите неизвестные обратной подстановкой."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Проверьте себя"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Может ли прямоугольная матрица иметь определитель? Что означает нулевой определитель квадратной матрицы для её обратимости?"
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Линейная алгебра: матрицы и определители Операции с матрицами, метод Гаусса и вычисление определителей второго и третьего порядка. Операции с матрицами, метод Гаусса и вычисление определителей второго и третьего порядка. Матрица и её размер Матрица — прямоугольная таблица чисел. Матрица размера m × n содержит m строк и n столбцов. Складывать можно матрицы одинакового размера. При умножении A · B число столбцов A должно совпадать с числом строк B. В общем случае A · B не равно B · A. Определитель 2 × 2 det [[a, b], [c, d]] = ad − bc Например, для матрицы [[2, 1], [3, 4]] определитель равен 2 · 4 − 1 · 3 = 5. Метод Гаусса Приведите систему к ступенчатому виду с помощью элементарных преобразований строк, затем найдите неизвестные обратной подстановкой. Проверьте себя Может ли прямоугольная матрица иметь определитель? Что означает нулевой определитель квадратной матрицы для её обратимости?",
+      "status": "published",
+      "ratings": {
+        "seed1": 4.8,
+        "seed2": 4.8
+      },
+      "saves": [],
+      "comments": [],
+      "attachments": [],
+      "views": 75
+    },
+    {
+      "id": "note-8",
+      "title": "Нормализация баз данных: 1НФ, 2НФ, 3НФ",
+      "description": "Как избавиться от дублирования данных и спроектировать понятную схему. Примеры пошаговой нормализации.",
+      "subject": "Базы данных",
+      "type": "Конспект",
+      "authorId": "demo",
+      "semester": 2,
+      "tags": [
+        "нормализация",
+        "проектирование",
+        "SQL"
+      ],
+      "createdAt": "2026-10-01T00:00:00.000Z",
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Как избавиться от дублирования данных и спроектировать понятную схему. Примеры пошаговой нормализации."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Зачем нужна нормализация"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Нормализация помогает уменьшить избыточность и избежать аномалий вставки, изменения и удаления. Основа анализа — ключи и функциональные зависимости."
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "1НФ: в каждой ячейке одно значение, нет повторяющихся групп."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "2НФ: таблица в 1НФ; неключевые атрибуты не зависят от части составного кандидатного ключа."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "3НФ: для каждой нетривиальной зависимости X → A либо X — суперключ, либо A входит в кандидатный ключ."
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Практический пример"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "В таблице записей на курсы (student_id, course_id, student_name, course_title) ключ составной. Имя зависит только от student_id, название курса — только от course_id. Это частичные зависимости."
+              }
+            ]
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Разделите данные на students, courses и enrollments. Свяжите таблицы внешними ключами."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Проверьте себя"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Какие данные придётся менять при переименовании курса в исходной таблице? Как нормализация устраняет эту проблему?"
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Нормализация баз данных: 1НФ, 2НФ, 3НФ Как избавиться от дублирования данных и спроектировать понятную схему. Примеры пошаговой нормализации. Как избавиться от дублирования данных и спроектировать понятную схему. Примеры пошаговой нормализации. Зачем нужна нормализация Нормализация помогает уменьшить избыточность и избежать аномалий вставки, изменения и удаления. Основа анализа — ключи и функциональные зависимости. 1НФ: в каждой ячейке одно значение, нет повторяющихся групп. 2НФ: таблица в 1НФ; неключевые атрибуты не зависят от части составного кандидатного ключа. 3НФ: для каждой нетривиальной зависимости X → A либо X — суперключ, либо A входит в кандидатный ключ. Практический пример В таблице записей на курсы (student_id, course_id, student_name, course_title) ключ составной. Имя зависит только от student_id, название курса — только от course_id. Это частичные зависимости. Разделите данные на students, courses и enrollments. Свяжите таблицы внешними ключами. Проверьте себя Какие данные придётся менять при переименовании курса в исходной таблице? Как нормализация устраняет эту проблему?",
+      "status": "published",
+      "ratings": {
+        "seed1": 4.9,
+        "seed2": 4.9
+      },
+      "saves": [],
+      "comments": [],
+      "attachments": [],
+      "views": 42
+    },
+    {
+      "id": "note-9",
+      "title": "Графы и поиск в ширину",
+      "description": "Очередь, посещённые вершины и кратчайший путь в невзвешенном графе.",
+      "subject": "Программирование",
+      "type": "Конспект",
+      "authorId": "ivan",
+      "semester": 2,
+      "tags": [
+        "графы",
+        "алгоритмы"
+      ],
+      "createdAt": "2026-10-09T09:00:00Z",
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Очередь, посещённые вершины и кратчайший путь в невзвешенном графе."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Как работает BFS"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Поместите стартовую вершину в очередь и отметьте её как посещённую. Затем по очереди обрабатывайте вершины и добавляйте в очередь непосещённых соседей."
+              }
+            ]
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Сложность BFS при хранении графа списками смежности: O(V + E)."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Графы и поиск в ширину Очередь, посещённые вершины и кратчайший путь в невзвешенном графе.",
+      "status": "pending",
+      "ratings": {},
+      "saves": [],
+      "comments": [],
+      "attachments": [],
+      "views": 128
+    },
+    {
+      "id": "note-10",
+      "title": "Интегралы: основные методы решения",
+      "description": "Замена переменной и интегрирование по частям с примерами.",
+      "subject": "Математика",
+      "type": "Конспект",
+      "authorId": "anna",
+      "semester": 2,
+      "tags": [
+        "интегралы",
+        "матан"
+      ],
+      "createdAt": "2026-10-09T09:00:00Z",
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Замена переменной и интегрирование по частям с примерами."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Интегрирование по частям"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Формула: ∫u dv = uv − ∫v du. Выбирайте u так, чтобы его производная стала проще."
+              }
+            ]
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "∫x cos(x) dx = x sin(x) + cos(x) + C"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Интегралы: основные методы решения Замена переменной и интегрирование по частям с примерами.",
+      "status": "pending",
+      "ratings": {},
+      "saves": [],
+      "comments": [],
+      "attachments": [],
+      "views": 96
+    }
+  ]
+}

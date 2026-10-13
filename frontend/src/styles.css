@@ -2844,6 +2844,8 @@ td {
     transition: none !important;
   }
 }
+.load-error { max-width: 650px; margin: 100px auto; }
+.load-error p { overflow-wrap: anywhere; }
 /* Comfortable text sizes and contrast for reading and report screenshots. */
 .nav-item {
   font-size: 13px;

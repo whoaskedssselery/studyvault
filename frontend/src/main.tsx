@@ -68,6 +68,7 @@ import {
 } from "./data";
 import type { Attachment, Database, Note, User } from "./data";
 import type { JSONContent } from "@tiptap/react";
+import { readSession } from './repository';
 import "./styles.css";
 
 const queryClient = new QueryClient();
@@ -177,14 +178,12 @@ function Modal({
 }
 function App() {
   const client = useQueryClient();
-  const { data: db, error } = useQuery({
+  const { data: db, error, refetch, isFetching } = useQuery({
     queryKey: ["database"],
     queryFn: repository.read,
+    retry: false,
   });
-  const [userId, setUserId] = useState<string | null>(() => {
-    const value = localStorage.getItem(sessionKey);
-    return value === null ? demoUser.id : value || null;
-  });
+  const [userId, setUserId] = useState<string | null>(readSession);
   const [subject, setSubject] = useState("Все предметы"),
     [search, setSearch] = useState(""),
     [mobile, setMobile] = useState(false),
@@ -243,11 +242,13 @@ function App() {
   };
   if (error)
     return (
-      <div className="loading">
-        Не удалось загрузить локальные данные. Проверьте настройки браузера.
+      <div className="empty load-error" role="alert">
+        <FileText size={38}/><h1>Не удалось открыть библиотеку</h1>
+        <p>{error.message}</p>
+        <button className="button primary" onClick={() => void refetch()} disabled={isFetching}>Повторить загрузку</button>
       </div>
     );
-  if (!db) return <div className="loading">Открываем StudyVault…</div>;
+  if (!db) return <div className="loading" role="status">Загружаем материалы из mock.json…</div>;
   const state = {
     db,
     user,
@@ -483,6 +484,7 @@ function App() {
             Вход, регистрация и роль модератора моделируются; реальные аккаунты
             и сервер пока не подключены. Используйте вымышленные данные.
           </div>
+          <p>Начальные материалы загружаются из <a className="text-button" href="/mock.json" target="_blank" rel="noreferrer">mock.json</a>. После первых изменений используется локальная копия. Данные сообщества демонстрационные.</p>
           <p>
             Нажмите <kbd>Ctrl K</kbd>, чтобы быстро найти материал. Создайте
             конспект и отправьте его на проверку во вкладке «Модерация».
