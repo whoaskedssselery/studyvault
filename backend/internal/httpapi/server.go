@@ -32,6 +32,7 @@ type Deps struct {
 	Auth         Authenticator
 	Subjects     SubjectService
 	Notes        NoteService
+	Tags         TagService
 	JWTSecret    []byte
 	CookieSecure bool
 }

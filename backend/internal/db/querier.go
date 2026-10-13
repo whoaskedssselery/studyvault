@@ -11,11 +11,14 @@ import (
 )
 
 type Querier interface {
+	CountUserTags(ctx context.Context, arg CountUserTagsParams) (int64, error)
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSubject(ctx context.Context, arg CreateSubjectParams) (Subject, error)
+	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteSubject(ctx context.Context, arg DeleteSubjectParams) (int64, error)
+	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	GetNote(ctx context.Context, arg GetNoteParams) (Note, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, lower string) (User, error)
@@ -24,6 +27,12 @@ type Querier interface {
 	// предыдущей страницы. Все фильтры необязательные: NULL значит «не фильтровать».
 	ListNotes(ctx context.Context, arg ListNotesParams) ([]ListNotesRow, error)
 	ListSubjects(ctx context.Context, userID uuid.UUID) ([]Subject, error)
+	ListTags(ctx context.Context, userID uuid.UUID) ([]Tag, error)
+	NoteOwnedByUser(ctx context.Context, arg NoteOwnedByUserParams) (bool, error)
+	// Заменяет набор тегов заметки одним запросом, поэтому либо применяется целиком, либо нет:
+	// лишние связи удаляются, недостающие добавляются. Теги чужих пользователей не вставятся
+	// даже при ошибке в вызывающем коде.
+	ReplaceNoteTags(ctx context.Context, arg ReplaceNoteTagsParams) error
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	// Возвращает число изменённых строк: 0 значит, что токен уже отозван (или его нет).
 	// Это делает ротацию атомарной: из двух параллельных запросов выиграет только один.

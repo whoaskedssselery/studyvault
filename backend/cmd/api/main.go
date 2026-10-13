@@ -19,6 +19,7 @@ import (
 	"github.com/whoaskedssselery/studyvault/backend/internal/httpapi"
 	"github.com/whoaskedssselery/studyvault/backend/internal/note"
 	"github.com/whoaskedssselery/studyvault/backend/internal/subject"
+	"github.com/whoaskedssselery/studyvault/backend/internal/tag"
 )
 
 func main() {
@@ -53,6 +54,7 @@ func run() error {
 		Auth:         auth.NewService(queries, cfg.JWTSecret),
 		Subjects:     subject.NewService(queries),
 		Notes:        note.NewService(queries),
+		Tags:         tag.NewService(queries),
 		JWTSecret:    cfg.JWTSecret,
 		CookieSecure: cfg.CookieSecure,
 	})
