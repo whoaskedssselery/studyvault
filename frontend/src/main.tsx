@@ -69,6 +69,8 @@ import {
 import type { Attachment, Database, Note, User } from "./data";
 import type { JSONContent } from "@tiptap/react";
 import { readSession } from './repository';
+import { ApiStatus } from './api-status';
+import { exportNote } from './downloads';
 import "./styles.css";
 
 const queryClient = new QueryClient();
@@ -280,6 +282,7 @@ function App() {
     ["/my", "Мои материалы", FileText],
     ["/ranking", "Рейтинг студентов", Trophy],
     ["/moderation", "Модерация", ShieldCheck],
+    ["/api-status", "Проверка API", Code2],
   ];
   const currentTitle =
     navigation.find(([path]) => path === pathname)?.[1] ||
@@ -449,6 +452,8 @@ function App() {
               <Moderation />
             ) : pathname === "/profile" ? (
               <Profile logout={() => login(null)} />
+            ) : pathname === "/api-status" ? (
+              <ApiStatus />
             ) : (
               <div className="empty">
                 <BookOpen />
@@ -1055,6 +1060,7 @@ function RenderContent({ node }: { node: JSONContent }) {
       if (m.type === "bold") result = <strong>{result}</strong>;
       if (m.type === "italic") result = <em>{result}</em>;
       if (m.type === "code") result = <code>{result}</code>;
+      if (m.type === 'link' && typeof m.attrs?.href === 'string' && /^https?:\/\//i.test(m.attrs.href)) result = <a href={m.attrs.href} target="_blank" rel="noreferrer">{result}</a>;
     });
     return <>{result}</>;
   }
@@ -1096,6 +1102,7 @@ function NotePage({ id }: { id: string }) {
   const { db, user, go, update, requireUser, toast } = useApp(),
     note = db.notes.find((n) => n.id === id);
   const [comment, setComment] = useState("");
+  const [deleting, setDeleting] = useState(false);
   if (!note)
     return (
       <div className="empty">
@@ -1132,6 +1139,8 @@ function NotePage({ id }: { id: string }) {
         <ArrowLeft size={16} />
         Назад в библиотеку
       </button>
+      <div className="reader-tools"><button className="button secondary small" onClick={() => exportNote(note)}><Download size={15}/>Скачать Markdown</button>{user?.id === note.authorId && <button className="text-button danger" onClick={() => setDeleting(true)}>Удалить материал</button>}</div>
+      {deleting && <Modal title="Удалить материал?" close={() => setDeleting(false)}><p>«{note.title}» будет удалён из вашей локальной демоверсии вместе с комментариями и вложениями. Исходный mock.json останется без изменений.</p><div className="modal-actions"><button className="button secondary" onClick={() => setDeleting(false)}>Отмена</button><button className="button primary" onClick={async () => { if (user?.id !== note.authorId) return; if (await update(db => ({ ...db, notes: db.notes.filter(n => n.id !== id) }))) { toast('Материал удалён из локальной библиотеки'); go('/my'); } }}>Подтвердить удаление</button></div></Modal>}
       <div className="reader-layout">
         <article className="reader">
           {note.authorId === user?.id && (
@@ -2221,6 +2230,7 @@ const routeTree = rootRoute.addChildren(
     "/register",
     "/notes/$noteId",
     "/edit/$noteId",
+    "/api-status",
   ].map((path) => createRoute({ getParentRoute: () => rootRoute, path })),
 );
 const router = createRouter({
