@@ -730,7 +730,7 @@ export interface components {
     };
     requestBodies: never;
     headers: {
-        /** @description `refresh_token=<value>; HttpOnly; SameSite=Lax; Path=/auth` */
+        /** @description `refresh_token=<value>; HttpOnly; SameSite=Lax; Path=/v1/auth` */
         RefreshCookie: string;
     };
     pathItems: never;
