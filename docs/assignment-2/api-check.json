@@ -1,12 +1,12 @@
 {
-  "checkedAt": "2026-10-13T23:29:21.470Z",
+  "checkedAt": "2026-10-13T23:31:34.007Z",
   "authenticated": false,
   "results": [
     {
       "path": "/health",
       "status": 502,
       "contentType": "application/json; charset=utf-8",
-      "milliseconds": 28,
+      "milliseconds": 20,
       "body": {
         "error": {
           "code": "api_unavailable",
@@ -20,7 +20,7 @@
       "path": "/notes",
       "status": 502,
       "contentType": "application/json; charset=utf-8",
-      "milliseconds": 27,
+      "milliseconds": 20,
       "body": {
         "error": {
           "code": "api_unavailable",
@@ -34,7 +34,7 @@
       "path": "/subjects",
       "status": 502,
       "contentType": "application/json; charset=utf-8",
-      "milliseconds": 27,
+      "milliseconds": 21,
       "body": {
         "error": {
           "code": "api_unavailable",
