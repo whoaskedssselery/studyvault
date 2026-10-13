@@ -20,6 +20,18 @@ npm run dev
 
 [Возможности фронтенда и инструкция](docs/frontend.md) · [Скриншоты для отчёта](docs/screenshots)
 
+## Следующее задание: Frontend + mock.json
+
+Готовые файлы **index.html + mock.json** находятся в [deliverables/frontend](deliverables/frontend). CSS и JavaScript включены в HTML; установка npm для просмотра не нужна.
+
+```bash
+node deliverables/frontend/serve.mjs
+```
+
+Откройте `http://127.0.0.1:4173`. Библиотека работает независимо от API. Экран «Проверка API» проверяет JSON и защиту маршрутов без токена.
+
+[Отчёт фронтендера](docs/assignment-2/frontend-report.md) · [Проверки и баг-репорты](docs/assignment-2/bug-reports.md)
+
 ## Запуск инфраструктуры бэкенда
 
 ```bash

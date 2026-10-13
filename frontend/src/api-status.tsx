@@ -12,6 +12,7 @@ async function inspect(path: string, signal: AbortSignal): Promise<Result> {
     const raw = await response.text();
     try { body = JSON.parse(raw); } catch { body = raw.slice(0, 5000); }
     if (!contentType.toLowerCase().includes('application/json') || !object(body)) return { path, status, contentType, milliseconds: Math.round(performance.now() - start), body, ok: false, message: 'Ответ не является JSON-объектом с Content-Type application/json' };
+    if (status === 502 && object(body.error) && body.error.code === 'api_unavailable') return { path, status, contentType, milliseconds: Math.round(performance.now() - start), body, ok: false, message: 'API не запущен. Библиотека продолжает работать на mock.json.' };
     if (path === '/health') {
       const ok = status === 200 && body.status === 'ok';
       return { path, status, contentType, milliseconds: Math.round(performance.now() - start), body, ok, message: ok ? 'Сервер и база данных доступны' : status === 503 && body.status === 'unavailable' ? 'JSON получен, но база данных недоступна' : 'Ответ /health не соответствует контракту' };
