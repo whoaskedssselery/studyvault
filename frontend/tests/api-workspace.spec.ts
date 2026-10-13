@@ -363,12 +363,14 @@ test("wrong credentials never refresh; auth rate limits show Retry-After", async
     if (route.request().url().endsWith("/auth/refresh")) refreshes++;
     return route.fulfill({
       status,
+      contentType: "application/problem+json",
       headers: { "Retry-After": "30" },
       json: {
-        error: {
-          code: status === 401 ? "invalid_credentials" : "rate_limited",
-          message: "error",
-        },
+        type: "https://example.test/errors",
+        title: status === 401 ? "Unauthorized" : "Too Many Requests",
+        status,
+        code: status === 401 ? "invalid_credentials" : "rate_limited",
+        detail: "error",
       },
     });
   });
@@ -383,6 +385,20 @@ test("wrong credentials never refresh; auth rate limits show Retry-After", async
   status = 429;
   await page.getByRole("button", { name: "Войти в API", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("30 сек.");
+});
+
+test('RFC 7807 quota errors keep the workspace and unsaved subject available', async ({ page }) => {
+  await setup(page); await login(page);
+  await page.route('**/backend-api/subjects', async route => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    return route.fulfill({ status: 409, contentType: 'application/problem+json', body: JSON.stringify({ type: 'https://example.test/errors#limit_reached', title: 'Conflict', status: 409, code: 'limit_reached', detail: 'at most 200 subjects', request_id: 'quota-fixture' }) });
+  });
+  await page.getByLabel('Новый предмет', { exact: true }).fill('Не сохранённый предмет');
+  await page.getByRole('button', { name: 'Создать предмет', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Достигнут лимит');
+  await expect(page.getByLabel('Новый предмет', { exact: true })).toHaveValue('Не сохранённый предмет');
+  await expect(page.getByRole('heading', { name: 'Мои знания.' })).toBeVisible();
+  await expect(page.getByText('Предмет создан', { exact: true })).toHaveCount(0);
 });
 
 test('API registration sends display_name and deletion uses the note UUID', async ({ page }) => {

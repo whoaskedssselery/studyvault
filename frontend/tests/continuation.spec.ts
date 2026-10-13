@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 test('API diagnostics accept JSON health and unauthenticated errors, export results', async ({ page }) => {
-  await page.route('**/backend-api/**', route => route.request().url().endsWith('/health') ? route.fulfill({ json: { status: 'ok' } }) : route.fulfill({ status: 401, json: { error: { code: 'unauthorized', message: 'access token required' } } }));
+  await page.route('**/backend-api/**', route => route.request().url().endsWith('/health') ? route.fulfill({ json: { status: 'ok' } }) : route.fulfill({ status: 401, contentType: 'application/problem+json', body: JSON.stringify({ type: 'https://example.test/errors#unauthorized', title: 'Unauthorized', status: 401, code: 'unauthorized', detail: 'access token required', request_id: 'fixture-request' }) }));
   await page.goto('/api-status');
   await page.getByRole('button', { name: 'Проверить API', exact: true }).click();
   await expect(page.locator('.api-result')).toHaveCount(3);
@@ -15,7 +15,7 @@ test('API diagnostics report non-JSON and unavailable database', async ({ page }
   await page.route('**/backend-api/**', route => route.request().url().endsWith('/health') ? route.fulfill({ status: 503, json: { status: 'unavailable' } }) : route.fulfill({ status: 500, contentType: 'text/html', body: '<h1>error</h1>' }));
   await page.goto('/api-status'); await page.getByRole('button', { name: 'Проверить API', exact: true }).click();
   await expect(page.getByText('JSON получен, но база данных недоступна')).toBeVisible();
-  await expect(page.getByText('Ответ не является JSON-объектом с Content-Type application/json')).toHaveCount(2);
+  await expect(page.getByText('Ответ не является JSON-объектом с Content-Type application/json или application/problem+json')).toHaveCount(2);
 });
 test('exported Markdown contains note content; deletion is confirmed and persists', async ({ page }) => {
   await page.goto('/notes/note-6');

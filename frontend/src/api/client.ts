@@ -131,12 +131,13 @@ async function result<T>(
   }
   if (!value.response.ok) {
     const error = value.error as
-      { error?: { code?: string; message?: string } } | undefined;
-    const code = error?.error?.code || "http_error";
+      { code?: string; detail?: string; error?: { code?: string; message?: string } } | undefined;
+    const code = error?.code || error?.error?.code || "http_error";
     const messages: Record<string, string> = {
       invalid_credentials: "Неверная почта или пароль.",
       email_taken: "Эта почта уже зарегистрирована.",
       rate_limited: "Слишком много попыток. Повторите позже.",
+      limit_reached: "Достигнут лимит предметов, тегов или файлов. Удалите ненужные объекты и повторите попытку.",
       not_found: "Объект не найден или принадлежит другому пользователю.",
       search_unavailable:
         "Поиск временно недоступен. Заметки доступны в списке.",
@@ -148,6 +149,7 @@ async function result<T>(
       value.response.status,
       code,
       messages[code] ||
+        error?.detail ||
         error?.error?.message ||
         `Ошибка API: HTTP ${value.response.status}`,
       value.response.headers.get("retry-after"),

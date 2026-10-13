@@ -382,12 +382,36 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        Error: {
-            error: {
-                /** @description Машиночитаемый код, например `validation_failed`, `not_found` */
-                code: string;
-                message: string;
-            };
+        /** @description Описание ошибки по RFC 7807 с расширениями `code` и `request_id` */
+        Problem: {
+            /**
+             * Format: uri
+             * @description Адрес описания этого вида ошибки
+             * @example https://github.com/whoaskedssselery/studyvault/blob/main/docs/errors.md#not_found
+             */
+            type: string;
+            /**
+             * @description Краткое название по HTTP-статусу
+             * @example Not Found
+             */
+            title: string;
+            /** @example 404 */
+            status: number;
+            /**
+             * @description Объяснение для человека
+             * @example note not found
+             */
+            detail: string;
+            /**
+             * @description Стабильный машиночитаемый код, например `validation_failed` или `not_found`
+             * @example not_found
+             */
+            code: string;
+            /**
+             * @description Совпадает с заголовком `X-Request-ID` ответа
+             * @example 3f9a1c2b7d4e5a60
+             */
+            request_id?: string;
         };
         Health: {
             /** @enum {string} */
@@ -638,7 +662,7 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                "application/json": components["schemas"]["Error"];
+                "application/problem+json": components["schemas"]["Problem"];
             };
         };
         /** @description Нет или просрочен токен */
@@ -647,7 +671,7 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                "application/json": components["schemas"]["Error"];
+                "application/problem+json": components["schemas"]["Problem"];
             };
         };
         /** @description Неверный текущий пароль (`invalid_credentials`) */
@@ -656,7 +680,7 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                "application/json": components["schemas"]["Error"];
+                "application/problem+json": components["schemas"]["Problem"];
             };
         };
         /** @description Не найдено (или принадлежит другому пользователю) */
@@ -665,7 +689,7 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                "application/json": components["schemas"]["Error"];
+                "application/problem+json": components["schemas"]["Problem"];
             };
         };
         /** @description Поиск или хранилище файлов временно недоступны (остальное API работает) */
@@ -674,7 +698,7 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                "application/json": components["schemas"]["Error"];
+                "application/problem+json": components["schemas"]["Problem"];
             };
         };
         /** @description Слишком много попыток входа, регистрации, обновления токена или смены пароля с этого адреса */
@@ -685,16 +709,16 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                "application/json": components["schemas"]["Error"];
+                "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Конфликт (дубликат) или файл ещё не загружен (`not_uploaded`) */
+        /** @description Конфликт, дубликат (`tag_exists`, `email_taken`), файл ещё не загружен (`not_uploaded`) или исчерпана квота (`limit_reached`) */
         Conflict: {
             headers: {
                 [name: string]: unknown;
             };
             content: {
-                "application/json": components["schemas"]["Error"];
+                "application/problem+json": components["schemas"]["Problem"];
             };
         };
     };
@@ -962,6 +986,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
         };
     };
     deleteSubject: {
@@ -1379,6 +1404,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };
