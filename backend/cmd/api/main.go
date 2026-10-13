@@ -17,6 +17,7 @@ import (
 	"github.com/whoaskedssselery/studyvault/backend/internal/config"
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/httpapi"
+	"github.com/whoaskedssselery/studyvault/backend/internal/subject"
 )
 
 func main() {
@@ -45,9 +46,11 @@ func run() error {
 	}
 	defer pool.Close()
 
+	queries := db.New(pool)
 	srv := httpapi.NewServer(cfg, httpapi.Deps{
 		DB:           pool,
-		Auth:         auth.NewService(db.New(pool), cfg.JWTSecret),
+		Auth:         auth.NewService(queries, cfg.JWTSecret),
+		Subjects:     subject.NewService(queries),
 		JWTSecret:    cfg.JWTSecret,
 		CookieSecure: cfg.CookieSecure,
 	})

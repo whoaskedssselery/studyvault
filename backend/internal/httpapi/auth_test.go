@@ -260,7 +260,7 @@ func TestProtectedRoute_RequiresValidAccessToken(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			rec := get(h, "/subjects", c.header)
+			rec := get(h, "/tags", c.header) // маршрут, который пока не реализован (501)
 			if rec.Code != c.want {
 				t.Fatalf("status = %d, want %d", rec.Code, c.want)
 			}

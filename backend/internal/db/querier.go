@@ -12,13 +12,19 @@ import (
 
 type Querier interface {
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
+	CreateSubject(ctx context.Context, arg CreateSubjectParams) (Subject, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteSubject(ctx context.Context, arg DeleteSubjectParams) (int64, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, lower string) (User, error)
+	ListSubjects(ctx context.Context, userID uuid.UUID) ([]Subject, error)
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	// Возвращает число изменённых строк: 0 значит, что токен уже отозван (или его нет).
 	// Это делает ротацию атомарной: из двух параллельных запросов выиграет только один.
 	RevokeRefreshToken(ctx context.Context, tokenHash string) (int64, error)
+	// Частичное обновление. title: NULL значит «не менять». Для color и semester NULL тоже
+	// осмысленное значение (очистить поле), поэтому «менять или нет» передаётся отдельным флагом.
+	UpdateSubject(ctx context.Context, arg UpdateSubjectParams) (Subject, error)
 }
 
 var _ Querier = (*Queries)(nil)

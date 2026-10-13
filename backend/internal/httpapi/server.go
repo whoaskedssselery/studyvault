@@ -30,6 +30,7 @@ type Authenticator interface {
 type Deps struct {
 	DB           Pinger
 	Auth         Authenticator
+	Subjects     SubjectService
 	JWTSecret    []byte
 	CookieSecure bool
 }
