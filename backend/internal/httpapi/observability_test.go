@@ -194,3 +194,29 @@ func TestErrorLogsInHandlersCarryTheRequestID(t *testing.T) {
 type failingPinger struct{}
 
 func (failingPinger) Ping(context.Context) error { return errors.New("down") }
+
+func TestLogHandler_KeepsRequestIDThroughWithAttrsAndGroups(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(NewLogHandler(slog.NewJSONHandler(&buf, nil))).With("component", "x").WithGroup("g")
+	ctx := context.WithValue(context.Background(), requestIDKey{}, "req-42")
+
+	logger.InfoContext(ctx, "hello", "k", "v")
+
+	var rec map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rec); err != nil {
+		t.Fatal(err)
+	}
+	// request_id добавляется внутрь открытой группы, но он обязан быть в записи.
+	group, _ := rec["g"].(map[string]any)
+	if rec["component"] != "x" || group["k"] != "v" || (rec["request_id"] != "req-42" && group["request_id"] != "req-42") {
+		t.Errorf("record = %v", rec)
+	}
+}
+
+func TestLogHandler_NoRequestIDOutsideARequest(t *testing.T) {
+	var buf bytes.Buffer
+	slog.New(NewLogHandler(slog.NewJSONHandler(&buf, nil))).Info("startup")
+	if strings.Contains(buf.String(), "request_id") {
+		t.Errorf("a record made outside a request must not invent an id: %s", buf.String())
+	}
+}
