@@ -1,0 +1,3 @@
+# The generated single-file submission contains intentional trailing spaces in
+# bundled JavaScript template strings (for example Markdown line breaks).
+deliverables/frontend/index.html whitespace=-blank-at-eol linguist-generated=true

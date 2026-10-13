@@ -16,6 +16,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  createHashHistory,
   RouterProvider,
   useRouterState,
 } from "@tanstack/react-router";
@@ -71,6 +72,7 @@ import type { JSONContent } from "@tiptap/react";
 import { readSession } from './repository';
 import { ApiStatus } from './api-status';
 import { exportNote } from './downloads';
+import { isSubmission, mockUrl } from './runtime';
 import "./styles.css";
 
 const queryClient = new QueryClient();
@@ -489,7 +491,7 @@ function App() {
             Вход, регистрация и роль модератора моделируются; реальные аккаунты
             и сервер пока не подключены. Используйте вымышленные данные.
           </div>
-          <p>Начальные материалы загружаются из <a className="text-button" href="/mock.json" target="_blank" rel="noreferrer">mock.json</a>. После первых изменений используется локальная копия. Данные сообщества демонстрационные.</p>
+          <p>Начальные материалы загружаются из <a className="text-button" href={mockUrl()} target="_blank" rel="noreferrer">mock.json</a>. После первых изменений используется локальная копия. Данные сообщества демонстрационные.</p>
           <p>
             Нажмите <kbd>Ctrl K</kbd>, чтобы быстро найти материал. Создайте
             конспект и отправьте его на проверку во вкладке «Модерация».
@@ -2235,6 +2237,7 @@ const routeTree = rootRoute.addChildren(
 );
 const router = createRouter({
   routeTree,
+  history: isSubmission ? createHashHistory() : undefined,
   defaultNotFoundComponent: () => null,
 });
 declare module "@tanstack/react-router" {
