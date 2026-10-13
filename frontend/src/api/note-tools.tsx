@@ -1,12 +1,143 @@
-import { useEffect, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from './client';
-import type { ApiNote } from './client';
-export function NoteTools({ userId, note, onTagged, onOpen }: { userId: string; note: ApiNote; onTagged: (note: ApiNote) => void; onOpen: (id: string) => void }) {
-  const cache = useQueryClient(), [tagName, setTagName] = useState(''), [selectedTags, setSelectedTags] = useState(note.tags.map(t => t.id)), [busy, setBusy] = useState(false), [error, setError] = useState('');
-  useEffect(() => { setSelectedTags(note.tags.map(t => t.id)); setError(''); }, [note.id, note.tags]);
-  const tags = useQuery({ queryKey: ['api', userId, 'tags'], queryFn: api.tags, retry: false });
-  const backlinks = useQuery({ queryKey: ['api', userId, 'backlinks', note.id], queryFn: () => api.backlinks(note.id), retry: false });
-  const run = async (action: () => Promise<unknown>) => { setBusy(true); setError(''); try { await action(); await cache.invalidateQueries({ queryKey: ['api'] }); } catch (e) { setError(e instanceof Error ? e.message : 'Ошибка API'); } finally { setBusy(false); } };
-  return <div className="api-note-tools"><section className="aside-panel"><h3>Теги заметки</h3>{tags.error && <p className="form-error" role="alert">{tags.error.message}</p>}<div className="api-tag-list">{tags.data?.items.map(t => <label key={t.id}><input type="checkbox" checked={selectedTags.includes(t.id)} disabled={busy || !selectedTags.includes(t.id) && selectedTags.length >= 50} onChange={e => setSelectedTags(ids => e.target.checked ? [...ids, t.id] : ids.filter(id => id !== t.id))}/>{t.name}</label>)}</div><button className="button secondary small" disabled={busy} onClick={() => void run(async () => onTagged(await api.setTags(note.id, selectedTags)))}>Сохранить теги</button><form className="api-tag-create" onSubmit={e => { e.preventDefault(); void run(async () => { const tag = await api.createTag(tagName.trim()); setSelectedTags(ids => [...new Set([...ids, tag.id])].slice(0, 50)); setTagName(''); }); }}><input required maxLength={50} aria-label="Новый тег API" placeholder="Новый тег" value={tagName} onChange={e => setTagName(e.target.value)}/><button className="button secondary small" disabled={busy}>Создать тег</button></form>{error && <p className="form-error" role="alert">{error}</p>}</section><section className="aside-panel"><h3>Обратные ссылки</h3><p className="muted">Заметки, которые ссылаются на «{note.title}».</p>{backlinks.error && <p className="form-error" role="alert">{backlinks.error.message}</p>}{backlinks.data?.items.length === 0 && <p className="muted">Ссылок пока нет.</p>}{backlinks.data?.items.map(n => <button className="related-note" key={n.id} onClick={() => onOpen(n.id)}>{n.title} →</button>)}</section></div>;
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "./client";
+import type { ApiNote } from "./client";
+export function NoteTools({
+  userId,
+  note,
+  onTagged,
+  onOpen,
+}: {
+  userId: string;
+  note: ApiNote;
+  onTagged: (note: ApiNote) => void;
+  onOpen: (id: string) => void;
+}) {
+  const cache = useQueryClient(),
+    [tagName, setTagName] = useState(""),
+    [selectedTags, setSelectedTags] = useState(note.tags.map((t) => t.id)),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  useEffect(() => {
+    setSelectedTags(note.tags.map((t) => t.id));
+    setError("");
+  }, [note.id, note.tags]);
+  const tags = useQuery({
+    queryKey: ["api", userId, "tags"],
+    queryFn: api.tags,
+    retry: false,
+  });
+  const backlinks = useQuery({
+    queryKey: ["api", userId, "backlinks", note.id],
+    queryFn: () => api.backlinks(note.id),
+    retry: false,
+  });
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+      await cache.invalidateQueries({ queryKey: ["api"] });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка API");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="api-note-tools">
+      <section className="aside-panel">
+        <h3>Теги заметки</h3>
+        {tags.error && (
+          <p className="form-error" role="alert">
+            {tags.error.message}
+          </p>
+        )}
+        <div className="api-tag-list">
+          {tags.data?.items.map((t) => (
+            <label key={t.id}>
+              <input
+                type="checkbox"
+                checked={selectedTags.includes(t.id)}
+                disabled={
+                  busy ||
+                  (!selectedTags.includes(t.id) && selectedTags.length >= 50)
+                }
+                onChange={(e) =>
+                  setSelectedTags((ids) =>
+                    e.target.checked
+                      ? [...ids, t.id]
+                      : ids.filter((id) => id !== t.id),
+                  )
+                }
+              />
+              {t.name}
+            </label>
+          ))}
+        </div>
+        <button
+          className="button secondary small"
+          disabled={busy}
+          onClick={() =>
+            void run(async () =>
+              onTagged(await api.setTags(note.id, selectedTags)),
+            )
+          }
+        >
+          Сохранить теги
+        </button>
+        <form
+          className="api-tag-create"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void run(async () => {
+              const tag = await api.createTag(tagName.trim());
+              setSelectedTags((ids) =>
+                [...new Set([...ids, tag.id])].slice(0, 50),
+              );
+              setTagName("");
+            });
+          }}
+        >
+          <input
+            required
+            maxLength={50}
+            aria-label="Новый тег API"
+            placeholder="Новый тег"
+            value={tagName}
+            onChange={(e) => setTagName(e.target.value)}
+          />
+          <button className="button secondary small" disabled={busy}>
+            Создать тег
+          </button>
+        </form>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+      </section>
+      <section className="aside-panel">
+        <h3>Обратные ссылки</h3>
+        <p className="muted">Заметки, которые ссылаются на «{note.title}».</p>
+        {backlinks.error && (
+          <p className="form-error" role="alert">
+            {backlinks.error.message}
+          </p>
+        )}
+        {backlinks.data?.items.length === 0 && (
+          <p className="muted">Ссылок пока нет.</p>
+        )}
+        {backlinks.data?.items.map((n) => (
+          <button
+            className="related-note"
+            key={n.id}
+            onClick={() => onOpen(n.id)}
+          >
+            {n.title} →
+          </button>
+        ))}
+      </section>
+    </div>
+  );
 }
