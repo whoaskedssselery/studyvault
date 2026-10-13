@@ -94,7 +94,8 @@ go run ./cmd/reindex                                                   # пер�
 ## API
 
 Все эндпоинты, кроме `/health`, `/docs` и `/auth/*`, требуют заголовок `Authorization: Bearer <access_token>`.
-Подробности, схемы и примеры смотрите в Swagger UI.
+Подробности, схемы и примеры смотрите в Swagger UI. Там же описаны каталог кодов ошибок, лимиты,
+пагинация и политика версий.
 
 | Метод и путь | Что делает |
 |---|---|
@@ -179,7 +180,9 @@ API проверено через Swagger UI (`/docs`) на запущенном
 
 ![Схема БД](backend/db/schema.png)
 
-Исходник схемы для dbdiagram.io: [backend/db/schema.dbml](backend/db/schema.dbml).
+Картинка снята до второй миграции. С тех пор добавлена таблица `note_mentions` (какие названия заметка
+упоминает как `[[...]]`, по ней входящие ссылки находятся по индексу) и индекс по названиям заметок.
+Актуальная схема лежит в исходнике для dbdiagram.io: [backend/db/schema.dbml](backend/db/schema.dbml).
 Миграции: [backend/migrations](backend/migrations).
 
 ## Устройство проекта
