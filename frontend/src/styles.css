@@ -2858,6 +2858,17 @@ td {
 .api-result-heading h2 { font-size:16px; margin:0; }
 .api-code { margin-left:auto; padding:5px 9px; border-radius:5px; background:#f6f3f9; font-size:12px; font-weight:700; }
 .api-pass { color:#78a18a; }.api-fail { color:#bb8195; }
+.api-login { max-width:520px; margin:30px auto; }
+.api-login h2 { font-size:22px; }.api-login>.text-button { margin-top:20px; }
+.api-workspace { display:grid; grid-template-columns:280px minmax(0,1fr); gap:22px; align-items:start; }
+.api-note-list { min-width:0; }.api-note-list .empty { padding:25px 0; }.api-note-list h3 { font-size:14px; }
+.api-note-item { display:flex; width:100%; align-items:flex-start; gap:10px; padding:14px 10px; text-align:left; border-bottom:1px solid var(--border); color:#9d83b2; border-radius:6px; }
+.api-note-item.active { background:#f1eafa; color:#8963b6; }.api-note-item span { min-width:0; }.api-note-item strong { display:block; font-size:11px; line-height:1.7; overflow-wrap:anywhere; }.api-note-item small { display:block; font-size:8px; margin-top:4px; color:#aa93bd; }
+.api-check { display:flex; align-items:center; gap:8px; font-size:11px; color:#9a80af; margin:15px 0; }
+.api-check input { accent-color:var(--purple); }.api-subject-form { margin-top:25px; padding-top:20px; border-top:1px solid var(--border); }
+.api-editor-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:20px; }.api-error { padding:17px; border:1px solid #eedbe3; background:#fff9fb; border-radius:8px; }.api-success { display:flex; gap:8px; color:#789786; font-size:12px; margin-bottom:20px; }
+@media(max-width:1100px){ .api-workspace { grid-template-columns:230px minmax(0,1fr); } }
+@media(max-width:850px){ .api-workspace { grid-template-columns:1fr; }.api-note-list { max-height:600px; overflow:auto; } }
 .api-result p { font-size:12px; color:#997caf; margin:15px 0 7px; }
 .api-result details { margin-top:15px; font-size:11px; color:#9a79b4; }
 .api-result summary { cursor:pointer; }.api-result pre { white-space:pre-wrap; overflow-wrap:anywhere; background:#f8f5fc; padding:15px; border-radius:8px; color:#8b739b; max-height:300px; overflow:auto; }

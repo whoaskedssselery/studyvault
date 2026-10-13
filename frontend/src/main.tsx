@@ -71,6 +71,7 @@ import type { Attachment, Database, Note, User } from "./data";
 import type { JSONContent } from "@tiptap/react";
 import { readSession } from './repository';
 import { ApiStatus } from './api-status';
+import { ApiWorkspace } from './api/workspace';
 import { exportNote } from './downloads';
 import { isSubmission, mockUrl } from './runtime';
 import "./styles.css";
@@ -285,6 +286,7 @@ function App() {
     ["/ranking", "Рейтинг студентов", Trophy],
     ["/moderation", "Модерация", ShieldCheck],
     ["/api-status", "Проверка API", Code2],
+    ["/workspace", "Кабинет API", UserRound],
   ];
   const currentTitle =
     navigation.find(([path]) => path === pathname)?.[1] ||
@@ -456,6 +458,8 @@ function App() {
               <Profile logout={() => login(null)} />
             ) : pathname === "/api-status" ? (
               <ApiStatus />
+            ) : pathname === "/workspace" ? (
+              <ApiWorkspace />
             ) : (
               <div className="empty">
                 <BookOpen />
@@ -2233,6 +2237,7 @@ const routeTree = rootRoute.addChildren(
     "/notes/$noteId",
     "/edit/$noteId",
     "/api-status",
+    "/workspace",
   ].map((path) => createRoute({ getParentRoute: () => rootRoute, path })),
 );
 const router = createRouter({
