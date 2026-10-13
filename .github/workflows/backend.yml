@@ -1,0 +1,95 @@
+name: backend
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", "docker-compose.yml", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["backend/**", "docker-compose.yml", ".github/workflows/backend.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    # Тесты идут на настоящих сервисах, как и на машине разработчика.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: studyvault
+          POSTGRES_PASSWORD: ci-password
+          POSTGRES_DB: studyvault
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U studyvault -d studyvault"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      meilisearch:
+        image: getmeili/meilisearch:v1.12
+        env:
+          MEILI_MASTER_KEY: ci-master-key-123456
+        ports: ["7700:7700"]
+      s3:
+        image: rustfs/rustfs:latest
+        env:
+          RUSTFS_ACCESS_KEY: ci-access
+          RUSTFS_SECRET_KEY: ci-secret-key
+        ports: ["9000:9000"]
+
+    env:
+      DATABASE_URL: postgres://studyvault:ci-password@localhost:5432/studyvault?sslmode=disable
+      JWT_SECRET: ci-jwt-secret-ci-jwt-secret-1234
+      MEILI_URL: http://localhost:7700
+      MEILI_MASTER_KEY: ci-master-key-123456
+      S3_ENDPOINT: localhost:9000
+      S3_ACCESS_KEY: ci-access
+      S3_SECRET_KEY: ci-secret-key
+      S3_BUCKET: attachments
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: go vet
+        run: go vet ./...
+
+      # Сгенерированный код должен совпадать с исходниками: контракт OpenAPI и SQL-запросы.
+      - name: Generated code is up to date
+        run: |
+          go generate ./internal/httpapi/
+          docker run --rm -v "$PWD:/src" -w /src sqlc/sqlc generate
+          git diff --exit-code -- . || { echo "::error::generated code is stale: run go generate and sqlc generate"; exit 1; }
+
+      - name: Wait for the services
+        run: |
+          curl --retry 30 --retry-connrefused --retry-delay 1 -fsS http://localhost:7700/health
+          for i in $(seq 1 30); do curl -s -o /dev/null http://localhost:9000/ && break; sleep 1; done
+
+      - name: Apply migrations
+        run: go tool goose -dir migrations postgres "$DATABASE_URL" up
+
+      - name: Tests
+        run: go test -race -count=1 ./...
+
+      - name: Build
+        run: go build ./...
+
+  image:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the Docker image
+        run: docker build -t studyvault-api:ci backend
