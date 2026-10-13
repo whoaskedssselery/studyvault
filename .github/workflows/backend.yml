@@ -111,10 +111,26 @@ jobs:
       - name: Build
         run: go build ./...
 
-  image:
+  # То же, что делает человек по README: собрать образ, поднять весь стек одной командой и пройти основной путь
+  # пользователя через настоящий HTTP. Ловит поломки, которых не видно юнит-тестам: Dockerfile, миграции в контейнере,
+  # переменные окружения compose, ссылки на загрузку файлов.
+  stack:
     runs-on: ubuntu-latest
     needs: test
     steps:
       - uses: actions/checkout@v4
-      - name: Build the Docker image
-        run: docker build -t studyvault-api:ci backend
+
+      - name: Start the stack
+        run: |
+          cp .env.example .env
+          docker compose --profile app up -d --build
+
+      - name: Wait for the API
+        run: curl --retry 60 --retry-connrefused --retry-delay 1 -fsS http://localhost:8080/health
+
+      - name: Smoke test
+        run: bash scripts/smoke.sh http://localhost:8080
+
+      - name: Logs of the stack
+        if: failure()
+        run: docker compose --profile app logs --no-color
