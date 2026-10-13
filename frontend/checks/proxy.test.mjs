@@ -10,7 +10,7 @@ before(async () => {
   upstream = createServer(async (req, res) => {
     let body = ''; for await (const chunk of req) body += chunk;
     requests.push({ method: req.method, url: req.url, headers: req.headers, body });
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': 'refresh_token=synthetic; HttpOnly; Path=/auth; SameSite=Lax', 'Retry-After': '20' });
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': 'refresh_token=synthetic; HttpOnly; Path=/v1/auth; SameSite=Lax', 'Retry-After': '20' });
     res.end(JSON.stringify({ status: 'ok' }));
   });
   upstream.listen(0, '127.0.0.1'); await once(upstream, 'listening');
@@ -24,7 +24,7 @@ test('proxy forwards JSON writes, auth headers, cursors and rewrites refresh-coo
   const result = await fetch(`${base}/backend-api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer synthetic', Cookie: 'refresh_token=synthetic' }, body: JSON.stringify({ email: 'synthetic@example.test', password: 'synthetic-password' }) });
   assert.equal(result.status, 200); assert.match(result.headers.get('set-cookie'), /Path=\/backend-api\/auth/); assert.equal(result.headers.get('retry-after'), '20');
   await fetch(`${base}/backend-api/notes?cursor=opaque%2Bvalue&limit=30`);
-  assert.equal(requests[0].method, 'POST'); assert.equal(JSON.parse(requests[0].body).email, 'synthetic@example.test'); assert.equal(requests[0].headers.authorization, 'Bearer synthetic'); assert.equal(requests[0].headers.cookie, 'refresh_token=synthetic'); assert.equal(requests[1].url, '/notes?cursor=opaque%2Bvalue&limit=30');
+  assert.equal(requests[0].method, 'POST'); assert.equal(requests[0].url, '/v1/auth/login'); assert.equal(JSON.parse(requests[0].body).email, 'synthetic@example.test'); assert.equal(requests[0].headers.authorization, 'Bearer synthetic'); assert.equal(requests[0].headers.cookie, 'refresh_token=synthetic'); assert.equal(requests[1].url, '/v1/notes?cursor=opaque%2Bvalue&limit=30');
 });
 test('proxy exposes only the scoped API and static submission files', async () => {
   assert.equal((await fetch(`${base}/backend-api/admin`)).status, 404);

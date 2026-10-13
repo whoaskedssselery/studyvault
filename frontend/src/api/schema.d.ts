@@ -93,6 +93,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Мой аккаунт */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Изменить имя */
+        patch: operations["updateMe"];
+        trace?: never;
+    };
+    "/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Сменить пароль
+         * @description Проверяет текущий пароль и сохраняет новый. Все сессии пользователя на других устройствах
+         *     завершаются, а этому клиенту выдаются новый access-токен и новый refresh-токен (cookie).
+         *     Неверный текущий пароль даёт 403 `invalid_credentials`, а не 401, чтобы клиент не принял его
+         *     за просроченный access-токен и не пытался обновить сессию.
+         */
+        post: operations["changePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/subjects": {
         parameters: {
             query?: never;
@@ -384,6 +425,19 @@ export interface components {
             /** @example correct-horse-battery */
             password: string;
         };
+        ProfilePatch: {
+            /** @example Анна Студентова */
+            display_name: string;
+        };
+        ChangePasswordRequest: {
+            /** @example correct-horse-battery */
+            current_password: string;
+            /**
+             * @description Не длиннее 72 байт (ограничение bcrypt) и не совпадает с текущим
+             * @example another-long-passphrase
+             */
+            new_password: string;
+        };
         TokenResponse: {
             access_token: string;
             /**
@@ -596,6 +650,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description Неверный текущий пароль (`invalid_credentials`) */
+        WrongPassword: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Не найдено (или принадлежит другому пользователю) */
         NotFound: {
             headers: {
@@ -614,7 +677,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Слишком много попыток входа, регистрации или обновления токена с этого адреса */
+        /** @description Слишком много попыток входа, регистрации, обновления токена или смены пароля с этого адреса */
         TooManyRequests: {
             headers: {
                 /** @description Через сколько секунд можно повторить запрос */
@@ -774,6 +837,82 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Текущий пользователь */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    updateMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfilePatch"];
+            };
+        };
+        responses: {
+            /** @description Обновлённый аккаунт */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Пароль сменён */
+            200: {
+                headers: {
+                    "Set-Cookie": components["headers"]["RefreshCookie"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["WrongPassword"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     listSubjects: {

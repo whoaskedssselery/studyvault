@@ -52,7 +52,7 @@ const server = createServer(async (req, res) => {
       if (req.headers[header]) headers[header] = req.headers[header];
     try {
       const response = await fetch(
-        new URL(endpoint + requested.search, target),
+        new URL("/v1" + endpoint + requested.search, target),
         {
           method: req.method,
           headers,
@@ -69,7 +69,7 @@ const server = createServer(async (req, res) => {
       const cookies = response.headers.getSetCookie();
       if (cookies.length)
         output["Set-Cookie"] = cookies.map((c) =>
-          c.replace(/;\s*Path=\/auth(?=;|$)/gi, "; Path=/backend-api/auth"),
+          c.replace(/;\s*Path=\/v1\/auth(?=;|$)/gi, "; Path=/backend-api/auth"),
         );
       if (response.headers.has("retry-after"))
         output["Retry-After"] = response.headers.get("retry-after");

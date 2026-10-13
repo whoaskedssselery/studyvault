@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
     target,
     changeOrigin: true,
     cookiePathRewrite: "/backend-api/auth",
-    rewrite: (path: string) => path.replace(/^\/backend-api/, ""),
+    rewrite: (path: string) => path.replace(/^\/backend-api/, "/v1"),
   };
   return {
     plugins: [react()],
