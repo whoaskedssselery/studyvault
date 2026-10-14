@@ -19,6 +19,8 @@ import (
 	"github.com/whoaskedssselery/studyvault/backend/internal/config"
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/httpapi"
+	"github.com/whoaskedssselery/studyvault/backend/internal/library"
+	"github.com/whoaskedssselery/studyvault/backend/internal/mail"
 	"github.com/whoaskedssselery/studyvault/backend/internal/note"
 	"github.com/whoaskedssselery/studyvault/backend/internal/search"
 	"github.com/whoaskedssselery/studyvault/backend/internal/storage"
@@ -66,7 +68,22 @@ func run() error {
 	noteOpts := []note.Option{note.WithTx(func(ctx context.Context, fn func(note.Store) error) error {
 		return db.InTx(ctx, pool, func(q *db.Queries) error { return fn(q) })
 	})}
-	authSvc := auth.NewService(queries, cfg.JWTSecret)
+	libOpts := []library.Option{library.WithTx(func(ctx context.Context, fn func(library.Store) error) error {
+		return db.InTx(ctx, pool, func(q *db.Queries) error { return fn(q) })
+	})}
+	var authOpts []auth.Option
+	if cfg.SMTP.Host != "" {
+		mailer, err := mail.NewSMTP(mail.Config{
+			Host: cfg.SMTP.Host, Port: cfg.SMTP.Port, Username: cfg.SMTP.Username, Password: cfg.SMTP.Password, From: cfg.SMTP.From,
+		})
+		if err != nil {
+			return fmt.Errorf("mail: %w", err)
+		}
+		authOpts = append(authOpts, auth.WithMailer(mailer, cfg.SMTP.ResetURL), auth.WithEmailVerification(cfg.SMTP.VerifyURL))
+	} else {
+		slog.Warn("SMTP_HOST is not set: password reset and e-mail verification are disabled, new accounts count as verified")
+	}
+	authSvc := auth.NewService(queries, cfg.JWTSecret, authOpts...)
 	deps := httpapi.Deps{
 		DB:             pool,
 		Auth:           authSvc,
@@ -77,12 +94,14 @@ func run() error {
 		CookieSecure:   cfg.CookieSecure,
 		AllowedOrigins: cfg.CORSOrigins,
 		AuthRateLimit:  cfg.AuthRateLimit,
+		TrustedProxies: cfg.TrustedProxies,
 	}
 
 	// Без Meilisearch API работает целиком, кроме /search (503).
 	if cfg.MeiliURL != "" {
 		meili := search.NewMeili(cfg.MeiliURL, cfg.MeiliKey, search.IndexUID)
 		noteOpts = append(noteOpts, note.WithIndexer(meili))
+		libOpts = append(libOpts, library.WithIndexer(meili), library.WithEngine(meili))
 		deps.Search = search.NewService(meili, queries)
 	} else {
 		slog.Warn("MEILI_URL is not set: search is disabled")
@@ -107,6 +126,7 @@ func run() error {
 	}
 
 	deps.Notes = note.NewService(queries, noteOpts...)
+	deps.Library = library.NewService(queries, libOpts...)
 
 	// Горутина живёт до сигнала остановки: ctx отменяется вместе с ним.
 	go authSvc.RunTokenPurge(ctx, time.Hour)

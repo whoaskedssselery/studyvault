@@ -26,7 +26,7 @@ func ReindexPages(src IndexSource, pageSize int32) func(context.Context) ([]Doc,
 		}
 		docs := make([]Doc, len(rows))
 		for i, r := range rows {
-			docs[i] = Doc{ID: r.ID, UserID: r.UserID, Title: r.Title, ContentText: r.ContentText}
+			docs[i] = Doc{ID: r.ID, UserID: r.UserID, Title: r.Title, ContentText: r.ContentText, Status: r.Status}
 			after = r.ID
 		}
 		return docs, nil

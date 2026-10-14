@@ -24,6 +24,9 @@ const maxFileNameLen = 255
 type AttachmentService interface {
 	Create(ctx context.Context, userID uuid.UUID, in attachment.Input) (attachment.Upload, error)
 	Get(ctx context.Context, userID, id uuid.UUID) (attachment.Download, error)
+	Link(ctx context.Context, row db.Attachment) (attachment.Download, error)
+	UserObjectKeys(ctx context.Context, userID uuid.UUID) ([]string, error)
+	RemoveObjects(ctx context.Context, keys []string)
 	List(ctx context.Context, userID, noteID uuid.UUID) ([]db.Attachment, error)
 	Delete(ctx context.Context, userID, id uuid.UUID) error
 }

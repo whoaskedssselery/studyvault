@@ -110,7 +110,7 @@ func (s *Service) Search(ctx context.Context, userID uuid.UUID, q Query) ([]Resu
 		if !ok {
 			continue
 		}
-		res := Result{ID: r.ID, Title: r.Title, Snippet: renderSnippet(h.Snippet), UpdatedAt: r.UpdatedAt}
+		res := Result{ID: r.ID, Title: r.Title, Snippet: RenderSnippet(h.Snippet), UpdatedAt: r.UpdatedAt}
 		if r.SubjectID.Valid {
 			id := r.SubjectID.UUID
 			res.SubjectID = &id
@@ -125,7 +125,7 @@ func (s *Service) Search(ctx context.Context, userID uuid.UUID, q Query) ([]Resu
 
 // renderSnippet экранирует весь текст (в заметке может быть что угодно, в том числе разметка)
 // и только после этого превращает маркеры подсветки в <mark>.
-func renderSnippet(raw string) string {
+func RenderSnippet(raw string) string {
 	escaped := html.EscapeString(raw)
 	escaped = strings.ReplaceAll(escaped, markStart, "<mark>")
 	return strings.ReplaceAll(escaped, markEnd, "</mark>")

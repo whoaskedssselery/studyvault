@@ -14,18 +14,22 @@ import (
 )
 
 const createNote = `-- name: CreateNote :one
-INSERT INTO notes (user_id, subject_id, title, content, content_text, is_pinned)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at
+INSERT INTO notes (user_id, subject_id, title, content, content_text, is_pinned, kind, summary, semester, library_subject_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id, rating_count, rating_avg
 `
 
 type CreateNoteParams struct {
-	UserID      uuid.UUID     `json:"user_id"`
-	SubjectID   uuid.NullUUID `json:"subject_id"`
-	Title       string        `json:"title"`
-	Content     []byte        `json:"content"`
-	ContentText string        `json:"content_text"`
-	IsPinned    bool          `json:"is_pinned"`
+	UserID           uuid.UUID     `json:"user_id"`
+	SubjectID        uuid.NullUUID `json:"subject_id"`
+	Title            string        `json:"title"`
+	Content          []byte        `json:"content"`
+	ContentText      string        `json:"content_text"`
+	IsPinned         bool          `json:"is_pinned"`
+	Kind             string        `json:"kind"`
+	Summary          pgtype.Text   `json:"summary"`
+	Semester         pgtype.Int2   `json:"semester"`
+	LibrarySubjectID uuid.NullUUID `json:"library_subject_id"`
 }
 
 func (q *Queries) CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error) {
@@ -36,6 +40,10 @@ func (q *Queries) CreateNote(ctx context.Context, arg CreateNoteParams) (Note, e
 		arg.Content,
 		arg.ContentText,
 		arg.IsPinned,
+		arg.Kind,
+		arg.Summary,
+		arg.Semester,
+		arg.LibrarySubjectID,
 	)
 	var i Note
 	err := row.Scan(
@@ -49,12 +57,21 @@ func (q *Queries) CreateNote(ctx context.Context, arg CreateNoteParams) (Note, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Kind,
+		&i.Summary,
+		&i.Semester,
+		&i.Status,
+		&i.PublishedAt,
+		&i.Views,
+		&i.LibrarySubjectID,
+		&i.RatingCount,
+		&i.RatingAvg,
 	)
 	return i, err
 }
 
 const getNote = `-- name: GetNote :one
-SELECT id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at FROM notes
+SELECT id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id, rating_count, rating_avg FROM notes
 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
 `
 
@@ -77,8 +94,29 @@ func (q *Queries) GetNote(ctx context.Context, arg GetNoteParams) (Note, error) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Kind,
+		&i.Summary,
+		&i.Semester,
+		&i.Status,
+		&i.PublishedAt,
+		&i.Views,
+		&i.LibrarySubjectID,
+		&i.RatingCount,
+		&i.RatingAvg,
 	)
 	return i, err
+}
+
+const librarySubjectExists = `-- name: LibrarySubjectExists :one
+SELECT EXISTS (SELECT 1 FROM library_subjects WHERE id = $1)
+`
+
+// Общий предмет библиотеки должен существовать.
+func (q *Queries) LibrarySubjectExists(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, librarySubjectExists, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listNoteTags = `-- name: ListNoteTags :many
@@ -116,7 +154,7 @@ func (q *Queries) ListNoteTags(ctx context.Context, noteIds []uuid.UUID) ([]List
 }
 
 const listNotes = `-- name: ListNotes :many
-SELECT n.id, n.subject_id, n.title, n.is_pinned, n.created_at, n.updated_at
+SELECT n.id, n.subject_id, n.title, n.is_pinned, n.kind, n.status, n.library_subject_id, n.created_at, n.updated_at
 FROM notes n
 WHERE n.user_id = $1
   AND n.deleted_at IS NULL
@@ -143,12 +181,15 @@ type ListNotesParams struct {
 }
 
 type ListNotesRow struct {
-	ID        uuid.UUID     `json:"id"`
-	SubjectID uuid.NullUUID `json:"subject_id"`
-	Title     string        `json:"title"`
-	IsPinned  bool          `json:"is_pinned"`
-	CreatedAt time.Time     `json:"created_at"`
-	UpdatedAt time.Time     `json:"updated_at"`
+	ID               uuid.UUID     `json:"id"`
+	SubjectID        uuid.NullUUID `json:"subject_id"`
+	Title            string        `json:"title"`
+	IsPinned         bool          `json:"is_pinned"`
+	Kind             string        `json:"kind"`
+	Status           string        `json:"status"`
+	LibrarySubjectID uuid.NullUUID `json:"library_subject_id"`
+	CreatedAt        time.Time     `json:"created_at"`
+	UpdatedAt        time.Time     `json:"updated_at"`
 }
 
 // Список без содержимого. Страницы по ключу (updated_at, id): курсор — это последняя строка
@@ -175,6 +216,9 @@ func (q *Queries) ListNotes(ctx context.Context, arg ListNotesParams) ([]ListNot
 			&i.SubjectID,
 			&i.Title,
 			&i.IsPinned,
+			&i.Kind,
+			&i.Status,
+			&i.LibrarySubjectID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -224,37 +268,69 @@ func (q *Queries) SubjectOwnedByUser(ctx context.Context, arg SubjectOwnedByUser
 
 const updateNote = `-- name: UpdateNote :one
 UPDATE notes SET
-    title        = COALESCE($1::text, title),
-    content      = COALESCE($2::jsonb, content),
-    content_text = COALESCE($3::text, content_text),
-    is_pinned    = COALESCE($4::boolean, is_pinned),
-    subject_id   = CASE WHEN $5::boolean THEN $6::uuid ELSE subject_id END,
-    updated_at   = now()
-WHERE id = $7 AND user_id = $8 AND deleted_at IS NULL
-RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at
+    title              = COALESCE($1::text, title),
+    content            = COALESCE($2::jsonb, content),
+    content_text       = COALESCE($3::text, content_text),
+    is_pinned          = COALESCE($4::boolean, is_pinned),
+    kind               = COALESCE($5::text, kind),
+    subject_id         = CASE WHEN $6::boolean THEN $7::uuid ELSE subject_id END,
+    summary            = CASE WHEN $8::boolean THEN $9::text ELSE summary END,
+    semester           = CASE WHEN $10::boolean THEN $11::smallint ELSE semester END,
+    library_subject_id = CASE WHEN $12::boolean THEN $13::uuid ELSE library_subject_id END,
+    status = CASE WHEN status = 'published' AND (
+                 $1::text IS NOT NULL OR $2::jsonb IS NOT NULL
+              OR $5::text IS NOT NULL OR $8::boolean
+              OR $10::boolean OR $12::boolean)
+             THEN 'pending' ELSE status END,
+    published_at = CASE WHEN status = 'published' AND (
+                 $1::text IS NOT NULL OR $2::jsonb IS NOT NULL
+              OR $5::text IS NOT NULL OR $8::boolean
+              OR $10::boolean OR $12::boolean)
+             THEN NULL ELSE published_at END,
+    updated_at         = now()
+WHERE id = $14 AND user_id = $15 AND deleted_at IS NULL
+RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id, rating_count, rating_avg
 `
 
 type UpdateNoteParams struct {
-	Title       pgtype.Text   `json:"title"`
-	Content     []byte        `json:"content"`
-	ContentText pgtype.Text   `json:"content_text"`
-	IsPinned    pgtype.Bool   `json:"is_pinned"`
-	SetSubject  bool          `json:"set_subject"`
-	SubjectID   uuid.NullUUID `json:"subject_id"`
-	ID          uuid.UUID     `json:"id"`
-	UserID      uuid.UUID     `json:"user_id"`
+	Title             pgtype.Text   `json:"title"`
+	Content           []byte        `json:"content"`
+	ContentText       pgtype.Text   `json:"content_text"`
+	IsPinned          pgtype.Bool   `json:"is_pinned"`
+	Kind              pgtype.Text   `json:"kind"`
+	SetSubject        bool          `json:"set_subject"`
+	SubjectID         uuid.NullUUID `json:"subject_id"`
+	SetSummary        bool          `json:"set_summary"`
+	Summary           pgtype.Text   `json:"summary"`
+	SetSemester       bool          `json:"set_semester"`
+	Semester          pgtype.Int2   `json:"semester"`
+	SetLibrarySubject bool          `json:"set_library_subject"`
+	LibrarySubjectID  uuid.NullUUID `json:"library_subject_id"`
+	ID                uuid.UUID     `json:"id"`
+	UserID            uuid.UUID     `json:"user_id"`
 }
 
-// Частичное обновление. NULL в title, content, content_text и is_pinned значит «не менять».
-// subject_id может быть очищен, поэтому «менять или нет» передаётся флагом set_subject.
+// Частичное обновление. NULL в title, content, content_text, is_pinned и kind значит «не менять».
+// subject_id, summary, semester и library_subject_id можно очистить, поэтому «менять или нет» для них
+// передаётся флагами set_*.
+// Правка самого материала (текст, название, тип, описание, семестр, общий предмет) возвращает опубликованный
+// материал на проверку: он пропадает из библиотеки, пока модератор не одобрит его снова. Закрепление и личный
+// предмет на публикацию не влияют.
 func (q *Queries) UpdateNote(ctx context.Context, arg UpdateNoteParams) (Note, error) {
 	row := q.db.QueryRow(ctx, updateNote,
 		arg.Title,
 		arg.Content,
 		arg.ContentText,
 		arg.IsPinned,
+		arg.Kind,
 		arg.SetSubject,
 		arg.SubjectID,
+		arg.SetSummary,
+		arg.Summary,
+		arg.SetSemester,
+		arg.Semester,
+		arg.SetLibrarySubject,
+		arg.LibrarySubjectID,
 		arg.ID,
 		arg.UserID,
 	)
@@ -270,6 +346,15 @@ func (q *Queries) UpdateNote(ctx context.Context, arg UpdateNoteParams) (Note, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Kind,
+		&i.Summary,
+		&i.Semester,
+		&i.Status,
+		&i.PublishedAt,
+		&i.Views,
+		&i.LibrarySubjectID,
+		&i.RatingCount,
+		&i.RatingAvg,
 	)
 	return i, err
 }

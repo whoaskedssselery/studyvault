@@ -1,0 +1,41 @@
+# Обратный прокси с HTTPS для боевого сервера. Сертификат Let's Encrypt Caddy выпускает и продлевает сам:
+# нужен домен, A-запись которого указывает на сервер, и открытые порты 80 и 443.
+#
+# {$DOMAIN} задаётся в .env (например studyvault.example.com).
+{$DOMAIN} {
+	encode zstd gzip
+
+	# API и его документация. Остальное отдаётся веб-клиентом.
+	@api path /v1/* /docs /docs/* /openapi.yaml /health
+	handle @api {
+		# Caddy сам проставляет X-Forwarded-For (присланное клиентом он заменяет), а API доверяет этому заголовку
+		# только от адреса прокси (TRUSTED_PROXIES), поэтому лимит попыток входа считается по настоящему клиенту.
+		reverse_proxy api:8080
+	}
+
+	# Веб-клиент: каталог со сборкой (FRONTEND_DIR), страницы приложения без файла отдают index.html.
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# Ссылка сброса пароля несёт токен в адресе страницы клиента (?token=...). В журнал доступа он попадать не должен:
+	# тот, кто читает журнал, мог бы сбросить чужой пароль, пока ссылка жива.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			request>uri query {
+				replace token REDACTED
+			}
+		}
+	}
+}

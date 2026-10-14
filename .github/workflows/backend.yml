@@ -123,13 +123,31 @@ jobs:
       - name: Start the stack
         run: |
           cp .env.example .env
+          # Сквозной прогон делает больше 20 запросов к /auth в минуту с одного адреса, а лимит это как раз ограничивает.
+          echo AUTH_RATE_LIMIT_PER_MIN=300 >> .env
           docker compose --profile app up -d --build
 
       - name: Wait for the API
         run: curl --retry 60 --retry-all-errors --retry-delay 1 -fsS http://localhost:8080/v1/health
 
+      # Демо-данные нужны не только для показа: сквозной прогон входит под seed-модератором.
+      - name: Demo data
+        run: docker compose --profile app run --rm --entrypoint /seed api
+
       - name: Smoke test
         run: bash scripts/smoke.sh http://localhost:8080
+
+      # Резервная копия должна не просто создаваться, а восстанавливаться.
+      - name: Backup and restore check
+        run: |
+          bash scripts/backup.sh backups
+          bash scripts/restore-check.sh
+
+      - name: Data survives a restart
+        run: bash scripts/restart-check.sh http://localhost:8080
+
+      - name: Load test (1000 materials, 20 users)
+        run: bash scripts/loadtest.sh http://localhost:8080
 
       - name: Logs of the stack
         if: failure()

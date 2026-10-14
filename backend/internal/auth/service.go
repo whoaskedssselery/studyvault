@@ -36,9 +36,22 @@ type Store interface {
 	RevokeRefreshToken(ctx context.Context, tokenHash string) (int64, error)
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time.Time) (int64, error)
+	DeleteUser(ctx context.Context, id uuid.UUID) (int64, error)
+	CreatePasswordResetToken(ctx context.Context, arg db.CreatePasswordResetTokenParams) error
+	DeleteUserPasswordResetTokens(ctx context.Context, userID uuid.UUID) error
+	ClaimPasswordResetToken(ctx context.Context, arg db.ClaimPasswordResetTokenParams) (uuid.UUID, error)
+	DeleteExpiredPasswordResetTokens(ctx context.Context, expiresAt time.Time) (int64, error)
+	LatestPasswordResetExpiry(ctx context.Context, userID uuid.UUID) (time.Time, error)
 	DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
+	VerifyUserEmail(ctx context.Context, id uuid.UUID) (int64, error)
+	CreateEmailVerificationToken(ctx context.Context, arg db.CreateEmailVerificationTokenParams) error
+	DeleteUserEmailVerificationTokens(ctx context.Context, userID uuid.UUID) error
+	ClaimEmailVerificationToken(ctx context.Context, arg db.ClaimEmailVerificationTokenParams) (uuid.UUID, error)
+	DeleteExpiredEmailVerificationTokens(ctx context.Context, expiresAt time.Time) (int64, error)
+	LatestEmailVerificationExpiry(ctx context.Context, userID uuid.UUID) (time.Time, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (db.User, error)
-	UpdateUserDisplayName(ctx context.Context, arg db.UpdateUserDisplayNameParams) (db.User, error)
+	UpdateUserProfile(ctx context.Context, arg db.UpdateUserProfileParams) (db.User, error)
+	SetUserRoleByEmail(ctx context.Context, arg db.SetUserRoleByEmailParams) (int64, error)
 	UpdateUserPassword(ctx context.Context, arg db.UpdateUserPasswordParams) (int64, error)
 }
 
@@ -60,6 +73,9 @@ type Service struct {
 	cost      int
 	now       func() time.Time
 	dummyHash []byte // для выравнивания времени ответа, если пользователя нет
+	mailer    Mailer // nil: сброс пароля по почте выключен
+	resetURL  string
+	verifyURL string // пусто: подтверждения почты нет
 }
 
 type Option func(*Service)
@@ -94,7 +110,29 @@ func (s *Service) Register(ctx context.Context, email, password, displayName, us
 		}
 		return Result{}, fmt.Errorf("create user: %w", err)
 	}
+	user, err = s.confirmOrAskToVerify(ctx, user)
+	if err != nil {
+		return Result{}, err
+	}
 	return s.startSession(ctx, user, userAgent)
+}
+
+// confirmOrAskToVerify: при настроенной почте новому аккаунту уходит письмо со ссылкой, а без почты подтверждать нечем, и
+// адрес сразу считается подтверждённым, иначе аккаунты навсегда остались бы без права публиковать. Сбой отправки письма
+// не отменяет регистрацию: ссылку можно запросить заново.
+func (s *Service) confirmOrAskToVerify(ctx context.Context, user db.User) (db.User, error) {
+	if s.verificationEnabled() {
+		if err := s.sendVerification(ctx, user); err != nil {
+			slog.ErrorContext(ctx, "send the verification mail after registration", "err", err)
+		}
+		return user, nil
+	}
+	if _, err := s.store.VerifyUserEmail(ctx, user.ID); err != nil {
+		return db.User{}, fmt.Errorf("verify email: %w", err)
+	}
+	now := s.now()
+	user.EmailVerifiedAt = &now
+	return user, nil
 }
 
 func (s *Service) Login(ctx context.Context, email, password, userAgent string) (Result, error) {
@@ -217,7 +255,7 @@ func sanitizeUserAgent(ua string) string {
 	return strings.TrimSpace(ua)
 }
 
-// PurgeExpiredTokens удаляет истёкшие refresh-токены и возвращает их число. Без этого таблица росла бы вечно:
+// PurgeExpiredTokens удаляет истёкшие refresh-токены и ссылки сброса пароля и подтверждения почты (истёкшие и уже использованные) и возвращает их число. Без этого таблица росла бы вечно:
 // каждый вход и каждое обновление добавляют строку. Отозванные, но ещё не истёкшие токены остаются,
 // потому что по ним распознаётся повторное предъявление уже использованного токена.
 func (s *Service) PurgeExpiredTokens(ctx context.Context) (int64, error) {
@@ -225,7 +263,15 @@ func (s *Service) PurgeExpiredTokens(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("purge expired refresh tokens: %w", err)
 	}
-	return n, nil
+	m, err := s.store.DeleteExpiredPasswordResetTokens(ctx, s.now())
+	if err != nil {
+		return n, fmt.Errorf("purge expired password reset tokens: %w", err)
+	}
+	k, err := s.store.DeleteExpiredEmailVerificationTokens(ctx, s.now())
+	if err != nil {
+		return n + m, fmt.Errorf("purge expired verification tokens: %w", err)
+	}
+	return n + m + k, nil
 }
 
 // RunTokenPurge чистит истёкшие токены сразу и затем каждые every, пока не отменён ctx. Ошибка очистки не
@@ -266,15 +312,52 @@ func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (db.User, error) {
 	return u, nil
 }
 
-func (s *Service) UpdateDisplayName(ctx context.Context, id uuid.UUID, displayName string) (db.User, error) {
-	u, err := s.store.UpdateUserDisplayName(ctx, db.UpdateUserDisplayNameParams{ID: id, DisplayName: displayName})
+// ProfilePatch — частичное изменение профиля. nil в DisplayName значит «не менять»; факультет можно очистить,
+// поэтому «передан ли он» хранится отдельным флагом.
+type ProfilePatch struct {
+	DisplayName *string
+	SetFaculty  bool
+	Faculty     *string
+}
+
+func (s *Service) UpdateProfile(ctx context.Context, id uuid.UUID, p ProfilePatch) (db.User, error) {
+	arg := db.UpdateUserProfileParams{ID: id, SetFaculty: p.SetFaculty}
+	if p.DisplayName != nil {
+		arg.DisplayName = pgtype.Text{String: *p.DisplayName, Valid: true}
+	}
+	if p.Faculty != nil {
+		arg.Faculty = pgtype.Text{String: *p.Faculty, Valid: true}
+	}
+	u, err := s.store.UpdateUserProfile(ctx, arg)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return db.User{}, ErrUserNotFound
 	}
 	if err != nil {
-		return db.User{}, fmt.Errorf("update display name: %w", err)
+		return db.User{}, fmt.Errorf("update profile: %w", err)
 	}
 	return u, nil
+}
+
+// Роли пользователя. Назначить роль можно только доверенной операцией на сервере (SetRole, cmd/promote):
+// через HTTP API этого нет.
+const (
+	RoleStudent   = "student"
+	RoleModerator = "moderator"
+)
+
+// SetRole назначает роль пользователю с этой почтой. ErrUserNotFound: такой почты нет.
+func (s *Service) SetRole(ctx context.Context, email, role string) error {
+	if role != RoleStudent && role != RoleModerator {
+		return fmt.Errorf("unknown role %q", role)
+	}
+	n, err := s.store.SetUserRoleByEmail(ctx, db.SetUserRoleByEmailParams{Email: email, Role: role})
+	if err != nil {
+		return fmt.Errorf("set role: %w", err)
+	}
+	if n == 0 {
+		return ErrUserNotFound
+	}
+	return nil
 }
 
 // ChangePassword проверяет текущий пароль, сохраняет новый и стирает все сессии пользователя, включая

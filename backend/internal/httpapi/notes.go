@@ -88,6 +88,12 @@ func (a *api) CreateNote(w http.ResponseWriter, r *http.Request) {
 	if req.IsPinned != nil {
 		in.IsPinned = *req.IsPinned
 	}
+	meta, msg := materialMeta(req.Kind, req.Summary, req.Semester, req.LibrarySubjectId)
+	if msg != "" {
+		badRequest(w, msg)
+		return
+	}
+	in.Kind, in.Description, in.Semester, in.LibrarySubjectID = meta.kind, meta.description, meta.semester, meta.librarySubject
 
 	created, err := a.Notes.Create(r.Context(), userID, in)
 	a.respondNote(w, r, http.StatusCreated, created, err, "create note")
@@ -112,8 +118,9 @@ func (a *api) UpdateNote(w http.ResponseWriter, r *http.Request, id Id) {
 		badRequest(w, "invalid request body: "+err.Error())
 		return
 	}
-	if req.Title == nil && req.Content == nil && req.IsPinned == nil && !req.SubjectId.IsSpecified() {
-		badRequest(w, "at least one of title, content, subject_id, is_pinned is required")
+	if req.Title == nil && req.Content == nil && req.IsPinned == nil && !req.SubjectId.IsSpecified() &&
+		req.Kind == nil && !req.Summary.IsSpecified() && !req.Semester.IsSpecified() && !req.LibrarySubjectId.IsSpecified() {
+		badRequest(w, "at least one field to change is required")
 		return
 	}
 
@@ -135,6 +142,17 @@ func (a *api) UpdateNote(w http.ResponseWriter, r *http.Request, id Id) {
 		patch.Content = content
 	}
 	patch.SetSubject, patch.SubjectID = optional(req.SubjectId)
+	meta, msg := materialMeta(req.Kind, req.Summary, req.Semester, req.LibrarySubjectId)
+	if msg != "" {
+		badRequest(w, msg)
+		return
+	}
+	if req.Kind != nil {
+		patch.Kind = &meta.kind
+	}
+	patch.SetDescription, patch.Description = req.Summary.IsSpecified(), meta.description
+	patch.SetSemester, patch.Semester = req.Semester.IsSpecified(), meta.semester
+	patch.SetLibrarySubject, patch.LibrarySubjectID = req.LibrarySubjectId.IsSpecified(), meta.librarySubject
 
 	updated, err := a.Notes.Update(r.Context(), userID, id, patch)
 	a.respondNote(w, r, http.StatusOK, updated, err, "update note")
@@ -164,6 +182,8 @@ func (a *api) respondNote(w http.ResponseWriter, r *http.Request, status int, n 
 		notFound(w, "note not found")
 	case errors.Is(err, note.ErrInvalidSubject):
 		badRequest(w, "subject does not exist")
+	case errors.Is(err, note.ErrInvalidLibrarySubject):
+		badRequest(w, "library subject does not exist")
 	case err != nil:
 		slog.ErrorContext(r.Context(), op, "err", err)
 		internalError(w)
@@ -197,13 +217,16 @@ func toNoteSummary(s note.Summary) NoteSummary {
 		tags = append(tags, Tag{Id: t.ID, Name: t.Name})
 	}
 	return NoteSummary{
-		Id:        s.ID,
-		SubjectId: nullableUUID(s.SubjectID),
-		Title:     s.Title,
-		IsPinned:  s.IsPinned,
-		Tags:      tags,
-		CreatedAt: s.CreatedAt,
-		UpdatedAt: s.UpdatedAt,
+		Id:               s.ID,
+		SubjectId:        nullableUUID(s.SubjectID),
+		Title:            s.Title,
+		IsPinned:         s.IsPinned,
+		Kind:             MaterialKind(s.Kind),
+		Status:           MaterialStatus(s.Status),
+		LibrarySubjectId: nullableUUID(s.LibrarySubjectID),
+		Tags:             tags,
+		CreatedAt:        s.CreatedAt,
+		UpdatedAt:        s.UpdatedAt,
 	}
 }
 
@@ -214,14 +237,22 @@ func toNote(n note.Note) (Note, error) {
 	}
 	s := toNoteSummary(n.Summary)
 	return Note{
-		Id:        s.Id,
-		SubjectId: s.SubjectId,
-		Title:     s.Title,
-		IsPinned:  s.IsPinned,
-		Tags:      s.Tags,
-		CreatedAt: s.CreatedAt,
-		UpdatedAt: s.UpdatedAt,
-		Content:   doc,
+		Id:               s.Id,
+		SubjectId:        s.SubjectId,
+		Title:            s.Title,
+		IsPinned:         s.IsPinned,
+		Kind:             s.Kind,
+		Status:           s.Status,
+		LibrarySubjectId: s.LibrarySubjectId,
+		Tags:             s.Tags,
+		CreatedAt:        s.CreatedAt,
+		UpdatedAt:        s.UpdatedAt,
+		Content:          doc,
+		Summary:          nullableOf(n.Description),
+		Semester:         nullableInt(n.Semester),
+		PublishedAt:      nullableTime(n.PublishedAt),
+		Views:            n.Views,
+		RejectionReason:  nullableOf(n.RejectionReason),
 	}, nil
 }
 

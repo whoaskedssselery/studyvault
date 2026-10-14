@@ -67,6 +67,8 @@ type fakeStore struct {
 	listed    []db.Attachment
 	err       error
 
+	demoted   []db.DemotePublishedNoteParams // для каких заметок просили вернуть материал на проверку
+	demoteErr error
 	noteFiles int64 // сколько файлов уже у заметки
 	usedBytes int64 // сколько байт файлов уже у пользователя
 	userFiles int64 // сколько файлов уже у пользователя
@@ -95,6 +97,21 @@ func (f *fakeStore) CreateAttachment(_ context.Context, a db.CreateAttachmentPar
 	row := db.Attachment{ID: uuid.New(), UserID: a.UserID, NoteID: a.NoteID, ObjectKey: a.ObjectKey, FileName: a.FileName, MimeType: a.MimeType, SizeBytes: a.SizeBytes}
 	f.rows[row.ID] = row
 	return row, nil
+}
+
+func (f *fakeStore) DemotePublishedNote(_ context.Context, a db.DemotePublishedNoteParams) error {
+	f.demoted = append(f.demoted, a)
+	return f.demoteErr
+}
+
+func (f *fakeStore) ListUserObjectKeys(_ context.Context, userID uuid.UUID) ([]string, error) {
+	var keys []string
+	for _, r := range f.rows {
+		if r.UserID == userID {
+			keys = append(keys, r.ObjectKey)
+		}
+	}
+	return keys, f.err
 }
 
 func (f *fakeStore) GetAttachment(_ context.Context, a db.GetAttachmentParams) (db.Attachment, error) {
@@ -202,13 +219,97 @@ func TestCreate_Limits_AreInclusive(t *testing.T) {
 	}
 }
 
+// Типы по ТЗ: PDF, PNG, JPEG и WebP. Остальное, включая то, что раньше разрешалось (gif, текст), отвергается;
+// html и svg нельзя ни в коем случае: файл с таким типом мог бы выполнить скрипт.
 func TestCreate_AllowedTypes(t *testing.T) {
-	for _, m := range []string{"application/pdf", "image/png", "image/jpeg", "image/webp", "image/gif", "text/plain", "text/markdown"} {
+	for _, m := range []string{"application/pdf", "image/png", "image/jpeg", "image/webp"} {
 		in := valid()
 		in.MimeType = m
 		if _, err := attachment.NewService(newFakeStore(), newMemStorage()).Create(context.Background(), uuid.New(), in); err != nil {
 			t.Errorf("%s must be accepted: %v", m, err)
 		}
+	}
+	for _, m := range []string{"image/gif", "text/plain", "text/markdown", "text/html", "image/svg+xml", "application/zip", ""} {
+		in := valid()
+		in.MimeType = m
+		if _, err := attachment.NewService(newFakeStore(), newMemStorage()).Create(context.Background(), uuid.New(), in); !errors.Is(err, attachment.ErrInvalid) {
+			t.Errorf("%q must be rejected, err = %v", m, err)
+		}
+	}
+}
+
+func TestMaxSize_IsTwoMegabytes(t *testing.T) {
+	if attachment.MaxSize != 2<<20 {
+		t.Errorf("MaxSize = %d, the contract says 2 MB", attachment.MaxSize)
+	}
+}
+
+func TestLimits_MatchTheContract(t *testing.T) {
+	if limits.MaxAttachmentsPerNote != 3 {
+		t.Fatalf("the per-note limit is %d, the contract says 3", limits.MaxAttachmentsPerNote)
+	}
+}
+
+// Файлы опубликованного материала нельзя менять незаметно для модератора.
+func TestCreateAndDelete_ReturnThePublishedNoteToReview(t *testing.T) {
+	ctx := context.Background()
+	f, st := newFakeStore(), newMemStorage()
+	f.noteOwned = true
+	uid, noteID := uuid.New(), uuid.New()
+	in := valid()
+	in.NoteID = &noteID
+	svc := attachment.NewService(f, st)
+
+	up, err := svc.Create(ctx, uid, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.demoted) != 1 || f.demoted[0].ID != noteID || f.demoted[0].UserID != uid {
+		t.Fatalf("after Create: demoted = %+v, want one request for the note", f.demoted)
+	}
+	if err := svc.Delete(ctx, uid, up.Attachment.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.demoted) != 2 {
+		t.Errorf("after Delete: demoted = %+v, want a second request", f.demoted)
+	}
+}
+
+func TestCreate_WithoutANote_DoesNotTouchAnyMaterial(t *testing.T) {
+	f, st := newFakeStore(), newMemStorage()
+	if _, err := attachment.NewService(f, st).Create(context.Background(), uuid.New(), valid()); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.demoted) != 0 {
+		t.Errorf("demoted = %+v, want none", f.demoted)
+	}
+}
+
+func TestCreate_FailedDemotionDoesNotFailTheUpload(t *testing.T) {
+	f, st := newFakeStore(), newMemStorage()
+	f.noteOwned, f.demoteErr = true, errors.New("db hiccup")
+	noteID := uuid.New()
+	in := valid()
+	in.NoteID = &noteID
+	if _, err := attachment.NewService(f, st).Create(context.Background(), uuid.New(), in); err != nil {
+		t.Errorf("the file is registered, the caller must not see the demotion failure: %v", err)
+	}
+}
+
+// Link выдаёт ссылку на уже найденный файл: права проверил вызывающий, а наличие файла в хранилище проверяется здесь.
+func TestLink_OnlyAfterTheUpload(t *testing.T) {
+	ctx := context.Background()
+	f, st := newFakeStore(), newMemStorage()
+	svc := attachment.NewService(f, st)
+	up, _ := svc.Create(ctx, uuid.New(), valid())
+
+	if _, err := svc.Link(ctx, up.Attachment); !errors.Is(err, attachment.ErrNotUploaded) {
+		t.Fatalf("before the upload: err = %v, want ErrNotUploaded", err)
+	}
+	st.objects[up.Attachment.ObjectKey] = 1234
+	dl, err := svc.Link(ctx, up.Attachment)
+	if err != nil || dl.URL == "" || dl.Attachment.ID != up.Attachment.ID {
+		t.Errorf("after the upload: %+v, %v", dl, err)
 	}
 }
 
@@ -430,5 +531,37 @@ func TestCreate_TooManyFilesInTotal_IsRefused(t *testing.T) {
 	_, err := attachment.NewService(f, st).Create(context.Background(), uuid.New(), valid())
 	if !errors.Is(err, limits.ErrReached) || len(st.putCalls) != 0 {
 		t.Fatalf("err = %v, presign calls = %d", err, len(st.putCalls))
+	}
+}
+
+// Удаление аккаунта: ключи берутся до удаления записей, а объекты убираются после; сбой одного не мешает остальным.
+func TestUserObjectKeys_AndRemoveObjects_CleanTheStorageEvenWhenOneRemovalFails(t *testing.T) {
+	ctx := context.Background()
+	f, st := newFakeStore(), newMemStorage()
+	svc := attachment.NewService(f, st)
+	owner, other := uuid.New(), uuid.New()
+	_, _ = svc.Create(ctx, owner, valid())
+	_, _ = svc.Create(ctx, owner, valid())
+	c, _ := svc.Create(ctx, other, valid())
+
+	keys, err := svc.UserObjectKeys(ctx, owner)
+	if err != nil || len(keys) != 2 {
+		t.Fatalf("keys = %v, %v, want the owner's two files only", keys, err)
+	}
+	for _, k := range keys {
+		if k == c.Attachment.ObjectKey {
+			t.Error("another user's file must not be listed")
+		}
+	}
+
+	st.removeErr = errors.New("storage hiccup")
+	svc.RemoveObjects(ctx, keys)
+	if len(st.removed) != 2 {
+		t.Errorf("removed %v, a failure of the first must not stop the second", st.removed)
+	}
+
+	f.err = errors.New("db down")
+	if _, err := svc.UserObjectKeys(ctx, owner); err == nil {
+		t.Error("a database error must surface")
 	}
 }

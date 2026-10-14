@@ -10,7 +10,7 @@ import (
 const (
 	MaxSubjectsPerUser        = 200
 	MaxTagsPerUser            = 500
-	MaxAttachmentsPerNote     = 50
+	MaxAttachmentsPerNote     = 3 // по ТЗ
 	MaxAttachmentsPerUser     = 5000
 	MaxAttachmentBytesPerUser = 1 << 30 // 1 ГиБ на все файлы пользователя
 )

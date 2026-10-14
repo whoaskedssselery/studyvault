@@ -23,6 +23,7 @@ const (
 	minPasswordLen    = 8
 	maxPasswordBytes  = 72 // предел bcrypt
 	maxDisplayNameLen = 100
+	maxFacultyLen     = 100
 )
 
 func (a *api) Register(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +142,15 @@ func (a *api) respondWithSession(w http.ResponseWriter, status int, res auth.Res
 }
 
 func toUser(u db.User) User {
-	return User{Id: u.ID, Email: types.Email(u.Email), DisplayName: u.DisplayName, CreatedAt: u.CreatedAt}
+	return User{
+		Id:            u.ID,
+		Email:         types.Email(u.Email),
+		EmailVerified: u.EmailVerifiedAt != nil,
+		DisplayName:   u.DisplayName,
+		Faculty:       nullableText(u.Faculty),
+		Role:          UserRole(u.Role),
+		CreatedAt:     u.CreatedAt,
+	}
 }
 
 func validateRegister(req RegisterRequest) string {

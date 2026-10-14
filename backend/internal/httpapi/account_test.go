@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/auth"
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
@@ -23,10 +24,21 @@ type fakeAccount struct {
 	changeErr           error
 	gotID               uuid.UUID
 	gotName             string
+	gotPatch            auth.ProfilePatch
 	gotCurrent, gotNext string
 	gotUA               string
 	changeCalls         int
 	updates             int
+
+	resetErr, confirmErr, deleteErr   error
+	resetEmail, resetToken, resetPass string
+	deletePass                        string
+	deleteCalls                       int
+
+	verifyReqErr, verifyConfirmErr error
+	verifyReqFor                   uuid.UUID
+	verifyReqCalls                 int
+	verifyToken                    string
 }
 
 func (f *fakeAccount) GetUser(_ context.Context, id uuid.UUID) (db.User, error) {
@@ -34,12 +46,48 @@ func (f *fakeAccount) GetUser(_ context.Context, id uuid.UUID) (db.User, error) 
 	return f.user, f.getErr
 }
 
-func (f *fakeAccount) UpdateDisplayName(_ context.Context, id uuid.UUID, name string) (db.User, error) {
-	f.gotID, f.gotName = id, name
+func (f *fakeAccount) UpdateProfile(_ context.Context, id uuid.UUID, p auth.ProfilePatch) (db.User, error) {
+	f.gotID, f.gotPatch = id, p
 	f.updates++
 	u := f.user
-	u.DisplayName = name
+	if p.DisplayName != nil {
+		u.DisplayName = *p.DisplayName
+		f.gotName = *p.DisplayName
+	}
+	if p.SetFaculty {
+		u.Faculty = pgtype.Text{}
+		if p.Faculty != nil {
+			u.Faculty = pgtype.Text{String: *p.Faculty, Valid: true}
+		}
+	}
 	return u, f.updateErr
+}
+
+func (f *fakeAccount) RequestPasswordReset(_ context.Context, email string) error {
+	f.resetEmail = email
+	return f.resetErr
+}
+
+func (f *fakeAccount) ConfirmPasswordReset(_ context.Context, token, pass string) error {
+	f.resetToken, f.resetPass = token, pass
+	return f.confirmErr
+}
+
+func (f *fakeAccount) RequestEmailVerification(_ context.Context, id uuid.UUID) error {
+	f.verifyReqFor = id
+	f.verifyReqCalls++
+	return f.verifyReqErr
+}
+
+func (f *fakeAccount) ConfirmEmail(_ context.Context, token string) error {
+	f.verifyToken = token
+	return f.verifyConfirmErr
+}
+
+func (f *fakeAccount) DeleteAccount(_ context.Context, id uuid.UUID, password string) error {
+	f.gotID, f.deletePass = id, password
+	f.deleteCalls++
+	return f.deleteErr
 }
 
 func (f *fakeAccount) ChangePassword(_ context.Context, id uuid.UUID, current, next, ua string) (auth.Tokens, error) {
@@ -288,5 +336,55 @@ func TestChangePassword_IsRateLimited(t *testing.T) {
 
 	if a, b, c := send(), send(), send(); a != http.StatusForbidden || b != http.StatusForbidden || c != http.StatusTooManyRequests {
 		t.Errorf("statuses = %d %d %d, want 403 403 429: a stolen access token must not allow unlimited password guessing", a, b, c)
+	}
+}
+
+func TestGetMe_ReturnsRoleAndFaculty(t *testing.T) {
+	e := newAccountEnv(t)
+	e.acc.user.Role = "moderator"
+	e.acc.user.Faculty = pgtype.Text{String: "Information Technology", Valid: true}
+
+	var u struct {
+		Role    string  `json:"role"`
+		Faculty *string `json:"faculty"`
+	}
+	_ = json.Unmarshal(e.do("GET", "/v1/me", "").Body.Bytes(), &u)
+	if u.Role != "moderator" || u.Faculty == nil || *u.Faculty != "Information Technology" {
+		t.Errorf("role = %q, faculty = %v", u.Role, u.Faculty)
+	}
+
+	e.acc.user.Faculty = pgtype.Text{}
+	body := e.do("GET", "/v1/me", "").Body.String()
+	if !strings.Contains(body, `"faculty":null`) {
+		t.Errorf("a missing faculty must be an explicit null: %s", body)
+	}
+}
+
+func TestUpdateMe_Faculty_SetTrimClearAndReject(t *testing.T) {
+	e := newAccountEnv(t)
+
+	if rec := e.do("PATCH", "/v1/me", `{"faculty":"  Physics  "}`); rec.Code != http.StatusOK || !e.acc.gotPatch.SetFaculty || e.acc.gotPatch.Faculty == nil || *e.acc.gotPatch.Faculty != "Physics" {
+		t.Fatalf("set: status = %d, patch = %+v", rec.Code, e.acc.gotPatch)
+	}
+	if e.acc.gotPatch.DisplayName != nil {
+		t.Error("the name was not sent and must stay untouched")
+	}
+	if rec := e.do("PATCH", "/v1/me", `{"faculty":null}`); rec.Code != http.StatusOK || !e.acc.gotPatch.SetFaculty || e.acc.gotPatch.Faculty != nil {
+		t.Errorf("null must clear the faculty: status = %d, patch = %+v", rec.Code, e.acc.gotPatch)
+	}
+	before := e.acc.updates
+	for _, bad := range []string{`{"faculty":""}`, `{"faculty":"   "}`, `{"faculty":"` + strings.Repeat("я", 101) + `"}`} {
+		if rec := e.do("PATCH", "/v1/me", bad); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400", bad, rec.Code)
+		}
+	}
+	if e.acc.updates != before {
+		t.Error("an invalid faculty must not reach the service")
+	}
+	if rec := e.do("PATCH", "/v1/me", `{"role":"moderator"}`); rec.Code != http.StatusBadRequest || e.acc.updates != before {
+		t.Errorf("a role can never be set through the API: status = %d", rec.Code)
+	}
+	if rec := e.do("PATCH", "/v1/me", `{"display_name":"Ann","faculty":"Law"}`); rec.Code != http.StatusOK || *e.acc.gotPatch.DisplayName != "Ann" || *e.acc.gotPatch.Faculty != "Law" {
+		t.Errorf("both at once: status = %d, patch = %+v", rec.Code, e.acc.gotPatch)
 	}
 }

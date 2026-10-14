@@ -21,3 +21,7 @@ SELECT count(*) FROM attachments WHERE note_id = $1 AND user_id = $2;
 -- name: UserAttachmentUsage :one
 SELECT count(*)::bigint AS files, COALESCE(sum(size_bytes), 0)::bigint AS bytes
 FROM attachments WHERE user_id = $1;
+
+-- Ключи объектов пользователя: нужны, чтобы убрать файлы из хранилища при удалении аккаунта.
+-- name: ListUserObjectKeys :many
+SELECT object_key FROM attachments WHERE user_id = $1;

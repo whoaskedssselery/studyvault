@@ -18,12 +18,9 @@ import (
 // Defines values for AttachmentInputMimeType.
 const (
 	Applicationpdf AttachmentInputMimeType = "application/pdf"
-	Imagegif       AttachmentInputMimeType = "image/gif"
 	Imagejpeg      AttachmentInputMimeType = "image/jpeg"
 	Imagepng       AttachmentInputMimeType = "image/png"
 	Imagewebp      AttachmentInputMimeType = "image/webp"
-	Textmarkdown   AttachmentInputMimeType = "text/markdown"
-	Textplain      AttachmentInputMimeType = "text/plain"
 )
 
 // Valid indicates whether the value is a known member of the AttachmentInputMimeType enum.
@@ -31,17 +28,29 @@ func (e AttachmentInputMimeType) Valid() bool {
 	switch e {
 	case Applicationpdf:
 		return true
-	case Imagegif:
-		return true
 	case Imagejpeg:
 		return true
 	case Imagepng:
 		return true
 	case Imagewebp:
 		return true
-	case Textmarkdown:
+	default:
+		return false
+	}
+}
+
+// Defines values for DecisionInputDecision.
+const (
+	DecisionInputDecisionApproved DecisionInputDecision = "approved"
+	DecisionInputDecisionRejected DecisionInputDecision = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the DecisionInputDecision enum.
+func (e DecisionInputDecision) Valid() bool {
+	switch e {
+	case DecisionInputDecisionApproved:
 		return true
-	case Textplain:
+	case DecisionInputDecisionRejected:
 		return true
 	default:
 		return false
@@ -60,6 +69,87 @@ func (e HealthStatus) Valid() bool {
 	case Ok:
 		return true
 	case Unavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MaterialKind.
+const (
+	MaterialKindCheatSheet MaterialKind = "cheat_sheet"
+	MaterialKindNote       MaterialKind = "note"
+)
+
+// Valid indicates whether the value is a known member of the MaterialKind enum.
+func (e MaterialKind) Valid() bool {
+	switch e {
+	case MaterialKindCheatSheet:
+		return true
+	case MaterialKindNote:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MaterialStatus.
+const (
+	MaterialStatusDraft     MaterialStatus = "draft"
+	MaterialStatusPending   MaterialStatus = "pending"
+	MaterialStatusPublished MaterialStatus = "published"
+	MaterialStatusRejected  MaterialStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the MaterialStatus enum.
+func (e MaterialStatus) Valid() bool {
+	switch e {
+	case MaterialStatusDraft:
+		return true
+	case MaterialStatusPending:
+		return true
+	case MaterialStatusPublished:
+		return true
+	case MaterialStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserRole.
+const (
+	Moderator UserRole = "moderator"
+	Student   UserRole = "student"
+)
+
+// Valid indicates whether the value is a known member of the UserRole enum.
+func (e UserRole) Valid() bool {
+	switch e {
+	case Moderator:
+		return true
+	case Student:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListLibraryParamsSort.
+const (
+	New    ListLibraryParamsSort = "new"
+	Rating ListLibraryParamsSort = "rating"
+	Views  ListLibraryParamsSort = "views"
+)
+
+// Valid indicates whether the value is a known member of the ListLibraryParamsSort enum.
+func (e ListLibraryParamsSort) Valid() bool {
+	switch e {
+	case New:
+		return true
+	case Rating:
+		return true
+	case Views:
 		return true
 	default:
 		return false
@@ -93,7 +183,7 @@ type AttachmentInput struct {
 	MimeType AttachmentInputMimeType               `json:"mime_type"`
 	NoteId   nullable.Nullable[openapi_types.UUID] `json:"note_id,omitempty"`
 
-	// SizeBytes До 20 МБ
+	// SizeBytes До 2 МБ
 	//
 	// Example: 183204
 	SizeBytes int64 `json:"size_bytes"`
@@ -119,6 +209,28 @@ type AuthResponse struct {
 	User      User `json:"user"`
 }
 
+// Author defines model for Author.
+type Author struct {
+	DisplayName string                    `json:"display_name"`
+	Faculty     nullable.Nullable[string] `json:"faculty"`
+	Id          openapi_types.UUID        `json:"id"`
+}
+
+// AuthorStats defines model for AuthorStats.
+type AuthorStats struct {
+	Author Author `json:"author"`
+
+	// MaterialsCount Опубликованных материалов
+	MaterialsCount int64         `json:"materials_count"`
+	Rating         RatingSummary `json:"rating"`
+
+	// RatingsCount Оценок всех опубликованных материалов вместе
+	RatingsCount int64 `json:"ratings_count"`
+
+	// Views Просмотров опубликованных материалов вместе
+	Views int64 `json:"views"`
+}
+
 // ChangePasswordRequest defines model for ChangePasswordRequest.
 type ChangePasswordRequest struct {
 	// CurrentPassword Example: correct-horse-battery
@@ -128,6 +240,68 @@ type ChangePasswordRequest struct {
 	//
 	// Example: another-long-passphrase
 	NewPassword string `json:"new_password"`
+}
+
+// Comment defines model for Comment.
+type Comment struct {
+	Author    Author    `json:"author"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// EditedAt Когда комментарий последний раз правили; `null`, если не правили
+	EditedAt nullable.Nullable[time.Time] `json:"edited_at"`
+	Id       openapi_types.UUID           `json:"id"`
+}
+
+// CommentInput defines model for CommentInput.
+type CommentInput struct {
+	// Body Example: Спасибо, очень помогло перед экзаменом!
+	Body string `json:"body"`
+}
+
+// CommentPage defines model for CommentPage.
+type CommentPage struct {
+	Items      []Comment                 `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
+
+// CommentPatch defines model for CommentPatch.
+type CommentPatch struct {
+	Body string `json:"body"`
+}
+
+// DecisionInput defines model for DecisionInput.
+type DecisionInput struct {
+	Decision DecisionInputDecision `json:"decision"`
+
+	// Reason Обязательна при `rejected`, игнорируется при `approved`
+	//
+	// Example: Не указан источник формул, дополните конспект.
+	Reason *string `json:"reason,omitempty"`
+}
+
+// DecisionInputDecision defines model for DecisionInput.Decision.
+type DecisionInputDecision string
+
+// DecisionResult defines model for DecisionResult.
+type DecisionResult struct {
+	Id openapi_types.UUID `json:"id"`
+
+	// Status `draft` — черновик, `pending` — на проверке, `published` — опубликован, `rejected` — отклонён.
+	// Переходы: draft → pending, pending → published или rejected, rejected → pending.
+	Status MaterialStatus `json:"status"`
+}
+
+// DeleteAccountRequest defines model for DeleteAccountRequest.
+type DeleteAccountRequest struct {
+	// Password Текущий пароль (удаление необратимо, поэтому его подтверждают)
+	Password string `json:"password"`
+}
+
+// EmailVerificationConfirm defines model for EmailVerificationConfirm.
+type EmailVerificationConfirm struct {
+	// Token Значение параметра `token` из ссылки в письме
+	Token string `json:"token"`
 }
 
 // Graph defines model for Graph.
@@ -153,6 +327,75 @@ type Health struct {
 // HealthStatus defines model for Health.Status.
 type HealthStatus string
 
+// LibraryItem defines model for LibraryItem.
+type LibraryItem struct {
+	Author Author `json:"author"`
+
+	// Bookmarked Лежит ли материал в избранном у зрителя (для гостя всегда `false`)
+	Bookmarked     bool               `json:"bookmarked"`
+	BookmarksCount int64              `json:"bookmarks_count"`
+	CommentsCount  int64              `json:"comments_count"`
+	Id             openapi_types.UUID `json:"id"`
+
+	// Kind `note` — конспект, `cheat_sheet` — шпаргалка
+	//
+	// Example: note
+	Kind MaterialKind `json:"kind"`
+
+	// MyRating Оценка зрителя; `null` для гостя и для материала без его оценки
+	MyRating    nullable.Nullable[int] `json:"my_rating"`
+	PublishedAt time.Time              `json:"published_at"`
+	Rating      RatingSummary          `json:"rating"`
+	Semester    nullable.Nullable[int] `json:"semester"`
+
+	// Snippet Только в результатах поиска (`q`): HTML-фрагмент, где весь текст экранирован, а найденные слова обёрнуты в
+	// `<mark>`. Вне поиска `null`.
+	Snippet nullable.Nullable[string]     `json:"snippet"`
+	Subject nullable.Nullable[SubjectRef] `json:"subject"`
+	Summary nullable.Nullable[string]     `json:"summary"`
+
+	// Tags Названия тегов автора, привязанных к материалу
+	Tags  []string `json:"tags"`
+	Title string   `json:"title"`
+	Views int64    `json:"views"`
+}
+
+// LibraryPage defines model for LibraryPage.
+type LibraryPage struct {
+	Items []LibraryItem `json:"items"`
+
+	// NextCursor `null`, если страница последняя
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
+
+// LibrarySubject defines model for LibrarySubject.
+type LibrarySubject struct {
+	// Color Example: #4f46e5
+	Color nullable.Nullable[string] `json:"color"`
+	Id    openapi_types.UUID        `json:"id"`
+
+	// MaterialsCount Сколько в предмете опубликованных материалов
+	MaterialsCount int64 `json:"materials_count"`
+
+	// Title Example: Математический анализ
+	Title string `json:"title"`
+}
+
+// LibrarySubjectInput defines model for LibrarySubjectInput.
+type LibrarySubjectInput struct {
+	// Color Example: #f97316
+	Color nullable.Nullable[string] `json:"color,omitempty"`
+
+	// Title Example: Базы данных
+	Title string `json:"title"`
+}
+
+// LibrarySubjectPatch defines model for LibrarySubjectPatch.
+type LibrarySubjectPatch struct {
+	Color nullable.Nullable[string] `json:"color,omitempty"`
+	Title *string                   `json:"title,omitempty"`
+}
+
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
 	// Email Example: anna@example.com
@@ -162,19 +405,89 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// Material Страница материала. Поля `status` и `rejection_reason` показываются автору и модератору.
+type Material struct {
+	Attachments    []Attachment `json:"attachments"`
+	Author         Author       `json:"author"`
+	Bookmarked     bool         `json:"bookmarked"`
+	BookmarksCount int64        `json:"bookmarks_count"`
+	CommentsCount  int64        `json:"comments_count"`
+
+	// Content Документ редактора Tiptap (ProseMirror JSON). Бэкенд хранит как есть.
+	//
+	// Example: {"content":[{"content":[{"text":"Привет, [[Другая заметка]]","type":"text"}],"type":"paragraph"}],"type":"doc"}
+	Content   TiptapDoc          `json:"content"`
+	CreatedAt time.Time          `json:"created_at"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// Kind `note` — конспект, `cheat_sheet` — шпаргалка
+	//
+	// Example: note
+	Kind     MaterialKind           `json:"kind"`
+	MyRating nullable.Nullable[int] `json:"my_rating"`
+
+	// PublishedAt `null`, пока материал не опубликован
+	PublishedAt nullable.Nullable[time.Time] `json:"published_at"`
+	Rating      RatingSummary                `json:"rating"`
+
+	// RejectionReason Причина последнего отказа; заполнена, пока материал в статусе `rejected`
+	RejectionReason nullable.Nullable[string] `json:"rejection_reason"`
+	Semester        nullable.Nullable[int]    `json:"semester"`
+
+	// Status `draft` — черновик, `pending` — на проверке, `published` — опубликован, `rejected` — отклонён.
+	// Переходы: draft → pending, pending → published или rejected, rejected → pending.
+	Status  MaterialStatus                `json:"status"`
+	Subject nullable.Nullable[SubjectRef] `json:"subject"`
+	Summary nullable.Nullable[string]     `json:"summary"`
+
+	// Tags Названия тегов автора, привязанных к материалу
+	Tags      []string  `json:"tags"`
+	Title     string    `json:"title"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Views     int64     `json:"views"`
+}
+
+// MaterialKind `note` — конспект, `cheat_sheet` — шпаргалка
+//
+// Example: note
+type MaterialKind string
+
+// MaterialStatus `draft` — черновик, `pending` — на проверке, `published` — опубликован, `rejected` — отклонён.
+// Переходы: draft → pending, pending → published или rejected, rejected → pending.
+type MaterialStatus string
+
 // Note defines model for Note.
 type Note struct {
 	// Content Документ редактора Tiptap (ProseMirror JSON). Бэкенд хранит как есть.
 	//
 	// Example: {"content":[{"content":[{"text":"Привет, [[Другая заметка]]","type":"text"}],"type":"paragraph"}],"type":"doc"}
-	Content   TiptapDoc                             `json:"content"`
-	CreatedAt time.Time                             `json:"created_at"`
-	Id        openapi_types.UUID                    `json:"id"`
-	IsPinned  bool                                  `json:"is_pinned"`
+	Content   TiptapDoc          `json:"content"`
+	CreatedAt time.Time          `json:"created_at"`
+	Id        openapi_types.UUID `json:"id"`
+	IsPinned  bool               `json:"is_pinned"`
+
+	// Kind `note` — конспект, `cheat_sheet` — шпаргалка
+	//
+	// Example: note
+	Kind MaterialKind `json:"kind"`
+
+	// LibrarySubjectId Общий предмет библиотеки (нужен для отправки на проверку)
+	LibrarySubjectId nullable.Nullable[openapi_types.UUID] `json:"library_subject_id"`
+	PublishedAt      nullable.Nullable[time.Time]          `json:"published_at"`
+
+	// RejectionReason Причина последнего отказа, пока заметка в статусе `rejected`
+	RejectionReason nullable.Nullable[string] `json:"rejection_reason"`
+	Semester        nullable.Nullable[int]    `json:"semester"`
+
+	// Status `draft` — черновик, `pending` — на проверке, `published` — опубликован, `rejected` — отклонён.
+	// Переходы: draft → pending, pending → published или rejected, rejected → pending.
+	Status    MaterialStatus                        `json:"status"`
 	SubjectId nullable.Nullable[openapi_types.UUID] `json:"subject_id"`
+	Summary   nullable.Nullable[string]             `json:"summary"`
 	Tags      []Tag                                 `json:"tags"`
 	Title     string                                `json:"title"`
 	UpdatedAt time.Time                             `json:"updated_at"`
+	Views     int64                                 `json:"views"`
 }
 
 // NoteInput defines model for NoteInput.
@@ -185,8 +498,20 @@ type NoteInput struct {
 	Content TiptapDoc `json:"content"`
 
 	// IsPinned Example: false
-	IsPinned  *bool                                 `json:"is_pinned,omitempty"`
-	SubjectId nullable.Nullable[openapi_types.UUID] `json:"subject_id,omitempty"`
+	IsPinned *bool `json:"is_pinned,omitempty"`
+
+	// Kind `note` — конспект, `cheat_sheet` — шпаргалка
+	//
+	// Example: note
+	Kind *MaterialKind `json:"kind,omitempty"`
+
+	// LibrarySubjectId Общий предмет из `GET /library-subjects`
+	LibrarySubjectId nullable.Nullable[openapi_types.UUID] `json:"library_subject_id,omitempty"`
+	Semester         nullable.Nullable[int]                `json:"semester,omitempty"`
+	SubjectId        nullable.Nullable[openapi_types.UUID] `json:"subject_id,omitempty"`
+
+	// Summary Example: Пределы последовательностей и функций с примерами
+	Summary nullable.Nullable[string] `json:"summary,omitempty"`
 
 	// Title Example: Пределы функций
 	Title string `json:"title"`
@@ -208,8 +533,20 @@ type NotePatch struct {
 	Content *TiptapDoc `json:"content,omitempty"`
 
 	// IsPinned Example: true
-	IsPinned  *bool                                 `json:"is_pinned,omitempty"`
-	SubjectId nullable.Nullable[openapi_types.UUID] `json:"subject_id,omitempty"`
+	IsPinned *bool `json:"is_pinned,omitempty"`
+
+	// Kind `note` — конспект, `cheat_sheet` — шпаргалка
+	//
+	// Example: note
+	Kind *MaterialKind `json:"kind,omitempty"`
+
+	// LibrarySubjectId Общий предмет из `GET /library-subjects`
+	LibrarySubjectId nullable.Nullable[openapi_types.UUID] `json:"library_subject_id,omitempty"`
+	Semester         nullable.Nullable[int]                `json:"semester,omitempty"`
+	SubjectId        nullable.Nullable[openapi_types.UUID] `json:"subject_id,omitempty"`
+
+	// Summary Example: Пределы последовательностей и функций с примерами
+	Summary nullable.Nullable[string] `json:"summary,omitempty"`
 
 	// Title Example: Пределы функций (конспект)
 	Title *string `json:"title,omitempty"`
@@ -217,13 +554,42 @@ type NotePatch struct {
 
 // NoteSummary defines model for NoteSummary.
 type NoteSummary struct {
-	CreatedAt time.Time                             `json:"created_at"`
-	Id        openapi_types.UUID                    `json:"id"`
-	IsPinned  bool                                  `json:"is_pinned"`
+	CreatedAt time.Time          `json:"created_at"`
+	Id        openapi_types.UUID `json:"id"`
+	IsPinned  bool               `json:"is_pinned"`
+
+	// Kind `note` — конспект, `cheat_sheet` — шпаргалка
+	//
+	// Example: note
+	Kind MaterialKind `json:"kind"`
+
+	// LibrarySubjectId Общий предмет библиотеки (нужен для отправки на проверку)
+	LibrarySubjectId nullable.Nullable[openapi_types.UUID] `json:"library_subject_id"`
+
+	// Status `draft` — черновик, `pending` — на проверке, `published` — опубликован, `rejected` — отклонён.
+	// Переходы: draft → pending, pending → published или rejected, rejected → pending.
+	Status    MaterialStatus                        `json:"status"`
 	SubjectId nullable.Nullable[openapi_types.UUID] `json:"subject_id"`
 	Tags      []Tag                                 `json:"tags"`
 	Title     string                                `json:"title"`
 	UpdatedAt time.Time                             `json:"updated_at"`
+}
+
+// PasswordResetConfirm defines model for PasswordResetConfirm.
+type PasswordResetConfirm struct {
+	// NewPassword Не длиннее 72 байт (ограничение bcrypt)
+	//
+	// Example: another-long-passphrase
+	NewPassword string `json:"new_password"`
+
+	// Token Значение параметра `token` из ссылки в письме
+	Token string `json:"token"`
+}
+
+// PasswordResetRequest defines model for PasswordResetRequest.
+type PasswordResetRequest struct {
+	// Email Example: anna@example.com
+	Email openapi_types.Email `json:"email"`
 }
 
 // Problem Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
@@ -260,7 +626,78 @@ type Problem struct {
 // ProfilePatch defines model for ProfilePatch.
 type ProfilePatch struct {
 	// DisplayName Example: Анна Студентова
-	DisplayName string `json:"display_name"`
+	DisplayName *string `json:"display_name,omitempty"`
+
+	// Faculty `null` очищает поле
+	//
+	// Example: Информационные технологии
+	Faculty nullable.Nullable[string] `json:"faculty,omitempty"`
+}
+
+// QueueItem defines model for QueueItem.
+type QueueItem struct {
+	Author    Author             `json:"author"`
+	CreatedAt time.Time          `json:"created_at"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// Kind `note` — конспект, `cheat_sheet` — шпаргалка
+	//
+	// Example: note
+	Kind     MaterialKind                  `json:"kind"`
+	Semester nullable.Nullable[int]        `json:"semester"`
+	Subject  nullable.Nullable[SubjectRef] `json:"subject"`
+
+	// SubmittedAt Когда материал отправлен на проверку (последний раз)
+	SubmittedAt time.Time                 `json:"submitted_at"`
+	Summary     nullable.Nullable[string] `json:"summary"`
+	Title       string                    `json:"title"`
+}
+
+// QueuePage defines model for QueuePage.
+type QueuePage struct {
+	Items      []QueueItem               `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
+
+// RankedAuthor defines model for RankedAuthor.
+type RankedAuthor struct {
+	Author Author `json:"author"`
+
+	// MaterialsCount Опубликованных материалов
+	MaterialsCount int64 `json:"materials_count"`
+
+	// Rank Место в рейтинге, начиная с 1
+	Rank   int           `json:"rank"`
+	Rating RatingSummary `json:"rating"`
+
+	// RatingsCount Оценок всех опубликованных материалов вместе
+	RatingsCount int64 `json:"ratings_count"`
+
+	// Views Просмотров опубликованных материалов вместе
+	Views int64 `json:"views"`
+}
+
+// RatingInput defines model for RatingInput.
+type RatingInput struct {
+	// Value Example: 5
+	Value int `json:"value"`
+}
+
+// RatingResult defines model for RatingResult.
+type RatingResult struct {
+	MyRating int           `json:"my_rating"`
+	Rating   RatingSummary `json:"rating"`
+}
+
+// RatingSummary defines model for RatingSummary.
+type RatingSummary struct {
+	// Average Среднее арифметическое оценок; `null`, если оценок ещё нет («Нет оценок»)
+	//
+	// Example: 4.5
+	Average nullable.Nullable[float64] `json:"average"`
+
+	// Count Example: 12
+	Count int64 `json:"count"`
 }
 
 // RegisterRequest defines model for RegisterRequest.
@@ -325,6 +762,13 @@ type SubjectPatch struct {
 	Title *string `json:"title,omitempty"`
 }
 
+// SubjectRef defines model for SubjectRef.
+type SubjectRef struct {
+	Color nullable.Nullable[string] `json:"color"`
+	Id    openapi_types.UUID        `json:"id"`
+	Title string                    `json:"title"`
+}
+
 // Tag defines model for Tag.
 type Tag struct {
 	Id   openapi_types.UUID `json:"id"`
@@ -352,13 +796,33 @@ type TokenResponse struct {
 	ExpiresIn int `json:"expires_in"`
 }
 
+// UnpublishInput defines model for UnpublishInput.
+type UnpublishInput struct {
+	// Reason Example: В материале найдены неточности в формулировке теоремы.
+	Reason string `json:"reason"`
+}
+
 // User defines model for User.
 type User struct {
 	CreatedAt   time.Time           `json:"created_at"`
 	DisplayName string              `json:"display_name"`
 	Email       openapi_types.Email `json:"email"`
-	Id          openapi_types.UUID  `json:"id"`
+
+	// EmailVerified Почта подтверждена ссылкой из письма. Пока `false`, публиковать материалы, комментировать и ставить оценки нельзя (403 `email_not_verified`). Если на сервере не настроена почта, новые аккаунты подтверждены сразу.
+	EmailVerified bool `json:"email_verified"`
+
+	// Faculty Факультет, необязательное поле профиля
+	//
+	// Example: Информационные технологии
+	Faculty nullable.Nullable[string] `json:"faculty"`
+	Id      openapi_types.UUID        `json:"id"`
+
+	// Role Роль назначается только на сервере; через API её не получить
+	Role UserRole `json:"role"`
 }
+
+// UserRole Роль назначается только на сервере; через API её не получить
+type UserRole string
 
 // Cursor defines model for Cursor.
 type Cursor = string
@@ -374,6 +838,9 @@ type BadRequest = Problem
 
 // Conflict Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
 type Conflict = Problem
+
+// Forbidden Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
+type Forbidden = Problem
 
 // NotFound Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
 type NotFound = Problem
@@ -395,6 +862,55 @@ type ListAttachmentsParams struct {
 	NoteId openapi_types.UUID `form:"note_id" json:"note_id"`
 }
 
+// ListBookmarksParams defines parameters for ListBookmarks.
+type ListBookmarksParams struct {
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Непрозрачная строка из `next_cursor` предыдущей страницы
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListLibraryParams defines parameters for ListLibrary.
+type ListLibraryParams struct {
+	// Q Поисковый запрос (1 до 200 символов)
+	Q                *string             `form:"q,omitempty" json:"q,omitempty"`
+	LibrarySubjectId *openapi_types.UUID `form:"library_subject_id,omitempty" json:"library_subject_id,omitempty"`
+	Kind             *MaterialKind       `form:"kind,omitempty" json:"kind,omitempty"`
+	Semester         *int                `form:"semester,omitempty" json:"semester,omitempty"`
+
+	// AuthorId Только материалы этого автора
+	AuthorId *openapi_types.UUID `form:"author_id,omitempty" json:"author_id,omitempty"`
+
+	// Tag Только материалы с тегом с таким названием (точное совпадение)
+	Tag *string `form:"tag,omitempty" json:"tag,omitempty"`
+
+	// Sort `new` — новые сверху, `rating` — лучшие по оценке, `views` — самые просматриваемые
+	Sort  *ListLibraryParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+	Limit *Limit                 `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Непрозрачная строка из `next_cursor` предыдущей страницы
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListLibraryParamsSort defines parameters for ListLibrary.
+type ListLibraryParamsSort string
+
+// ListCommentsParams defines parameters for ListComments.
+type ListCommentsParams struct {
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Непрозрачная строка из `next_cursor` предыдущей страницы
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListModerationQueueParams defines parameters for ListModerationQueue.
+type ListModerationQueueParams struct {
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Непрозрачная строка из `next_cursor` предыдущей страницы
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListNotesParams defines parameters for ListNotes.
 type ListNotesParams struct {
 	SubjectId *openapi_types.UUID `form:"subject_id,omitempty" json:"subject_id,omitempty"`
@@ -413,6 +929,11 @@ type SetNoteTagsJSONBody struct {
 	TagIds []openapi_types.UUID `json:"tag_ids"`
 }
 
+// ListAuthorRankingParams defines parameters for ListAuthorRanking.
+type ListAuthorRankingParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // SearchNotesParams defines parameters for SearchNotes.
 type SearchNotesParams struct {
 	Q         string              `form:"q" json:"q"`
@@ -426,17 +947,50 @@ type SearchNotesParams struct {
 // CreateAttachmentJSONRequestBody defines body for CreateAttachment for application/json ContentType.
 type CreateAttachmentJSONRequestBody = AttachmentInput
 
+// ConfirmEmailJSONRequestBody defines body for ConfirmEmail for application/json ContentType.
+type ConfirmEmailJSONRequestBody = EmailVerificationConfirm
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
+// RequestPasswordResetJSONRequestBody defines body for RequestPasswordReset for application/json ContentType.
+type RequestPasswordResetJSONRequestBody = PasswordResetRequest
+
+// ConfirmPasswordResetJSONRequestBody defines body for ConfirmPasswordReset for application/json ContentType.
+type ConfirmPasswordResetJSONRequestBody = PasswordResetConfirm
+
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
+
+// UpdateCommentJSONRequestBody defines body for UpdateComment for application/json ContentType.
+type UpdateCommentJSONRequestBody = CommentPatch
+
+// CreateLibrarySubjectJSONRequestBody defines body for CreateLibrarySubject for application/json ContentType.
+type CreateLibrarySubjectJSONRequestBody = LibrarySubjectInput
+
+// UpdateLibrarySubjectJSONRequestBody defines body for UpdateLibrarySubject for application/json ContentType.
+type UpdateLibrarySubjectJSONRequestBody = LibrarySubjectPatch
+
+// CreateCommentJSONRequestBody defines body for CreateComment for application/json ContentType.
+type CreateCommentJSONRequestBody = CommentInput
+
+// RateMaterialJSONRequestBody defines body for RateMaterial for application/json ContentType.
+type RateMaterialJSONRequestBody = RatingInput
+
+// DeleteMeJSONRequestBody defines body for DeleteMe for application/json ContentType.
+type DeleteMeJSONRequestBody = DeleteAccountRequest
 
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = ProfilePatch
 
 // ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
 type ChangePasswordJSONRequestBody = ChangePasswordRequest
+
+// DecideMaterialJSONRequestBody defines body for DecideMaterial for application/json ContentType.
+type DecideMaterialJSONRequestBody = DecisionInput
+
+// UnpublishMaterialJSONRequestBody defines body for UnpublishMaterial for application/json ContentType.
+type UnpublishMaterialJSONRequestBody = UnpublishInput
 
 // CreateNoteJSONRequestBody defines body for CreateNote for application/json ContentType.
 type CreateNoteJSONRequestBody = NoteInput
@@ -470,33 +1024,105 @@ type ServerInterface interface {
 	// GetAttachment Метаданные файла и временная ссылка для скачивания
 	// (GET /attachments/{id})
 	GetAttachment(w http.ResponseWriter, r *http.Request, id Id)
+	// ConfirmEmail Подтвердить почту по ссылке из письма
+	// (POST /auth/email-verification/confirm)
+	ConfirmEmail(w http.ResponseWriter, r *http.Request)
 	// Login Вход
 	// (POST /auth/login)
 	Login(w http.ResponseWriter, r *http.Request)
 	// Logout Выход (отзывает refresh-токен)
 	// (POST /auth/logout)
 	Logout(w http.ResponseWriter, r *http.Request)
+	// RequestPasswordReset Запросить письмо со ссылкой для сброса пароля
+	// (POST /auth/password-reset)
+	RequestPasswordReset(w http.ResponseWriter, r *http.Request)
+	// ConfirmPasswordReset Задать новый пароль по ссылке из письма
+	// (POST /auth/password-reset/confirm)
+	ConfirmPasswordReset(w http.ResponseWriter, r *http.Request)
 	// Refresh Обновить access-токен
 	// (POST /auth/refresh)
 	Refresh(w http.ResponseWriter, r *http.Request)
 	// Register Регистрация
 	// (POST /auth/register)
 	Register(w http.ResponseWriter, r *http.Request)
+	// GetAuthor Публичный профиль автора
+	// (GET /authors/{id})
+	GetAuthor(w http.ResponseWriter, r *http.Request, id Id)
+	// ListBookmarks Моё избранное
+	// (GET /bookmarks)
+	ListBookmarks(w http.ResponseWriter, r *http.Request, params ListBookmarksParams)
+	// DeleteComment Удалить комментарий
+	// (DELETE /comments/{id})
+	DeleteComment(w http.ResponseWriter, r *http.Request, id Id)
+	// UpdateComment Изменить свой комментарий
+	// (PATCH /comments/{id})
+	UpdateComment(w http.ResponseWriter, r *http.Request, id Id)
 	// GetGraph Граф связей между заметками
 	// (GET /graph)
 	GetGraph(w http.ResponseWriter, r *http.Request)
 	// GetHealth Проверка живости сервиса и БД
 	// (GET /health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
+	// ListLibrary Библиотека опубликованных материалов
+	// (GET /library)
+	ListLibrary(w http.ResponseWriter, r *http.Request, params ListLibraryParams)
+	// ListLibrarySubjects Общие предметы библиотеки
+	// (GET /library-subjects)
+	ListLibrarySubjects(w http.ResponseWriter, r *http.Request)
+	// CreateLibrarySubject Добавить общий предмет (модератор)
+	// (POST /library-subjects)
+	CreateLibrarySubject(w http.ResponseWriter, r *http.Request)
+	// DeleteLibrarySubject Удалить общий предмет (модератор)
+	// (DELETE /library-subjects/{id})
+	DeleteLibrarySubject(w http.ResponseWriter, r *http.Request, id Id)
+	// UpdateLibrarySubject Изменить общий предмет (модератор)
+	// (PATCH /library-subjects/{id})
+	UpdateLibrarySubject(w http.ResponseWriter, r *http.Request, id Id)
+	// GetMaterial Страница материала
+	// (GET /library/{id})
+	GetMaterial(w http.ResponseWriter, r *http.Request, id Id)
+	// GetMaterialAttachment Скачать файл материала
+	// (GET /library/{id}/attachments/{attachment_id})
+	GetMaterialAttachment(w http.ResponseWriter, r *http.Request, id Id, attachmentId openapi_types.UUID)
+	// RemoveBookmark Убрать из избранного
+	// (DELETE /library/{id}/bookmark)
+	RemoveBookmark(w http.ResponseWriter, r *http.Request, id Id)
+	// AddBookmark Добавить в избранное
+	// (PUT /library/{id}/bookmark)
+	AddBookmark(w http.ResponseWriter, r *http.Request, id Id)
+	// ListComments Комментарии к опубликованному материалу
+	// (GET /library/{id}/comments)
+	ListComments(w http.ResponseWriter, r *http.Request, id Id, params ListCommentsParams)
+	// CreateComment Оставить комментарий
+	// (POST /library/{id}/comments)
+	CreateComment(w http.ResponseWriter, r *http.Request, id Id)
+	// RateMaterial Поставить или изменить оценку
+	// (PUT /library/{id}/rating)
+	RateMaterial(w http.ResponseWriter, r *http.Request, id Id)
+	// DeleteMe Удалить аккаунт
+	// (DELETE /me)
+	DeleteMe(w http.ResponseWriter, r *http.Request)
 	// GetMe Мой аккаунт
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
 	// UpdateMe Изменить имя
 	// (PATCH /me)
 	UpdateMe(w http.ResponseWriter, r *http.Request)
+	// RequestEmailVerification Отправить письмо подтверждения почты ещё раз
+	// (POST /me/email-verification)
+	RequestEmailVerification(w http.ResponseWriter, r *http.Request)
 	// ChangePassword Сменить пароль
 	// (POST /me/password)
 	ChangePassword(w http.ResponseWriter, r *http.Request)
+	// ListModerationQueue Очередь проверки (модератор)
+	// (GET /moderation/queue)
+	ListModerationQueue(w http.ResponseWriter, r *http.Request, params ListModerationQueueParams)
+	// DecideMaterial Одобрить или отклонить материал (модератор)
+	// (POST /moderation/{id}/decision)
+	DecideMaterial(w http.ResponseWriter, r *http.Request, id Id)
+	// UnpublishMaterial Снять опубликованный материал с публикации (модератор)
+	// (POST /moderation/{id}/unpublish)
+	UnpublishMaterial(w http.ResponseWriter, r *http.Request, id Id)
 	// ListNotes Список заметок (без содержимого)
 	// (GET /notes)
 	ListNotes(w http.ResponseWriter, r *http.Request, params ListNotesParams)
@@ -515,9 +1141,18 @@ type ServerInterface interface {
 	// ListBacklinks Заметки, которые ссылаются на эту через `[[...]]`
 	// (GET /notes/{id}/backlinks)
 	ListBacklinks(w http.ResponseWriter, r *http.Request, id Id)
+	// SubmitNote Отправить заметку на проверку
+	// (POST /notes/{id}/submit)
+	SubmitNote(w http.ResponseWriter, r *http.Request, id Id)
 	// SetNoteTags Заменить набор тегов заметки целиком
 	// (PUT /notes/{id}/tags)
 	SetNoteTags(w http.ResponseWriter, r *http.Request, id Id)
+	// WithdrawNote Забрать материал с проверки
+	// (POST /notes/{id}/withdraw)
+	WithdrawNote(w http.ResponseWriter, r *http.Request, id Id)
+	// ListAuthorRanking Рейтинг авторов
+	// (GET /ranking/authors)
+	ListAuthorRanking(w http.ResponseWriter, r *http.Request, params ListAuthorRankingParams)
 	// SearchNotes Полнотекстовый поиск по заметкам (Meilisearch)
 	// (GET /search)
 	SearchNotes(w http.ResponseWriter, r *http.Request, params SearchNotesParams)
@@ -572,6 +1207,12 @@ func (_ Unimplemented) GetAttachment(w http.ResponseWriter, r *http.Request, id 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// ConfirmEmail Подтвердить почту по ссылке из письма
+// (POST /auth/email-verification/confirm)
+func (_ Unimplemented) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Login Вход
 // (POST /auth/login)
 func (_ Unimplemented) Login(w http.ResponseWriter, r *http.Request) {
@@ -581,6 +1222,18 @@ func (_ Unimplemented) Login(w http.ResponseWriter, r *http.Request) {
 // Logout Выход (отзывает refresh-токен)
 // (POST /auth/logout)
 func (_ Unimplemented) Logout(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RequestPasswordReset Запросить письмо со ссылкой для сброса пароля
+// (POST /auth/password-reset)
+func (_ Unimplemented) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ConfirmPasswordReset Задать новый пароль по ссылке из письма
+// (POST /auth/password-reset/confirm)
+func (_ Unimplemented) ConfirmPasswordReset(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -596,6 +1249,30 @@ func (_ Unimplemented) Register(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetAuthor Публичный профиль автора
+// (GET /authors/{id})
+func (_ Unimplemented) GetAuthor(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListBookmarks Моё избранное
+// (GET /bookmarks)
+func (_ Unimplemented) ListBookmarks(w http.ResponseWriter, r *http.Request, params ListBookmarksParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteComment Удалить комментарий
+// (DELETE /comments/{id})
+func (_ Unimplemented) DeleteComment(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdateComment Изменить свой комментарий
+// (PATCH /comments/{id})
+func (_ Unimplemented) UpdateComment(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetGraph Граф связей между заметками
 // (GET /graph)
 func (_ Unimplemented) GetGraph(w http.ResponseWriter, r *http.Request) {
@@ -605,6 +1282,84 @@ func (_ Unimplemented) GetGraph(w http.ResponseWriter, r *http.Request) {
 // GetHealth Проверка живости сервиса и БД
 // (GET /health)
 func (_ Unimplemented) GetHealth(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListLibrary Библиотека опубликованных материалов
+// (GET /library)
+func (_ Unimplemented) ListLibrary(w http.ResponseWriter, r *http.Request, params ListLibraryParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListLibrarySubjects Общие предметы библиотеки
+// (GET /library-subjects)
+func (_ Unimplemented) ListLibrarySubjects(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateLibrarySubject Добавить общий предмет (модератор)
+// (POST /library-subjects)
+func (_ Unimplemented) CreateLibrarySubject(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteLibrarySubject Удалить общий предмет (модератор)
+// (DELETE /library-subjects/{id})
+func (_ Unimplemented) DeleteLibrarySubject(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdateLibrarySubject Изменить общий предмет (модератор)
+// (PATCH /library-subjects/{id})
+func (_ Unimplemented) UpdateLibrarySubject(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMaterial Страница материала
+// (GET /library/{id})
+func (_ Unimplemented) GetMaterial(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMaterialAttachment Скачать файл материала
+// (GET /library/{id}/attachments/{attachment_id})
+func (_ Unimplemented) GetMaterialAttachment(w http.ResponseWriter, r *http.Request, id Id, attachmentId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RemoveBookmark Убрать из избранного
+// (DELETE /library/{id}/bookmark)
+func (_ Unimplemented) RemoveBookmark(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// AddBookmark Добавить в избранное
+// (PUT /library/{id}/bookmark)
+func (_ Unimplemented) AddBookmark(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListComments Комментарии к опубликованному материалу
+// (GET /library/{id}/comments)
+func (_ Unimplemented) ListComments(w http.ResponseWriter, r *http.Request, id Id, params ListCommentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateComment Оставить комментарий
+// (POST /library/{id}/comments)
+func (_ Unimplemented) CreateComment(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RateMaterial Поставить или изменить оценку
+// (PUT /library/{id}/rating)
+func (_ Unimplemented) RateMaterial(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteMe Удалить аккаунт
+// (DELETE /me)
+func (_ Unimplemented) DeleteMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -620,9 +1375,33 @@ func (_ Unimplemented) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// RequestEmailVerification Отправить письмо подтверждения почты ещё раз
+// (POST /me/email-verification)
+func (_ Unimplemented) RequestEmailVerification(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ChangePassword Сменить пароль
 // (POST /me/password)
 func (_ Unimplemented) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListModerationQueue Очередь проверки (модератор)
+// (GET /moderation/queue)
+func (_ Unimplemented) ListModerationQueue(w http.ResponseWriter, r *http.Request, params ListModerationQueueParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DecideMaterial Одобрить или отклонить материал (модератор)
+// (POST /moderation/{id}/decision)
+func (_ Unimplemented) DecideMaterial(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UnpublishMaterial Снять опубликованный материал с публикации (модератор)
+// (POST /moderation/{id}/unpublish)
+func (_ Unimplemented) UnpublishMaterial(w http.ResponseWriter, r *http.Request, id Id) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -662,9 +1441,27 @@ func (_ Unimplemented) ListBacklinks(w http.ResponseWriter, r *http.Request, id 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// SubmitNote Отправить заметку на проверку
+// (POST /notes/{id}/submit)
+func (_ Unimplemented) SubmitNote(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // SetNoteTags Заменить набор тегов заметки целиком
 // (PUT /notes/{id}/tags)
 func (_ Unimplemented) SetNoteTags(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// WithdrawNote Забрать материал с проверки
+// (POST /notes/{id}/withdraw)
+func (_ Unimplemented) WithdrawNote(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListAuthorRanking Рейтинг авторов
+// (GET /ranking/authors)
+func (_ Unimplemented) ListAuthorRanking(w http.ResponseWriter, r *http.Request, params ListAuthorRankingParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -824,6 +1621,20 @@ func (siw *ServerInterfaceWrapper) GetAttachment(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// ConfirmEmail operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmEmail(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // Login operation middleware
 func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request) {
 
@@ -843,6 +1654,34 @@ func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Logout(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RequestPasswordReset operation middleware
+func (siw *ServerInterfaceWrapper) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestPasswordReset(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConfirmPasswordReset operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmPasswordReset(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmPasswordReset(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -880,6 +1719,130 @@ func (siw *ServerInterfaceWrapper) Register(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// GetAuthor operation middleware
+func (siw *ServerInterfaceWrapper) GetAuthor(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAuthor(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListBookmarks operation middleware
+func (siw *ServerInterfaceWrapper) ListBookmarks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListBookmarksParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListBookmarks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteComment operation middleware
+func (siw *ServerInterfaceWrapper) DeleteComment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteComment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateComment operation middleware
+func (siw *ServerInterfaceWrapper) UpdateComment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateComment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetGraph operation middleware
 func (siw *ServerInterfaceWrapper) GetGraph(w http.ResponseWriter, r *http.Request) {
 
@@ -899,6 +1862,457 @@ func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetHealth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListLibrary operation middleware
+func (siw *ServerInterfaceWrapper) ListLibrary(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListLibraryParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "library_subject_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "library_subject_id", r.URL.Query(), &params.LibrarySubjectId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "library_subject_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "library_subject_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "semester" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "semester", r.URL.Query(), &params.Semester, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "semester"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "semester", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "author_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "author_id", r.URL.Query(), &params.AuthorId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "author_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "author_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "tag" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "tag", r.URL.Query(), &params.Tag, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "tag"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tag", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListLibrary(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListLibrarySubjects operation middleware
+func (siw *ServerInterfaceWrapper) ListLibrarySubjects(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListLibrarySubjects(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateLibrarySubject operation middleware
+func (siw *ServerInterfaceWrapper) CreateLibrarySubject(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateLibrarySubject(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteLibrarySubject operation middleware
+func (siw *ServerInterfaceWrapper) DeleteLibrarySubject(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteLibrarySubject(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateLibrarySubject operation middleware
+func (siw *ServerInterfaceWrapper) UpdateLibrarySubject(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateLibrarySubject(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMaterial operation middleware
+func (siw *ServerInterfaceWrapper) GetMaterial(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMaterial(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMaterialAttachment operation middleware
+func (siw *ServerInterfaceWrapper) GetMaterialAttachment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "attachment_id" -------------
+	var attachmentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "attachment_id", chi.URLParam(r, "attachment_id"), &attachmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "attachment_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMaterialAttachment(w, r, id, attachmentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveBookmark operation middleware
+func (siw *ServerInterfaceWrapper) RemoveBookmark(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveBookmark(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddBookmark operation middleware
+func (siw *ServerInterfaceWrapper) AddBookmark(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddBookmark(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListComments operation middleware
+func (siw *ServerInterfaceWrapper) ListComments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListCommentsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListComments(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateComment operation middleware
+func (siw *ServerInterfaceWrapper) CreateComment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateComment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RateMaterial operation middleware
+func (siw *ServerInterfaceWrapper) RateMaterial(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RateMaterial(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMe operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMe(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -936,11 +2350,123 @@ func (siw *ServerInterfaceWrapper) UpdateMe(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// RequestEmailVerification operation middleware
+func (siw *ServerInterfaceWrapper) RequestEmailVerification(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestEmailVerification(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ChangePassword operation middleware
 func (siw *ServerInterfaceWrapper) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ChangePassword(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListModerationQueue operation middleware
+func (siw *ServerInterfaceWrapper) ListModerationQueue(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListModerationQueueParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListModerationQueue(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DecideMaterial operation middleware
+func (siw *ServerInterfaceWrapper) DecideMaterial(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DecideMaterial(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnpublishMaterial operation middleware
+func (siw *ServerInterfaceWrapper) UnpublishMaterial(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnpublishMaterial(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1153,6 +2679,32 @@ func (siw *ServerInterfaceWrapper) ListBacklinks(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// SubmitNote operation middleware
+func (siw *ServerInterfaceWrapper) SubmitNote(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SubmitNote(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SetNoteTags operation middleware
 func (siw *ServerInterfaceWrapper) SetNoteTags(w http.ResponseWriter, r *http.Request) {
 
@@ -1170,6 +2722,65 @@ func (siw *ServerInterfaceWrapper) SetNoteTags(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SetNoteTags(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// WithdrawNote operation middleware
+func (siw *ServerInterfaceWrapper) WithdrawNote(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.WithdrawNote(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAuthorRanking operation middleware
+func (siw *ServerInterfaceWrapper) ListAuthorRanking(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAuthorRankingParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAuthorRanking(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1514,6 +3125,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/auth/logout", wrapper.Logout)
 	})
 	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/me", wrapper.DeleteMe)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/me", wrapper.GetMe)
 	})
 	r.Group(func(r chi.Router) {
@@ -1521,6 +3135,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/me/password", wrapper.ChangePassword)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/email-verification", wrapper.RequestEmailVerification)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/subjects", wrapper.ListSubjects)
@@ -1581,6 +3198,81 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/attachments/{id}", wrapper.GetAttachment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/notes/{id}/submit", wrapper.SubmitNote)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/library", wrapper.ListLibrary)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/library-subjects", wrapper.ListLibrarySubjects)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/library-subjects", wrapper.CreateLibrarySubject)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/library-subjects/{id}", wrapper.DeleteLibrarySubject)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/library-subjects/{id}", wrapper.UpdateLibrarySubject)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/library/{id}", wrapper.GetMaterial)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/library/{id}/attachments/{attachment_id}", wrapper.GetMaterialAttachment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/library/{id}/comments", wrapper.ListComments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/library/{id}/comments", wrapper.CreateComment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/comments/{id}", wrapper.DeleteComment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/comments/{id}", wrapper.UpdateComment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/library/{id}/rating", wrapper.RateMaterial)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/library/{id}/bookmark", wrapper.RemoveBookmark)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/library/{id}/bookmark", wrapper.AddBookmark)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/bookmarks", wrapper.ListBookmarks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/moderation/queue", wrapper.ListModerationQueue)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/moderation/{id}/decision", wrapper.DecideMaterial)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/password-reset", wrapper.RequestPasswordReset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/password-reset/confirm", wrapper.ConfirmPasswordReset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/email-verification/confirm", wrapper.ConfirmEmail)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/notes/{id}/withdraw", wrapper.WithdrawNote)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/moderation/{id}/unpublish", wrapper.UnpublishMaterial)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/ranking/authors", wrapper.ListAuthorRanking)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/authors/{id}", wrapper.GetAuthor)
 	})
 
 	return r

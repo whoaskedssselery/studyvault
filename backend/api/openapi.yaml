@@ -24,21 +24,27 @@ info:
     | `validation_failed` | 400 | неверные входные данные, неизвестное поле, неправильный id или курсор |
     | `unauthorized` | 401 | нет токена, он неверный или просрочен |
     | `invalid_credentials` | 401, 403 | неверная почта или пароль (401); неверный текущий пароль при смене (403) |
-    | `invalid_token` | 401 | refresh-токен отсутствует, просрочен или уже использован |
+    | `invalid_token` | 401 | refresh-токен или ссылка сброса пароля отсутствует, просрочена или уже использована |
+    | `forbidden` | 403 | действие только для модератора, либо над своим материалом (оценка, решение модератора) |
     | `not_found` | 404 | объект не найден (или принадлежит другому пользователю) |
     | `method_not_allowed` | 405 | у этого пути нет такого метода |
     | `email_taken` | 409 | почта уже зарегистрирована |
     | `tag_exists` | 409 | у пользователя уже есть тег с таким именем |
+    | `subject_exists` | 409 | общий предмет библиотеки с таким названием уже есть |
+    | `subject_in_use` | 409 | к общему предмету привязаны материалы, удалить его нельзя |
+    | `invalid_transition` | 409 | материал в статусе, из которого нельзя выполнить это действие |
     | `limit_reached` | 409 | исчерпана квота пользователя, см. «Лимиты» |
     | `not_uploaded` | 409 | файл зарегистрирован, но ещё не загружен |
     | `rate_limited` | 429 | слишком много попыток входа; заголовок `Retry-After` в секундах |
     | `internal` | 500 | непредвиденная ошибка сервера (подробности только в его логе) |
     | `search_unavailable` | 503 | поиск недоступен, остальное API работает |
+    | `email_unavailable` | 503 | на сервере не настроена почта, сброс пароля недоступен |
     | `storage_unavailable` | 503 | хранилище файлов недоступно, остальное API работает |
 
-    **Лимиты.** Вход, регистрация, обновление токена и смена пароля: 20 попыток в минуту с одного адреса, дальше 429.
-    Квоты на пользователя: 200 предметов, 500 тегов, 50 файлов на заметку, 5000 файлов и 1 ГиБ суммарно (один файл до
-    20 МБ), дальше 409 `limit_reached`. Квоты мягкие: при одновременных запросах предел можно превысить на число
+    **Лимиты.** Вход, регистрация, обновление токена, сброс, смена пароля и удаление аккаунта: 20 попыток в минуту с одного адреса,
+    дальше 429.
+    Квоты на пользователя: 200 предметов, 500 тегов, 3 файла на заметку, 5000 файлов и 1 ГиБ суммарно (один файл до
+    2 МБ), дальше 409 `limit_reached`. Квоты мягкие: при одновременных запросах предел можно превысить на число
     параллельных запросов.
 
     **Страницы.** Список заметок отдаётся страницами по курсору: `next_cursor` из ответа передают в `?cursor=`,
@@ -68,6 +74,10 @@ tags:
     description: Полнотекстовый поиск
   - name: attachments
     description: Файлы к заметкам
+  - name: library
+    description: Общая библиотека опубликованных материалов, комментарии, оценки и избранное
+  - name: moderation
+    description: Проверка материалов модератором
 
 security:
   - bearerAuth: []
@@ -219,6 +229,31 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [account]
+      operationId: deleteMe
+      summary: Удалить аккаунт
+      description: |
+        Необратимо удаляет аккаунт после подтверждения паролем: заметки, предметы, теги, файлы, комментарии, оценки,
+        избранное и сессии. Опубликованные материалы пользователя пропадают из библиотеки. Неверный пароль даёт
+        403 `invalid_credentials`. Попытки ограничены так же, как смена пароля.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteAccountRequest"
+      responses:
+        "204":
+          description: Аккаунт удалён, cookie `refresh_token` сброшена
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WrongPassword"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /me/password:
     post:
@@ -254,6 +289,26 @@ paths:
           $ref: "#/components/responses/WrongPassword"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+
+  /me/email-verification:
+    post:
+      tags: [account]
+      operationId: requestEmailVerification
+      summary: Отправить письмо подтверждения почты ещё раз
+      description: |
+        При регистрации письмо со ссылкой уходит само; этот метод нужен, если оно не пришло или ссылка просрочена
+        (она действует 24 часа). Новая ссылка гасит прежние. Если почта уже подтверждена, ничего не происходит.
+        Чаще раза в минуту на аккаунт не отправляется: ответ 429 `rate_limited` с `Retry-After`. Если на сервере не
+        настроена почта, ответ 503 `email_unavailable` (в таком режиме все аккаунты подтверждены сразу).
+      responses:
+        "204":
+          description: Письмо отправлено (или почта уже подтверждена)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /subjects:
     get:
@@ -675,7 +730,8 @@ paths:
         напрямую в хранилище запросом `PUT` на этот адрес, **не передавая токен**, и обязан отправить
         ровно те `Content-Type` (`mime_type`) и `Content-Length` (`size_bytes`), которые заявил здесь:
         они входят в подпись ссылки, и при любом расхождении хранилище ответит 403.
-        Разрешены PDF, PNG, JPEG, WebP, GIF, обычный текст и Markdown, до 20 МБ.
+        Разрешены PDF, PNG, JPEG и WebP, до 2 МБ; не больше 3 файлов на заметку. Добавление или удаление файла у
+        опубликованного материала возвращает его на проверку.
       requestBody:
         required: true
         content:
@@ -730,6 +786,692 @@ paths:
       responses:
         "204":
           description: Удалён
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /notes/{id}/submit:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [notes]
+      operationId: submitNote
+      summary: Отправить заметку на проверку
+      description: |
+        Переводит заметку из `draft` или `rejected` в `pending`: её рассмотрит модератор. Для отправки нужны
+        непустое содержимое, общий предмет библиотеки (`library_subject_id`) и тип. Опубликованным материал
+        становится только после одобрения. Правка опубликованного материала возвращает его на проверку.
+      responses:
+        "200":
+          description: Заметка на проверке
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /library:
+    get:
+      tags: [library]
+      operationId: listLibrary
+      summary: Библиотека опубликованных материалов
+      description: |
+        Доступна гостям. Если передан токен, в карточках заполняются `my_rating` и `bookmarked`.
+        Без `q` материалы идут страницами по курсору в выбранном порядке. С `q` выполняется полнотекстовый поиск
+        по опубликованным материалам: результаты идут по релевантности одной страницей (`next_cursor` всегда `null`,
+        параметры `sort` и `cursor` игнорируются), в карточке есть `snippet` с подсветкой.
+      security:
+        - {}
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          description: Поисковый запрос (1 до 200 символов)
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: library_subject_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: kind
+          in: query
+          schema:
+            $ref: "#/components/schemas/MaterialKind"
+        - name: semester
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+        - name: author_id
+          in: query
+          description: Только материалы этого автора
+          schema:
+            type: string
+            format: uuid
+        - name: tag
+          in: query
+          description: Только материалы с тегом с таким названием (точное совпадение)
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 50
+        - name: sort
+          in: query
+          description: "`new` — новые сверху, `rating` — лучшие по оценке, `views` — самые просматриваемые"
+          schema:
+            type: string
+            enum: [new, rating, views]
+            default: new
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Страница материалов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /library-subjects:
+    get:
+      tags: [library]
+      operationId: listLibrarySubjects
+      summary: Общие предметы библиотеки
+      security:
+        - {}
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Список предметов с числом опубликованных материалов
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LibrarySubject"
+    post:
+      tags: [library]
+      operationId: createLibrarySubject
+      summary: Добавить общий предмет (модератор)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibrarySubjectInput"
+      responses:
+        "201":
+          description: Создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibrarySubject"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /library-subjects/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      tags: [library]
+      operationId: updateLibrarySubject
+      summary: Изменить общий предмет (модератор)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibrarySubjectPatch"
+      responses:
+        "200":
+          description: Обновлён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibrarySubject"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [library]
+      operationId: deleteLibrarySubject
+      summary: Удалить общий предмет (модератор)
+      description: Предмет, к которому привязаны материалы, удалить нельзя (409 `subject_in_use`).
+      responses:
+        "204":
+          description: Удалён
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /library/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [library]
+      operationId: getMaterial
+      summary: Страница материала
+      description: |
+        Опубликованный материал видят все, включая гостей, и каждый просмотр чужого опубликованного материала
+        увеличивает `views`. Материал в статусе `draft`, `pending` или `rejected` видит только автор, а `pending` и
+        `rejected` ещё и модератор. Остальным он отвечает 404, как несуществующий.
+      security:
+        - {}
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Материал с содержимым и вложениями
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Material"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /library/{id}/attachments/{attachment_id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: attachment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [library]
+      operationId: getMaterialAttachment
+      summary: Скачать файл материала
+      description: Временная ссылка на 15 минут. Те же правила видимости, что у страницы материала.
+      security:
+        - {}
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Файл
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentDownload"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /library/{id}/comments:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [library]
+      operationId: listComments
+      summary: Комментарии к опубликованному материалу
+      description: Старые сверху. Доступны гостям.
+      security:
+        - {}
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Страница комментариев
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommentPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [library]
+      operationId: createComment
+      summary: Оставить комментарий
+      description: Только к опубликованному материалу. Пустой текст отвергается.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommentInput"
+      responses:
+        "201":
+          description: Создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /comments/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      tags: [library]
+      operationId: updateComment
+      summary: Изменить свой комментарий
+      description: |
+        Только автор и только пока материал опубликован; иначе комментарий неотличим от несуществующего.
+        У изменённого комментария заполнено `edited_at`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommentPatch"
+      responses:
+        "200":
+          description: Комментарий изменён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [library]
+      operationId: deleteComment
+      summary: Удалить комментарий
+      description: Удалить может автор комментария или модератор. Чужой комментарий для студента неотличим от несуществующего.
+      responses:
+        "204":
+          description: Удалён
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /library/{id}/rating:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      tags: [library]
+      operationId: rateMaterial
+      summary: Поставить или изменить оценку
+      description: |
+        Целое число от 1 до 5. Повторная оценка обновляет прежнюю. Оценивать можно только чужой опубликованный
+        материал: свой оценить нельзя (403 `forbidden`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RatingInput"
+      responses:
+        "200":
+          description: Новая сводка по оценкам
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RatingResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /library/{id}/bookmark:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      tags: [library]
+      operationId: addBookmark
+      summary: Добавить в избранное
+      description: Повторный вызов ничего не меняет.
+      responses:
+        "204":
+          description: Материал в избранном
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [library]
+      operationId: removeBookmark
+      summary: Убрать из избранного
+      responses:
+        "204":
+          description: Материала нет в избранном
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /bookmarks:
+    get:
+      tags: [library]
+      operationId: listBookmarks
+      summary: Моё избранное
+      description: Новые сверху. Снятые с публикации материалы из списка пропадают.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Страница избранного
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /moderation/queue:
+    get:
+      tags: [moderation]
+      operationId: listModerationQueue
+      summary: Очередь проверки (модератор)
+      description: Материалы в статусе `pending`, старые сверху.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Страница очереди
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueuePage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /moderation/{id}/decision:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [moderation]
+      operationId: decideMaterial
+      summary: Одобрить или отклонить материал (модератор)
+      description: |
+        Работает только для материала в статусе `pending`; иначе 409 `invalid_transition`. Одобрение публикует материал,
+        отказ требует `reason`. Статус и запись решения меняются одной транзакцией. Свой материал модератор
+        рассматривать не может (403 `forbidden`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionInput"
+      responses:
+        "200":
+          description: Решение принято
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /auth/password-reset:
+    post:
+      tags: [auth]
+      operationId: requestPasswordReset
+      summary: Запросить письмо со ссылкой для сброса пароля
+      description: |
+        Если аккаунт с такой почтой есть, на неё уходит ссылка на страницу фронтенда (`PASSWORD_RESET_URL` сервера)
+        с параметром `token`. Ссылка действует 1 час и работает один раз; новый запрос гасит прежние ссылки.
+        Ответ всегда один и тот же, существует ли аккаунт или нет, а письмо уходит в фоне: так по ответу нельзя выяснить,
+        кто зарегистрирован. На один аккаунт письмо уходит не чаще раза в минуту (повторный запрос раньше ничего не
+        отправляет, но отвечает так же). Если на сервере не настроена почта, ответ 503 `email_unavailable`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetRequest"
+      responses:
+        "204":
+          description: Запрос принят
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /auth/password-reset/confirm:
+    post:
+      tags: [auth]
+      operationId: confirmPasswordReset
+      summary: Задать новый пароль по ссылке из письма
+      description: |
+        Меняет пароль и завершает все сессии пользователя на всех устройствах; после этого нужно войти заново.
+        Неверная, просроченная или уже использованная ссылка даёт 401 `invalid_token`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetConfirm"
+      responses:
+        "204":
+          description: Пароль изменён
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/email-verification/confirm:
+    post:
+      tags: [auth]
+      operationId: confirmEmail
+      summary: Подтвердить почту по ссылке из письма
+      description: |
+        Ссылка ведёт на страницу фронтенда (`EMAIL_VERIFY_URL` сервера) с параметром `token`; страница отправляет токен сюда.
+        Токен в заголовке не нужен: письмо часто открывают на другом устройстве, чем то, где сделана регистрация. Ссылка
+        срабатывает один раз; неверная, просроченная или уже использованная даёт 401 `invalid_token`. Если пользователь
+        уже вошёл, после успеха достаточно обновить `GET /me` (поле `email_verified`); входить заново не нужно.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailVerificationConfirm"
+      responses:
+        "204":
+          description: Почта подтверждена
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /notes/{id}/withdraw:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [notes]
+      operationId: withdrawNote
+      summary: Забрать материал с проверки
+      description: |
+        Переводит заметку из `pending` обратно в `draft`, пока модератор её не рассмотрел. Из других статусов
+        отзывать нечего: 409 `invalid_transition`. Опубликованный материал автор снимает правкой или удалением.
+      responses:
+        "200":
+          description: Заметка снова черновик
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /moderation/{id}/unpublish:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [moderation]
+      operationId: unpublishMaterial
+      summary: Снять опубликованный материал с публикации (модератор)
+      description: |
+        Материал становится `rejected` с указанной причиной: автор видит её, исправляет и отправляет на проверку заново.
+        Оценки, комментарии и избранное сохраняются. Работает только для опубликованного материала (иначе 409
+        `invalid_transition`). Статус и запись решения меняются одной транзакцией.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnpublishInput"
+      responses:
+        "200":
+          description: Материал снят с публикации
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /ranking/authors:
+    get:
+      tags: [library]
+      operationId: listAuthorRanking
+      summary: Рейтинг авторов
+      description: |
+        Лучшие авторы библиотеки, открыт гостям. Показатель автора: среднее арифметическое всех оценок всех его
+        опубликованных материалов. При равенстве выше тот, у кого больше оценок, затем больше материалов. Авторы без оценок
+        стоят в конце. В рейтинге только авторы, у которых есть опубликованные материалы. Список не постраничный, это «топ N».
+      security: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Авторы по местам
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RankedAuthor"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /authors/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [library]
+      operationId: getAuthor
+      summary: Публичный профиль автора
+      description: |
+        Имя, факультет и сводка по опубликованным материалам. Материалы автора: `GET /library?author_id=`. Профиль есть
+        только у пользователя с хотя бы одним опубликованным материалом; для остальных 404, как для несуществующих.
+      security: []
+      responses:
+        "200":
+          description: Профиль автора
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorStats"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -791,6 +1533,12 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: Недостаточно прав (`forbidden`, действие только для модератора или над чужим материалом) либо почта ещё не подтверждена (`email_not_verified`, публиковать, комментировать и оценивать можно только с подтверждённой почтой)
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
     NotFound:
       description: Не найдено (или принадлежит другому пользователю)
       content:
@@ -804,7 +1552,7 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
     TooManyRequests:
-      description: Слишком много попыток входа, регистрации, обновления токена или смены пароля с этого адреса
+      description: Слишком много попыток входа, регистрации, обновления токена, сброса или смены пароля, подтверждения почты, удаления аккаунта с этого адреса. Запрос нового письма подтверждения раньше чем через минуту тоже даёт 429
       headers:
         Retry-After:
           description: Через сколько секунд можно повторить запрос
@@ -815,7 +1563,7 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
     Conflict:
-      description: Конфликт, дубликат (`tag_exists`, `email_taken`), файл ещё не загружен (`not_uploaded`) или исчерпана квота (`limit_reached`)
+      description: Конфликт, дубликат (`tag_exists`, `email_taken`, `subject_exists`), файл ещё не загружен (`not_uploaded`), исчерпана квота (`limit_reached`) или действие недопустимо в этом статусе (`invalid_transition`)
       content:
         application/problem+json:
           schema:
@@ -862,7 +1610,7 @@ components:
 
     User:
       type: object
-      required: [id, email, display_name, created_at]
+      required: [id, email, email_verified, display_name, faculty, role, created_at]
       properties:
         id:
           type: string
@@ -870,8 +1618,20 @@ components:
         email:
           type: string
           format: email
+        email_verified:
+          type: boolean
+          description: Почта подтверждена ссылкой из письма. Пока `false`, публиковать материалы, комментировать и ставить оценки нельзя (403 `email_not_verified`). Если на сервере не настроена почта, новые аккаунты подтверждены сразу.
         display_name:
           type: string
+        faculty:
+          type: string
+          nullable: true
+          description: Факультет, необязательное поле профиля
+          example: Информационные технологии
+        role:
+          type: string
+          enum: [student, moderator]
+          description: Роль назначается только на сервере; через API её не получить
         created_at:
           type: string
           format: date-time
@@ -911,13 +1671,20 @@ components:
 
     ProfilePatch:
       type: object
-      required: [display_name]
+      minProperties: 1
       properties:
         display_name:
           example: Анна Студентова
           type: string
           minLength: 1
           maxLength: 100
+        faculty:
+          example: Информационные технологии
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 100
+          description: "`null` очищает поле"
 
     ChangePasswordRequest:
       type: object
@@ -1053,7 +1820,7 @@ components:
 
     NoteSummary:
       type: object
-      required: [id, subject_id, title, is_pinned, tags, created_at, updated_at]
+      required: [id, subject_id, title, is_pinned, kind, status, library_subject_id, tags, created_at, updated_at]
       properties:
         id:
           type: string
@@ -1066,6 +1833,15 @@ components:
           type: string
         is_pinned:
           type: boolean
+        kind:
+          $ref: "#/components/schemas/MaterialKind"
+        status:
+          $ref: "#/components/schemas/MaterialStatus"
+        library_subject_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Общий предмет библиотеки (нужен для отправки на проверку)
         tags:
           type: array
           items:
@@ -1081,8 +1857,25 @@ components:
       allOf:
         - $ref: "#/components/schemas/NoteSummary"
         - type: object
-          required: [content]
+          required: [content, summary, semester, published_at, views, rejection_reason]
           properties:
+            summary:
+              type: string
+              nullable: true
+            semester:
+              type: integer
+              nullable: true
+            published_at:
+              type: string
+              format: date-time
+              nullable: true
+            views:
+              type: integer
+              format: int64
+            rejection_reason:
+              type: string
+              nullable: true
+              description: Причина последнего отказа, пока заметка в статусе `rejected`
             content:
               $ref: "#/components/schemas/TiptapDoc"
 
@@ -1118,6 +1911,23 @@ components:
           example: false
           type: boolean
           default: false
+        kind:
+          $ref: "#/components/schemas/MaterialKind"
+        summary:
+          type: string
+          nullable: true
+          maxLength: 500
+          example: Пределы последовательностей и функций с примерами
+        semester:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 12
+        library_subject_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Общий предмет из `GET /library-subjects`
 
     NotePatch:
       type: object
@@ -1137,6 +1947,23 @@ components:
         is_pinned:
           example: true
           type: boolean
+        kind:
+          $ref: "#/components/schemas/MaterialKind"
+        summary:
+          type: string
+          nullable: true
+          maxLength: 500
+          example: Пределы последовательностей и функций с примерами
+        semester:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 12
+        library_subject_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Общий предмет из `GET /library-subjects`
 
     Graph:
       type: object
@@ -1233,16 +2060,13 @@ components:
             - image/png
             - image/jpeg
             - image/webp
-            - image/gif
-            - text/plain
-            - text/markdown
         size_bytes:
           example: 183204
           type: integer
           format: int64
           minimum: 1
-          maximum: 20971520
-          description: До 20 МБ
+          maximum: 2097152
+          description: До 2 МБ
 
     AttachmentUpload:
       type: object
@@ -1265,3 +2089,462 @@ components:
           type: string
           format: uri
           description: Presigned GET URL
+
+    MaterialKind:
+      type: string
+      enum: [note, cheat_sheet]
+      description: "`note` — конспект, `cheat_sheet` — шпаргалка"
+      example: note
+
+    MaterialStatus:
+      type: string
+      enum: [draft, pending, published, rejected]
+      description: |
+        `draft` — черновик, `pending` — на проверке, `published` — опубликован, `rejected` — отклонён.
+        Переходы: draft → pending, pending → published или rejected, rejected → pending.
+
+    Author:
+      type: object
+      required: [id, display_name, faculty]
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        faculty:
+          type: string
+          nullable: true
+
+    LibrarySubject:
+      type: object
+      required: [id, title, color, materials_count]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: Математический анализ
+        color:
+          type: string
+          nullable: true
+          example: "#4f46e5"
+        materials_count:
+          type: integer
+          format: int64
+          description: Сколько в предмете опубликованных материалов
+
+    LibrarySubjectInput:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: Базы данных
+        color:
+          type: string
+          nullable: true
+          pattern: "^#[0-9a-fA-F]{6}$"
+          example: "#f97316"
+
+    LibrarySubjectPatch:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        color:
+          type: string
+          nullable: true
+          pattern: "^#[0-9a-fA-F]{6}$"
+
+    SubjectRef:
+      type: object
+      nullable: true
+      required: [id, title, color]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        color:
+          type: string
+          nullable: true
+
+    RatingSummary:
+      type: object
+      required: [average, count]
+      properties:
+        average:
+          type: number
+          format: double
+          nullable: true
+          description: Среднее арифметическое оценок; `null`, если оценок ещё нет («Нет оценок»)
+          example: 4.5
+        count:
+          type: integer
+          format: int64
+          example: 12
+
+    LibraryItem:
+      type: object
+      required: [id, title, summary, kind, semester, subject, author, rating, views, comments_count, bookmarks_count, published_at, my_rating, bookmarked, tags, snippet]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        kind:
+          $ref: "#/components/schemas/MaterialKind"
+        semester:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 12
+        subject:
+          $ref: "#/components/schemas/SubjectRef"
+        author:
+          $ref: "#/components/schemas/Author"
+        rating:
+          $ref: "#/components/schemas/RatingSummary"
+        views:
+          type: integer
+          format: int64
+        comments_count:
+          type: integer
+          format: int64
+        bookmarks_count:
+          type: integer
+          format: int64
+        published_at:
+          type: string
+          format: date-time
+        my_rating:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 5
+          description: Оценка зрителя; `null` для гостя и для материала без его оценки
+        bookmarked:
+          type: boolean
+          description: Лежит ли материал в избранном у зрителя (для гостя всегда `false`)
+        tags:
+          type: array
+          description: Названия тегов автора, привязанных к материалу
+          items:
+            type: string
+        snippet:
+          type: string
+          nullable: true
+          description: |
+            Только в результатах поиска (`q`): HTML-фрагмент, где весь текст экранирован, а найденные слова обёрнуты в
+            `<mark>`. Вне поиска `null`.
+
+    LibraryPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LibraryItem"
+        next_cursor:
+          type: string
+          nullable: true
+          description: "`null`, если страница последняя"
+
+    Material:
+      type: object
+      description: Страница материала. Поля `status` и `rejection_reason` показываются автору и модератору.
+      required: [id, title, summary, kind, semester, subject, author, rating, views, comments_count, bookmarks_count, published_at, my_rating, bookmarked, status, rejection_reason, content, tags, attachments, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        kind:
+          $ref: "#/components/schemas/MaterialKind"
+        semester:
+          type: integer
+          nullable: true
+        subject:
+          $ref: "#/components/schemas/SubjectRef"
+        author:
+          $ref: "#/components/schemas/Author"
+        rating:
+          $ref: "#/components/schemas/RatingSummary"
+        views:
+          type: integer
+          format: int64
+        comments_count:
+          type: integer
+          format: int64
+        bookmarks_count:
+          type: integer
+          format: int64
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: "`null`, пока материал не опубликован"
+        my_rating:
+          type: integer
+          nullable: true
+        bookmarked:
+          type: boolean
+        status:
+          $ref: "#/components/schemas/MaterialStatus"
+        rejection_reason:
+          type: string
+          nullable: true
+          description: Причина последнего отказа; заполнена, пока материал в статусе `rejected`
+        content:
+          $ref: "#/components/schemas/TiptapDoc"
+        tags:
+          type: array
+          description: Названия тегов автора, привязанных к материалу
+          items:
+            type: string
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attachment"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Comment:
+      type: object
+      required: [id, body, author, created_at, edited_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        body:
+          type: string
+        author:
+          $ref: "#/components/schemas/Author"
+        created_at:
+          type: string
+          format: date-time
+        edited_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Когда комментарий последний раз правили; `null`, если не правили
+
+    CommentInput:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          example: Спасибо, очень помогло перед экзаменом!
+
+    CommentPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Comment"
+        next_cursor:
+          type: string
+          nullable: true
+
+    RatingInput:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+
+    RatingResult:
+      type: object
+      required: [rating, my_rating]
+      properties:
+        rating:
+          $ref: "#/components/schemas/RatingSummary"
+        my_rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+
+    QueueItem:
+      type: object
+      required: [id, title, summary, kind, semester, subject, author, submitted_at, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        kind:
+          $ref: "#/components/schemas/MaterialKind"
+        semester:
+          type: integer
+          nullable: true
+        subject:
+          $ref: "#/components/schemas/SubjectRef"
+        author:
+          $ref: "#/components/schemas/Author"
+        submitted_at:
+          type: string
+          format: date-time
+          description: Когда материал отправлен на проверку (последний раз)
+        created_at:
+          type: string
+          format: date-time
+
+    QueuePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueueItem"
+        next_cursor:
+          type: string
+          nullable: true
+
+    DecisionInput:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approved, rejected]
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: Обязательна при `rejected`, игнорируется при `approved`
+          example: Не указан источник формул, дополните конспект.
+
+    DecisionResult:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/MaterialStatus"
+
+    PasswordResetRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: anna@example.com
+
+    PasswordResetConfirm:
+      type: object
+      required: [token, new_password]
+      properties:
+        token:
+          type: string
+          description: Значение параметра `token` из ссылки в письме
+        new_password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          description: Не длиннее 72 байт (ограничение bcrypt)
+          example: another-long-passphrase
+
+    EmailVerificationConfirm:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: Значение параметра `token` из ссылки в письме
+
+    DeleteAccountRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          description: Текущий пароль (удаление необратимо, поэтому его подтверждают)
+
+    UnpublishInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          example: В материале найдены неточности в формулировке теоремы.
+
+    CommentPatch:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+    AuthorStats:
+      type: object
+      required: [author, materials_count, ratings_count, rating, views]
+      properties:
+        author:
+          $ref: "#/components/schemas/Author"
+        materials_count:
+          type: integer
+          format: int64
+          description: Опубликованных материалов
+        ratings_count:
+          type: integer
+          format: int64
+          description: Оценок всех опубликованных материалов вместе
+        rating:
+          $ref: "#/components/schemas/RatingSummary"
+        views:
+          type: integer
+          format: int64
+          description: Просмотров опубликованных материалов вместе
+
+    RankedAuthor:
+      allOf:
+        - $ref: "#/components/schemas/AuthorStats"
+        - type: object
+          required: [rank]
+          properties:
+            rank:
+              type: integer
+              minimum: 1
+              description: Место в рейтинге, начиная с 1

@@ -42,6 +42,14 @@ services:
     volumes:
       - s3_data:/data
 
+  # Локальный почтовый ящик: письма со ссылкой сброса пароля приходят сюда, а не в интернет.
+  # Окно со всеми письмами: http://localhost:8025. В боевом стенде вместо него настоящий SMTP (deploy/docker-compose.prod.yml).
+  mailpit:
+    image: axllent/mailpit:v1.31.5
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+
   # Само приложение. Запускается только с профилем: docker compose --profile app up --build
   # Без профиля поднимается одна инфраструктура, а API гоняют локально (go run ./cmd/api).
   migrate:
@@ -76,6 +84,17 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       # Локальный запуск идёт по http, поэтому Secure выключен. В проде оставьте true.
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-studyvault@example.com}
+      PASSWORD_RESET_URL: ${PASSWORD_RESET_URL:-http://localhost:5173/reset-password}
+      EMAIL_VERIFY_URL: ${EMAIL_VERIFY_URL:-}
+      # Для служебных команд (seed, promote), запускаемых в этом же контейнере.
+      SEED_PASSWORD: ${SEED_PASSWORD:-}
+      AUTH_RATE_LIMIT_PER_MIN: ${AUTH_RATE_LIMIT_PER_MIN:-20}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       LOG_FORMAT: ${LOG_FORMAT:-json}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     restart: unless-stopped
@@ -88,6 +107,9 @@ services:
         condition: service_started
       s3:
         condition: service_started
+      mailpit:
+        condition: service_started
+        required: false # в боевом стенде вместо него настоящий SMTP
 
 volumes:
   postgres_data:

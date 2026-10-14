@@ -1,6 +1,8 @@
 package httpapi_test
 
 import (
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -105,5 +107,82 @@ func TestAuthRateLimit_ZeroDisablesIt(t *testing.T) {
 		if rec := attempt(h, http.MethodPost, "/v1/auth/login", "192.0.2.1:1", ""); rec.Code == http.StatusTooManyRequests {
 			t.Fatalf("attempt %d was limited although the limit is off", i+1)
 		}
+	}
+}
+
+func proxied(perMinute int, proxies ...string) http.Handler {
+	var nets []*net.IPNet
+	for _, p := range proxies {
+		_, n, err := net.ParseCIDR(p)
+		if err != nil {
+			panic(err)
+		}
+		nets = append(nets, n)
+	}
+	return httpapi.NewHandler(httpapi.Deps{
+		DB: fakePinger{}, JWTSecret: testSecret, AuthRateLimit: perMinute, TrustedProxies: nets,
+		Auth: &fakeAuth{loginErr: auth.ErrInvalidCredentials},
+	})
+}
+
+// За доверенным прокси лимит считается по настоящему клиенту, а не по прокси: иначе один подбирающий пароль
+// заблокировал бы вход всем.
+func TestAuthRateLimit_BehindATrustedProxy_CountsEachClientSeparately(t *testing.T) {
+	h := proxied(2, "172.16.0.0/12")
+	proxy := "172.18.0.5:4000"
+
+	for i := 0; i < 2; i++ {
+		attempt(h, http.MethodPost, "/v1/auth/login", proxy, "203.0.113.7")
+	}
+	if rec := attempt(h, http.MethodPost, "/v1/auth/login", proxy, "203.0.113.7"); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("the guessing client must be limited, status = %d", rec.Code)
+	}
+	if rec := attempt(h, http.MethodPost, "/v1/auth/login", proxy, "203.0.113.8"); rec.Code != http.StatusUnauthorized {
+		t.Errorf("another client behind the same proxy must not be blocked, status = %d", rec.Code)
+	}
+}
+
+// Прислать свой X-Forwarded-For клиент может всегда. Значение, подставленное им слева, не должно давать новый лимит:
+// доверенный прокси дописывает настоящий адрес справа.
+func TestAuthRateLimit_ForgedForwardedForBehindAProxyDoesNotHelpTheClient(t *testing.T) {
+	h := proxied(2, "172.16.0.0/12")
+	proxy := "172.18.0.5:4000"
+
+	for i := 0; i < 2; i++ {
+		attempt(h, http.MethodPost, "/v1/auth/login", proxy, fmt.Sprintf("1.1.1.%d, 203.0.113.7", i)) // подделка слева, настоящий адрес справа
+	}
+	if rec := attempt(h, http.MethodPost, "/v1/auth/login", proxy, "9.9.9.9, 203.0.113.7"); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("status = %d: a forged left part must not reset the limit", rec.Code)
+	}
+}
+
+func TestAuthRateLimit_ChainOfTrustedProxies_UsesTheFirstUntrustedAddress(t *testing.T) {
+	h := proxied(1, "172.16.0.0/12", "10.0.0.0/8")
+	for i := 0; i < 1; i++ {
+		attempt(h, http.MethodPost, "/v1/auth/login", "172.18.0.5:1", "203.0.113.7, 10.1.2.3")
+	}
+	if rec := attempt(h, http.MethodPost, "/v1/auth/login", "172.18.0.5:1", "203.0.113.7, 10.9.9.9"); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("both requests come from 203.0.113.7 through two trusted hops: status = %d", rec.Code)
+	}
+}
+
+func TestAuthRateLimit_ForwardedForFromAnUntrustedPeerIsIgnored(t *testing.T) {
+	h := proxied(2, "172.16.0.0/12")
+	for i := 0; i < 2; i++ {
+		attempt(h, http.MethodPost, "/v1/auth/login", "198.51.100.9:1", fmt.Sprintf("5.5.5.%d", i))
+	}
+	if rec := attempt(h, http.MethodPost, "/v1/auth/login", "198.51.100.9:2", "6.6.6.6"); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("a peer that is not a trusted proxy cannot choose its own address: status = %d", rec.Code)
+	}
+}
+
+func TestAuthRateLimit_UnreadableForwardedFor_FallsBackToTheProxyAddress(t *testing.T) {
+	h := proxied(1, "172.16.0.0/12")
+	attempt(h, http.MethodPost, "/v1/auth/login", "172.18.0.5:1", "not-an-address")
+	if rec := attempt(h, http.MethodPost, "/v1/auth/login", "172.18.0.5:2", "also garbage"); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("status = %d: with no usable header the proxy's own address is counted", rec.Code)
+	}
+	if rec := attempt(h, http.MethodPost, "/v1/auth/login", "172.18.0.6:2", ""); rec.Code != http.StatusUnauthorized {
+		t.Errorf("another proxy address with no header: status = %d", rec.Code)
 	}
 }

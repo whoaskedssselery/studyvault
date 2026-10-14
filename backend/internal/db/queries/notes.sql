@@ -2,8 +2,8 @@
 SELECT EXISTS (SELECT 1 FROM subjects WHERE id = $1 AND user_id = $2);
 
 -- name: CreateNote :one
-INSERT INTO notes (user_id, subject_id, title, content, content_text, is_pinned)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO notes (user_id, subject_id, title, content, content_text, is_pinned, kind, summary, semester, library_subject_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: GetNote :one
@@ -13,7 +13,7 @@ WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL;
 -- Список без содержимого. Страницы по ключу (updated_at, id): курсор — это последняя строка
 -- предыдущей страницы. Все фильтры необязательные: NULL значит «не фильтровать».
 -- name: ListNotes :many
-SELECT n.id, n.subject_id, n.title, n.is_pinned, n.created_at, n.updated_at
+SELECT n.id, n.subject_id, n.title, n.is_pinned, n.kind, n.status, n.library_subject_id, n.created_at, n.updated_at
 FROM notes n
 WHERE n.user_id = sqlc.arg('user_id')
   AND n.deleted_at IS NULL
@@ -35,19 +35,41 @@ JOIN tags t ON t.id = nt.tag_id
 WHERE nt.note_id = ANY(sqlc.arg('note_ids')::uuid[])
 ORDER BY t.name;
 
--- Частичное обновление. NULL в title, content, content_text и is_pinned значит «не менять».
--- subject_id может быть очищен, поэтому «менять или нет» передаётся флагом set_subject.
+-- Частичное обновление. NULL в title, content, content_text, is_pinned и kind значит «не менять».
+-- subject_id, summary, semester и library_subject_id можно очистить, поэтому «менять или нет» для них
+-- передаётся флагами set_*.
+-- Правка самого материала (текст, название, тип, описание, семестр, общий предмет) возвращает опубликованный
+-- материал на проверку: он пропадает из библиотеки, пока модератор не одобрит его снова. Закрепление и личный
+-- предмет на публикацию не влияют.
 -- name: UpdateNote :one
 UPDATE notes SET
-    title        = COALESCE(sqlc.narg('title')::text, title),
-    content      = COALESCE(sqlc.narg('content')::jsonb, content),
-    content_text = COALESCE(sqlc.narg('content_text')::text, content_text),
-    is_pinned    = COALESCE(sqlc.narg('is_pinned')::boolean, is_pinned),
-    subject_id   = CASE WHEN sqlc.arg('set_subject')::boolean THEN sqlc.narg('subject_id')::uuid ELSE subject_id END,
-    updated_at   = now()
+    title              = COALESCE(sqlc.narg('title')::text, title),
+    content            = COALESCE(sqlc.narg('content')::jsonb, content),
+    content_text       = COALESCE(sqlc.narg('content_text')::text, content_text),
+    is_pinned          = COALESCE(sqlc.narg('is_pinned')::boolean, is_pinned),
+    kind               = COALESCE(sqlc.narg('kind')::text, kind),
+    subject_id         = CASE WHEN sqlc.arg('set_subject')::boolean THEN sqlc.narg('subject_id')::uuid ELSE subject_id END,
+    summary            = CASE WHEN sqlc.arg('set_summary')::boolean THEN sqlc.narg('summary')::text ELSE summary END,
+    semester           = CASE WHEN sqlc.arg('set_semester')::boolean THEN sqlc.narg('semester')::smallint ELSE semester END,
+    library_subject_id = CASE WHEN sqlc.arg('set_library_subject')::boolean THEN sqlc.narg('library_subject_id')::uuid ELSE library_subject_id END,
+    status = CASE WHEN status = 'published' AND (
+                 sqlc.narg('title')::text IS NOT NULL OR sqlc.narg('content')::jsonb IS NOT NULL
+              OR sqlc.narg('kind')::text IS NOT NULL OR sqlc.arg('set_summary')::boolean
+              OR sqlc.arg('set_semester')::boolean OR sqlc.arg('set_library_subject')::boolean)
+             THEN 'pending' ELSE status END,
+    published_at = CASE WHEN status = 'published' AND (
+                 sqlc.narg('title')::text IS NOT NULL OR sqlc.narg('content')::jsonb IS NOT NULL
+              OR sqlc.narg('kind')::text IS NOT NULL OR sqlc.arg('set_summary')::boolean
+              OR sqlc.arg('set_semester')::boolean OR sqlc.arg('set_library_subject')::boolean)
+             THEN NULL ELSE published_at END,
+    updated_at         = now()
 WHERE id = sqlc.arg('id') AND user_id = sqlc.arg('user_id') AND deleted_at IS NULL
 RETURNING *;
 
 -- name: SoftDeleteNote :execrows
 UPDATE notes SET deleted_at = now()
 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL;
+
+-- Общий предмет библиотеки должен существовать.
+-- name: LibrarySubjectExists :one
+SELECT EXISTS (SELECT 1 FROM library_subjects WHERE id = $1);

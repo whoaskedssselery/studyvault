@@ -22,17 +22,88 @@ type Attachment struct {
 	CreatedAt time.Time     `json:"created_at"`
 }
 
-type Note struct {
+type Comment struct {
+	ID        uuid.UUID  `json:"id"`
+	NoteID    uuid.UUID  `json:"note_id"`
+	UserID    uuid.UUID  `json:"user_id"`
+	Body      string     `json:"body"`
+	CreatedAt time.Time  `json:"created_at"`
+	DeletedAt *time.Time `json:"deleted_at"`
+	EditedAt  *time.Time `json:"edited_at"`
+}
+
+type EmailVerificationToken struct {
+	ID        uuid.UUID  `json:"id"`
+	UserID    uuid.UUID  `json:"user_id"`
+	TokenHash string     `json:"token_hash"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	UsedAt    *time.Time `json:"used_at"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+type LibraryItem struct {
+	ID               uuid.UUID     `json:"id"`
+	UserID           uuid.UUID     `json:"user_id"`
+	Title            string        `json:"title"`
+	Summary          pgtype.Text   `json:"summary"`
+	Kind             string        `json:"kind"`
+	Semester         pgtype.Int2   `json:"semester"`
+	PublishedAt      *time.Time    `json:"published_at"`
+	Views            int64         `json:"views"`
+	LibrarySubjectID uuid.NullUUID `json:"library_subject_id"`
+	SubjectTitle     pgtype.Text   `json:"subject_title"`
+	SubjectColor     pgtype.Text   `json:"subject_color"`
+	AuthorName       string        `json:"author_name"`
+	AuthorFaculty    pgtype.Text   `json:"author_faculty"`
+	RatingCount      int64         `json:"rating_count"`
+	RatingAvg        float64       `json:"rating_avg"`
+	CommentsCount    int64         `json:"comments_count"`
+	BookmarksCount   int64         `json:"bookmarks_count"`
+	Tags             []string      `json:"tags"`
+}
+
+type LibrarySubject struct {
+	ID        uuid.UUID   `json:"id"`
+	Title     string      `json:"title"`
+	Color     pgtype.Text `json:"color"`
+	CreatedAt time.Time   `json:"created_at"`
+}
+
+type ModerationDecision struct {
 	ID          uuid.UUID     `json:"id"`
-	UserID      uuid.UUID     `json:"user_id"`
-	SubjectID   uuid.NullUUID `json:"subject_id"`
-	Title       string        `json:"title"`
-	Content     []byte        `json:"content"`
-	ContentText string        `json:"content_text"`
-	IsPinned    bool          `json:"is_pinned"`
+	NoteID      uuid.UUID     `json:"note_id"`
+	ModeratorID uuid.NullUUID `json:"moderator_id"`
+	Decision    string        `json:"decision"`
+	Reason      pgtype.Text   `json:"reason"`
 	CreatedAt   time.Time     `json:"created_at"`
-	UpdatedAt   time.Time     `json:"updated_at"`
-	DeletedAt   *time.Time    `json:"deleted_at"`
+}
+
+type Note struct {
+	ID               uuid.UUID     `json:"id"`
+	UserID           uuid.UUID     `json:"user_id"`
+	SubjectID        uuid.NullUUID `json:"subject_id"`
+	Title            string        `json:"title"`
+	Content          []byte        `json:"content"`
+	ContentText      string        `json:"content_text"`
+	IsPinned         bool          `json:"is_pinned"`
+	CreatedAt        time.Time     `json:"created_at"`
+	UpdatedAt        time.Time     `json:"updated_at"`
+	DeletedAt        *time.Time    `json:"deleted_at"`
+	Kind             string        `json:"kind"`
+	Summary          pgtype.Text   `json:"summary"`
+	Semester         pgtype.Int2   `json:"semester"`
+	Status           string        `json:"status"`
+	PublishedAt      *time.Time    `json:"published_at"`
+	Views            int64         `json:"views"`
+	LibrarySubjectID uuid.NullUUID `json:"library_subject_id"`
+	RatingCount      int64         `json:"rating_count"`
+	RatingAvg        float64       `json:"rating_avg"`
+}
+
+type NoteBookmark struct {
+	NoteID    uuid.UUID `json:"note_id"`
+	UserID    uuid.UUID `json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type NoteLink struct {
@@ -45,9 +116,26 @@ type NoteMention struct {
 	TitleKey string    `json:"title_key"`
 }
 
+type NoteRating struct {
+	NoteID    uuid.UUID `json:"note_id"`
+	UserID    uuid.UUID `json:"user_id"`
+	Value     int16     `json:"value"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type NoteTag struct {
 	NoteID uuid.UUID `json:"note_id"`
 	TagID  uuid.UUID `json:"tag_id"`
+}
+
+type PasswordResetToken struct {
+	ID        uuid.UUID  `json:"id"`
+	UserID    uuid.UUID  `json:"user_id"`
+	TokenHash string     `json:"token_hash"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	UsedAt    *time.Time `json:"used_at"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type RefreshToken struct {
@@ -76,10 +164,13 @@ type Tag struct {
 }
 
 type User struct {
-	ID           uuid.UUID `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"password_hash"`
-	DisplayName  string    `json:"display_name"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID              uuid.UUID   `json:"id"`
+	Email           string      `json:"email"`
+	PasswordHash    string      `json:"password_hash"`
+	DisplayName     string      `json:"display_name"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+	Role            string      `json:"role"`
+	Faculty         pgtype.Text `json:"faculty"`
+	EmailVerifiedAt *time.Time  `json:"email_verified_at"`
 }

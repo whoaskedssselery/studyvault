@@ -1,0 +1,49 @@
+# Боевой стенд: тот же стек, но наружу смотрит только Caddy с HTTPS, а почта идёт через настоящий SMTP.
+#
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml --profile app up -d --build
+#
+# Нужны в .env: DOMAIN, SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM, PASSWORD_RESET_URL,
+# (EMAIL_VERIFY_URL необязателен: по умолчанию /verify-email на том же сайте),
+# CORS_ORIGINS (если клиент на другом адресе), COOKIE_SECURE=true и свои секреты. FRONTEND_DIR: каталог со сборкой клиента.
+# Подробности: docs/operations.md.
+services:
+  caddy:
+    image: caddy:2.11-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required (for example studyvault.example.com)}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${FRONTEND_DIR:-./deliverables/frontend}:/srv/frontend:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    profiles: ["app"]
+
+  api:
+    # API доступен только через прокси: порт наружу не публикуется.
+    ports: !reset []
+    environment:
+      COOKIE_SECURE: "true"
+      # Единственный, кто может достучаться до API, это Caddy из внутренней сети Docker; ей доверяем X-Forwarded-For.
+      TRUSTED_PROXIES: 172.16.0.0/12,10.0.0.0/8,192.168.0.0/16
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required in production (password reset and e-mail verification need it)}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required in production}
+      PASSWORD_RESET_URL: ${PASSWORD_RESET_URL:?PASSWORD_RESET_URL is required in production}
+      EMAIL_VERIFY_URL: ${EMAIL_VERIFY_URL:-}
+      SEED_PASSWORD: ""
+
+  # Локальный почтовый ящик нужен только разработчику.
+  mailpit:
+    profiles: !override ["never"]
+
+volumes:
+  caddy_data:
+  caddy_config:

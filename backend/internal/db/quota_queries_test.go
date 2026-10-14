@@ -42,7 +42,7 @@ func TestQuotaQueries_CountOnlyTheOwnersRows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	note, err := q.CreateNote(ctx, db.CreateNoteParams{UserID: alice, Title: "n", Content: []byte(`{}`)})
+	note, err := q.CreateNote(ctx, db.CreateNoteParams{UserID: alice, Title: "n", Content: []byte(`{}`), Kind: "note"})
 	if err != nil {
 		t.Fatal(err)
 	}

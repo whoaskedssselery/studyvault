@@ -12,12 +12,13 @@ import (
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
+	"github.com/whoaskedssselery/studyvault/backend/internal/pgconv"
 	"github.com/whoaskedssselery/studyvault/backend/internal/storage"
 )
 
 const (
-	// MaxSize — предельный размер файла, 20 МБ.
-	MaxSize = 20 << 20
+	// MaxSize — предельный размер файла, 2 МБ (так в ТЗ).
+	MaxSize = 2 << 20
 
 	linkTTL = 15 * time.Minute
 )
@@ -31,15 +32,13 @@ var (
 	ErrInvalid     = errors.New("invalid attachment")
 )
 
-// Белый список типов. Нет html и svg: файл, отданный браузеру с таким типом, мог бы выполнить скрипт.
+// Белый список типов по ТЗ: PDF, PNG, JPEG и WebP. Нет html и svg: файл, отданный браузеру с таким типом,
+// мог бы выполнить скрипт.
 var allowedMIME = map[string]bool{
 	"application/pdf": true,
 	"image/png":       true,
 	"image/jpeg":      true,
 	"image/webp":      true,
-	"image/gif":       true,
-	"text/plain":      true,
-	"text/markdown":   true,
 }
 
 type Store interface {
@@ -48,6 +47,8 @@ type Store interface {
 	UserAttachmentUsage(ctx context.Context, userID uuid.UUID) (db.UserAttachmentUsageRow, error)
 	CreateAttachment(ctx context.Context, arg db.CreateAttachmentParams) (db.Attachment, error)
 	GetAttachment(ctx context.Context, arg db.GetAttachmentParams) (db.Attachment, error)
+	DemotePublishedNote(ctx context.Context, arg db.DemotePublishedNoteParams) error
+	ListUserObjectKeys(ctx context.Context, userID uuid.UUID) ([]string, error)
 	ListAttachmentsByNote(ctx context.Context, arg db.ListAttachmentsByNoteParams) ([]db.Attachment, error)
 	DeleteAttachment(ctx context.Context, arg db.DeleteAttachmentParams) (db.Attachment, error)
 }
@@ -99,7 +100,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (Uploa
 		if !owned {
 			return Upload{}, ErrNoteNotFound
 		}
-		count, err := s.store.CountNoteAttachments(ctx, db.CountNoteAttachmentsParams{NoteID: toNullUUID(in.NoteID), UserID: userID})
+		count, err := s.store.CountNoteAttachments(ctx, db.CountNoteAttachmentsParams{NoteID: pgconv.ToNullUUID(in.NoteID), UserID: userID})
 		if err != nil {
 			return Upload{}, fmt.Errorf("count note attachments: %w", err)
 		}
@@ -125,7 +126,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (Uploa
 	}
 	row, err := s.store.CreateAttachment(ctx, db.CreateAttachmentParams{
 		UserID:    userID,
-		NoteID:    toNullUUID(in.NoteID),
+		NoteID:    pgconv.ToNullUUID(in.NoteID),
 		ObjectKey: key,
 		FileName:  in.FileName,
 		MimeType:  in.MimeType,
@@ -134,6 +135,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (Uploa
 	if err != nil {
 		return Upload{}, fmt.Errorf("create attachment: %w", err)
 	}
+	s.demoteIfPublished(ctx, userID, in.NoteID)
 	return Upload{Attachment: row, URL: url}, nil
 }
 
@@ -145,7 +147,12 @@ func (s *Service) Get(ctx context.Context, userID, id uuid.UUID) (Download, erro
 	if err != nil {
 		return Download{}, fmt.Errorf("get attachment: %w", err)
 	}
+	return s.Link(ctx, row)
+}
 
+// Link выдаёт временную ссылку на скачивание уже найденного файла. Права проверяет вызывающий: владелец через Get,
+// читатель опубликованного материала через пакет library.
+func (s *Service) Link(ctx context.Context, row db.Attachment) (Download, error) {
 	if _, err := s.storage.Stat(ctx, row.ObjectKey); err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return Download{}, ErrNotUploaded
@@ -167,7 +174,7 @@ func (s *Service) List(ctx context.Context, userID, noteID uuid.UUID) ([]db.Atta
 	if !owned {
 		return nil, ErrNoteNotFound
 	}
-	rows, err := s.store.ListAttachmentsByNote(ctx, db.ListAttachmentsByNoteParams{NoteID: toNullUUID(&noteID), UserID: userID})
+	rows, err := s.store.ListAttachmentsByNote(ctx, db.ListAttachmentsByNoteParams{NoteID: pgconv.ToNullUUID(&noteID), UserID: userID})
 	if err != nil {
 		return nil, fmt.Errorf("list attachments: %w", err)
 	}
@@ -190,7 +197,22 @@ func (s *Service) Delete(ctx context.Context, userID, id uuid.UUID) error {
 	if err := s.storage.Remove(ctx, row.ObjectKey); err != nil {
 		slog.Error("attachment: stored file was not removed", "key", row.ObjectKey, "err", err)
 	}
+	if row.NoteID.Valid {
+		s.demoteIfPublished(ctx, userID, &row.NoteID.UUID)
+	}
 	return nil
+}
+
+// demoteIfPublished возвращает опубликованный материал на проверку, когда у него меняются файлы: иначе файл
+// можно было бы подменить уже после одобрения. Для неопубликованных заметок это ничего не делает. Ошибка не
+// должна ронять уже выполненную операцию с файлом, поэтому только логируется.
+func (s *Service) demoteIfPublished(ctx context.Context, userID uuid.UUID, noteID *uuid.UUID) {
+	if noteID == nil {
+		return
+	}
+	if err := s.store.DemotePublishedNote(ctx, db.DemotePublishedNoteParams{ID: *noteID, UserID: userID}); err != nil {
+		slog.ErrorContext(ctx, "attachment: could not return the material to review", "note", *noteID, "err", err)
+	}
 }
 
 func validate(in Input) error {
@@ -198,16 +220,29 @@ func validate(in Input) error {
 	case in.FileName == "":
 		return fmt.Errorf("%w: file name is required", ErrInvalid)
 	case in.SizeBytes < 1 || in.SizeBytes > MaxSize:
-		return fmt.Errorf("%w: size must be between 1 byte and 20 MB", ErrInvalid)
+		return fmt.Errorf("%w: size must be between 1 byte and 2 MB", ErrInvalid)
 	case !allowedMIME[in.MimeType]:
 		return fmt.Errorf("%w: file type %q is not allowed", ErrInvalid, in.MimeType)
 	}
 	return nil
 }
 
-func toNullUUID(id *uuid.UUID) uuid.NullUUID {
-	if id == nil {
-		return uuid.NullUUID{}
+// UserObjectKeys возвращает ключи всех файлов пользователя в хранилище. Вызывается перед удалением аккаунта: после него
+// записи о файлах уже не найти, а сами объекты надо убрать.
+func (s *Service) UserObjectKeys(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	keys, err := s.store.ListUserObjectKeys(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list object keys: %w", err)
 	}
-	return uuid.NullUUID{UUID: *id, Valid: true}
+	return keys, nil
+}
+
+// RemoveObjects убирает объекты из хранилища после удаления аккаунта. Сбой одного объекта не останавливает остальные: пользователь
+// своё удаление уже получил, а лишний объект остаётся невидимым мусором, о котором сообщает лог.
+func (s *Service) RemoveObjects(ctx context.Context, keys []string) {
+	for _, key := range keys {
+		if err := s.storage.Remove(ctx, key); err != nil {
+			slog.ErrorContext(ctx, "attachment: stored file was not removed", "key", key, "err", err)
+		}
+	}
 }
