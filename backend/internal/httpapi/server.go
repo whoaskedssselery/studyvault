@@ -38,6 +38,7 @@ type Deps struct {
 	Tags           TagService
 	Search         SearchService
 	Attachments    AttachmentService
+	Library        LibraryService
 	AllowedOrigins []string // источники для CORS; пусто: CORS выключен
 	AuthRateLimit  int      // попыток входа, регистрации и обновления токена с одного адреса в минуту; 0: без лимита
 	JWTSecret      []byte

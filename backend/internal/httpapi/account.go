@@ -15,7 +15,7 @@ import (
 // AccountService is satisfied by *auth.Service.
 type AccountService interface {
 	GetUser(ctx context.Context, id uuid.UUID) (db.User, error)
-	UpdateDisplayName(ctx context.Context, id uuid.UUID, displayName string) (db.User, error)
+	UpdateProfile(ctx context.Context, id uuid.UUID, p auth.ProfilePatch) (db.User, error)
 	ChangePassword(ctx context.Context, id uuid.UUID, current, next, userAgent string) (auth.Tokens, error)
 }
 
@@ -38,12 +38,31 @@ func (a *api) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "invalid request body: "+err.Error())
 		return
 	}
-	name, err := trimmedField("display_name", req.DisplayName, maxDisplayNameLen)
-	if err != nil {
-		badRequest(w, err.Error())
+	if req.DisplayName == nil && !req.Faculty.IsSpecified() {
+		badRequest(w, "at least one of display_name, faculty is required")
 		return
 	}
-	u, err := a.Account.UpdateDisplayName(r.Context(), uid, name)
+	var patch auth.ProfilePatch
+	if req.DisplayName != nil {
+		name, err := trimmedField("display_name", *req.DisplayName, maxDisplayNameLen)
+		if err != nil {
+			badRequest(w, err.Error())
+			return
+		}
+		patch.DisplayName = &name
+	}
+	if set, faculty := optional(req.Faculty); set {
+		patch.SetFaculty = true
+		if faculty != nil {
+			f, err := trimmedField("faculty", *faculty, maxFacultyLen)
+			if err != nil {
+				badRequest(w, err.Error())
+				return
+			}
+			patch.Faculty = &f
+		}
+	}
+	u, err := a.Account.UpdateProfile(r.Context(), uid, patch)
 	a.respondUser(w, r, u, err, "update account")
 }
 
