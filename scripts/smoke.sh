@@ -24,7 +24,7 @@ call() {
 }
 expect() { [ "$code" = "$1" ] || fail "$2: HTTP $code, expected $1: $(cat "$tmp/body")"; echo "ok  $2 ($code)"; }
 # jget a.b.0.c: значение из JSON последнего ответа (perl есть и в Git Bash, и на ubuntu-runner, а jq не везде).
-jget() { perl -MJSON::PP -e 'local $/; my $d = decode_json(<STDIN>); $d = ref $d eq "ARRAY" ? $d->[$_] : $d->{$_} for split /\./, shift; print $d // ""' "$1" < "$tmp/body"; }
+jget() { perl -CO -MJSON::PP -e 'local $/; my $d = decode_json(<STDIN>); $d = ref $d eq "ARRAY" ? $d->[$_] : $d->{$_} for split /\./, shift; print $d // ""' "$1" < "$tmp/body"; }
 
 token=""
 
@@ -131,7 +131,9 @@ reader="reader-$(date +%s)-$RANDOM@example.com"
 call POST /auth/register "{\"email\":\"$reader\",\"password\":\"$password\",\"display_name\":\"Smoke Reader\"}"
 expect 201 "a second student registers"
 token="$(jget access_token)"
+reader_token="$token"
 call POST "/library/$material/comments" '{"body":"Thanks, this helped!"}';   expect 201 "POST comment"
+comment_id="$(jget id)"
 call POST "/library/$material/comments" '{"body":"   "}';                    expect 400 "an empty comment is refused"
 call PUT "/library/$material/rating" '{"value":4}';                          expect 200 "PUT rating"
 [ "$(jget rating.average)" = "4" ] || fail "the average must be 4: $(cat "$tmp/body")"
@@ -161,11 +163,99 @@ token=""
 call GET "/library/$material";    expect 404 "it left the library until it is approved again"
 token="$author_token"
 
+step "library: withdraw, tags, authors, comment edit, take-down"
+token="$author_token"
+call POST "/notes/$material/withdraw";   expect 200 "the author withdraws the pending material"
+[ "$(jget status)" = "draft" ] || fail "a withdrawn material must be a draft: $(cat "$tmp/body")"
+call POST "/notes/$material/withdraw";   expect 409 "a draft cannot be withdrawn"
+call POST "/notes/$material/submit";     expect 200 "the author submits it again"
+token="$moderator_token"
+call POST "/moderation/$material/decision" '{"decision":"approved"}';  expect 200 "the moderator approves it again"
+
+token="$author_token"
+tag="smoketag$RANDOM"
+call POST /tags "{\"name\":\"$tag\"}";   expect 201 "POST /tags"
+tag_id="$(jget id)"
+call PUT "/notes/$material/tags" "{\"tag_ids\":[\"$tag_id\"]}";  expect 200 "PUT tags (does not unpublish)"
+token=""
+call GET "/library?tag=$tag";            expect 200 "GET /library?tag="
+grep -q "$material" "$tmp/body" || fail "the tag filter lost the material: $(cat "$tmp/body")"
+grep -q "\"$tag\"" "$tmp/body" || fail "the card must carry the tag"
+call GET "/library?tag=nosuchtag$RANDOM"; expect 200 "an unknown tag"
+grep -q '"items":\[\]' "$tmp/body" || fail "an unknown tag must give an empty page"
+call GET "/library/$material";           expect 200 "a guest reads the republished material"
+author_id="$(jget author.id)"
+call GET "/authors/$author_id";          expect 200 "GET /authors/{id} (public profile)"
+[ "$(jget materials_count)" -ge 1 ] || fail "the profile must count the material"
+call GET "/library?author_id=$author_id"; expect 200 "GET /library?author_id="
+grep -q "$material" "$tmp/body" || fail "the author filter lost the material"
+call GET "/ranking/authors?limit=100";   expect 200 "GET /ranking/authors"
+grep -q "$author_id" "$tmp/body" || fail "the author is missing from the ranking"
+[ "$(jget items.0.rank)" = "1" ] || fail "the ranking must start at place 1"
+call GET "/authors/00000000-0000-4000-8000-000000000000"; expect 404 "an unknown author"
+
+token="$reader_token"
+call PATCH "/comments/$comment_id" '{"body":"Thanks, this really helped!"}';  expect 200 "the reader edits their comment"
+[ -n "$(jget edited_at)" ] || fail "edited_at must be set: $(cat "$tmp/body")"
+token="$author_token"
+call PATCH "/comments/$comment_id" '{"body":"hijacked"}';  expect 404 "the author cannot edit someone else's comment"
+
+token="$author_token"
+call POST "/moderation/$material/unpublish" '{"reason":"nope"}';       expect 403 "a student cannot take material down"
+token="$moderator_token"
+call POST "/moderation/$material/unpublish" '{"reason":"   "}';        expect 400 "a take-down needs a reason"
+call POST "/moderation/$material/unpublish" '{"reason":"Contains an error in the main formula"}';  expect 200 "the moderator takes the material down"
+token=""
+call GET "/library/$material";           expect 404 "a taken-down material leaves the library"
+token="$author_token"
+call GET "/notes/$material";             expect 200 "the author still sees it"
+[ "$(jget status)" = "rejected" ] || fail "a taken-down material is rejected"
+[ "$(jget rejection_reason)" = "Contains an error in the main formula" ] || fail "the author must see the reason: $(cat "$tmp/body")"
+
 step "password change ends the old password"
 call POST /me/password "{\"current_password\":\"$password\",\"new_password\":\"smoke-password-2\"}"
 expect 200 "POST /me/password"
 token="$(jget access_token)"
 call POST /auth/login "{\"email\":\"$email\",\"password\":\"$password\"}";            expect 401 "login with the old password"
 call POST /auth/login "{\"email\":\"$email\",\"password\":\"smoke-password-2\"}";    expect 200 "login with the new password"
+
+
+step "password reset by e-mail (the mail is read from Mailpit)"
+mailpit="${MAILPIT_URL:-http://localhost:8025}"
+forgetful="forgetful-$(date +%s)-$RANDOM@example.com"
+token=""
+call POST /auth/register "{\"email\":\"$forgetful\",\"password\":\"forgotten-pass-1\",\"display_name\":\"Forgetful\"}"; expect 201 "another student registers"
+call POST /auth/password-reset "{\"email\":\"nobody-$RANDOM@example.com\"}";  expect 204 "an unknown address gets the same answer"
+call POST /auth/password-reset "{\"email\":\"$forgetful\"}";                  expect 204 "a known address gets the same answer"
+reset_token=""
+for _ in $(seq 1 20); do   # письмо уходит в фоне
+  curl -sS -o "$tmp/body" "$mailpit/api/v1/search?query=to:$forgetful" || true
+  mail_id="$(jget messages.0.ID 2>/dev/null || true)"
+  if [ -n "$mail_id" ]; then
+    curl -sS -o "$tmp/body" "$mailpit/api/v1/message/$mail_id"
+    reset_token="$(jget Text | perl -ne 'print $1 if /token=([A-Za-z0-9_-]+)/')"
+    [ -n "$reset_token" ] && break
+  fi
+  sleep 0.5
+done
+[ -n "$reset_token" ] || fail "no reset link arrived in Mailpit ($mailpit)"
+echo "ok  the reset link arrived by mail"
+call POST /auth/password-reset/confirm "{\"token\":\"$reset_token\",\"new_password\":\"remembered-pass-2\"}";  expect 204 "POST /auth/password-reset/confirm"
+call POST /auth/password-reset/confirm "{\"token\":\"$reset_token\",\"new_password\":\"remembered-pass-3\"}";  expect 401 "the link works once"
+call POST /auth/login "{\"email\":\"$forgetful\",\"password\":\"forgotten-pass-1\"}";   expect 401 "login with the forgotten password"
+call POST /auth/login "{\"email\":\"$forgetful\",\"password\":\"remembered-pass-2\"}";  expect 200 "login with the new password"
+
+step "account deletion removes the data and the stored file"
+token="$author_token"
+call DELETE /me '{"password":"not-my-password"}';  expect 403 "a wrong password deletes nothing"
+call GET /me;                                      expect 200 "the account is intact"
+call DELETE /me '{"password":"smoke-password-2"}'; expect 204 "DELETE /me"
+call GET /me;                                      expect 401 "the access token of a deleted account stops working"
+call POST /auth/login "{\"email\":\"$email\",\"password\":\"smoke-password-2\"}";  expect 401 "a deleted account cannot sign in"
+token=""
+call GET "/library/$material";                     expect 404 "its materials are gone"
+gone="$(curl -sS -o /dev/null -w '%{http_code}' "$download_url")"
+[ "$gone" = "404" ] || fail "the uploaded file must be removed from storage, the old download link answered $gone"
+echo "ok  the stored file is gone from S3 (404)"
 
 printf '\nAll smoke checks passed.\n'

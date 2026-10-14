@@ -18,6 +18,7 @@ req() { # req МЕТОД ПУТЬ [ТОКЕН] [ТЕЛО] -> тело в $tmp/bo
 jget() { perl -MJSON::PP -e 'local $/; my $d = decode_json(<STDIN>); $d = ref $d eq "ARRAY" ? $d->[$_] : $d->{$_} for split /\./, shift; print $d // ""' "$1" < "$tmp/body"; }
 
 pw="${SEED_PASSWORD:-demo-password-123}"
+# Три запроса к /auth; если рядом только что шёл другой прогон, лимит попыток входа (20 в минуту) мог быть исчерпан.
 author="restart-$(date +%s)-$RANDOM@example.com"
 req POST /auth/register "" "{\"email\":\"$author\",\"password\":\"$pw-author\",\"display_name\":\"Restart Check\"}"; [ "$code" = 201 ] || fail "register: $code"
 at="$(jget access_token)"

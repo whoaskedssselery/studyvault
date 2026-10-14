@@ -123,6 +123,8 @@ jobs:
       - name: Start the stack
         run: |
           cp .env.example .env
+          # Сквозной прогон делает больше 20 запросов к /auth в минуту с одного адреса, а лимит это как раз ограничивает.
+          echo AUTH_RATE_LIMIT_PER_MIN=300 >> .env
           docker compose --profile app up -d --build
 
       - name: Wait for the API
