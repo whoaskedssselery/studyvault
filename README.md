@@ -222,7 +222,31 @@ API проверено через Swagger UI (`/docs`) на запущенном
 
 ![403](docs/screenshots/15-wrong-password-403.jpg)
 
-**15. Автоматические проверки.** Линтеры, тесты на настоящих Postgres, Meilisearch и S3, проверка покрытия и сквозной прогон всего стека в Docker проходят в GitHub Actions.
+**15. Библиотека: лента.** `GET /library?sort=rating` без токена: опубликованные материалы по средней оценке, у каждого автор, предмет, оценка, число просмотров и комментариев, постраничная выдача.
+
+![feed](docs/screenshots/16-library-feed-200.jpg)
+
+**16. Библиотека: поиск.** Запрос `q=JOIN` находит материал и подсвечивает совпадения в `snippet`; результат перепроверяется в Postgres.
+
+![library search](docs/screenshots/17-library-search-200.jpg)
+
+**17. Страница материала.** Для студента в ответе его оценка (`my_rating`) и отметка «в избранном»; опубликованное видно всем.
+
+![material](docs/screenshots/18-material-page-200.jpg)
+
+**18. Очередь проверки закрыта для студента.** Студент получает 403 `forbidden`.
+
+![student queue](docs/screenshots/19-student-queue-403.jpg)
+
+**19. Очередь проверки у модератора.** Материалы на проверке, старые сверху, с автором и предметом.
+
+![moderation queue](docs/screenshots/20-moderation-queue-200.jpg)
+
+**20. Отказ без причины невозможен.** `POST /moderation/{id}/decision` с `rejected` без `reason` отвечает 400, статус материала не меняется.
+
+![reject needs reason](docs/screenshots/21-reject-needs-reason-400.jpg)
+
+**21. Автоматические проверки.** Линтеры, тесты на настоящих Postgres, Meilisearch и S3, проверка покрытия и сквозной прогон всего стека в Docker проходят в GitHub Actions.
 
 ![CI](docs/screenshots/13-ci-green.jpg)
 
