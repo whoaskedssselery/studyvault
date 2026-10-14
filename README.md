@@ -146,6 +146,7 @@ go run ./cmd/reindex                                                   # пер�
 | `POST /auth/password-reset`, `/auth/password-reset/confirm` | сброс пароля по почте: запрос ссылки и новый пароль по ней |
 | `GET /me`, `PATCH /me`, `DELETE /me` | свой аккаунт (с ролью), смена имени и факультета, удаление аккаунта с паролем |
 | `POST /me/password` | смена пароля: остальные сессии завершаются, текущая продолжается |
+| `POST /auth/email-verification/confirm`, `POST /me/email-verification` | подтверждение почты по ссылке из письма; повторная отправка письма (не чаще раза в минуту) |
 | `GET /subjects`, `POST /subjects` | список и создание предметов |
 | `PATCH /subjects/{id}`, `DELETE /subjects/{id}` | изменение и удаление предмета |
 | `GET /notes`, `POST /notes` | список (по курсору, с фильтрами) и создание заметки |
