@@ -365,13 +365,15 @@ backend/
 
 ## Фронтенд
 
-React + TypeScript + Vite: учебная библиотека на `mock.json` и клиентская часть для работы с API.
+React + TypeScript + Vite. Основной интерфейс подключён к API: гостевая библиотека, авторы и рейтинг, аккаунты и подтверждение почты, конспекты и файлы, публикация, модерация, комментарии, оценки и избранное. Для учебного задания сохранена отдельная сборка на `mock.json`.
 
 ```bash
 cd frontend
 npm ci
 npm run dev
 ```
+
+Откройте http://localhost:5173/. Сначала запустите API через Docker Compose; для примеров выполните `docker compose --profile app run --rm --entrypoint /seed api` из корня. Почта для новых аккаунтов приходит в Mailpit на http://localhost:8025/. Полный порядок для Windows и демоаккаунты — в инструкции ниже.
 
 Готовый комплект `index.html + mock.json` — [deliverables/frontend](deliverables/frontend).
 [Инструкция фронтенда](docs/frontend.md) · [Отчёт и проверки](docs/assignment-2/frontend-report.md).
