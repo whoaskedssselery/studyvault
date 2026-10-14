@@ -46,11 +46,13 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  Moon,
   Plus,
   Search,
   ShieldCheck,
   Sparkles,
   Star,
+  Sun,
   Trophy,
   Upload,
   UserRound,
@@ -75,6 +77,9 @@ import { ApiWorkspace } from './api/workspace';
 import { exportNote } from './downloads';
 import { isSubmission, mockUrl } from './runtime';
 import "./styles.css";
+import "./theme.css";
+import { AccountMenu } from "./account-menu";
+import { useTheme } from "./theme";
 
 const queryClient = new QueryClient();
 type AppState = {
@@ -182,6 +187,7 @@ function Modal({
   );
 }
 function App() {
+  const { theme, toggleTheme } = useTheme();
   const client = useQueryClient();
   const { data: db, error, refetch, isFetching } = useQuery({
     queryKey: ["database"],
@@ -408,20 +414,17 @@ function App() {
               />
               <span className="topbar-divider" />
               {user ? (
-                <button className="user-button" onClick={() => go("/profile")}>
-                  <Avatar user={user} />
-                  <span>
-                    {user.name.split(" ")[0]}
-                    <ChevronDown size={14} />
-                  </span>
-                </button>
+                <AccountMenu user={user} navigate={go} logout={() => login(null)} theme={theme} toggleTheme={toggleTheme}/>
               ) : (
+                <>
+                <IconButton icon={theme === "dark" ? Sun : Moon} label={theme === "dark" ? "Светлая тема" : "Тёмная тема"} onClick={toggleTheme}/>
                 <button
                   className="button primary small"
                   onClick={() => go("/login")}
                 >
                   Войти
                 </button>
+                </>
               )}
             </div>
           </header>

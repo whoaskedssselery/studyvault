@@ -6,8 +6,8 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  color: #282837;
-  background: #f8f9fc;
+  color: var(--text);
+  background: var(--page);
   font-synthesis: none;
   font-size: 14px;
   --purple: #7655ce;
@@ -85,8 +85,8 @@ textarea,
 select {
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: white;
-  color: #363543;
+  background: var(--surface);
+  color: var(--text);
 }
 input::placeholder,
 textarea::placeholder {
@@ -104,7 +104,7 @@ kbd {
   border: 1px solid #e3e3eb;
   border-radius: 4px;
   padding: 1px 4px;
-  background: #fff;
+  background: var(--surface);
   color: #8a8a99;
 }
 .app-shell {
@@ -115,7 +115,7 @@ kbd {
   width: 234px;
   position: fixed;
   inset: 0 auto 0 0;
-  background: #fff;
+  background: var(--surface);
   border-right: 1px solid var(--border);
   padding: 30px 18px 18px;
   display: flex;
@@ -335,7 +335,7 @@ kbd {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border);
-  background: #fff;
+  background: var(--surface);
   padding: 0 36px;
 }
 .breadcrumb {
@@ -376,7 +376,7 @@ kbd {
 }
 .icon-button.active {
   color: var(--purple);
-  background: white;
+  background: var(--surface);
   box-shadow: 0 1px 4px #27223810;
 }
 .topbar-divider {
@@ -394,7 +394,7 @@ kbd {
   font-size: 11px;
   font-weight: 700;
   flex-shrink: 0;
-  border: 2px solid #fff;
+  border: 2px solid var(--surface);
 }
 .avatar.tiny {
   width: 23px;
@@ -491,7 +491,7 @@ h1 {
   background: #6543bf;
 }
 .button.secondary {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid #e3e1ec;
   color: #767084;
 }
@@ -574,7 +574,7 @@ h1 {
 }
 .floating-note {
   position: absolute;
-  background: #fff;
+  background: var(--surface);
   border-radius: 10px;
   box-shadow: 0 10px 25px #74559812;
 }
@@ -700,7 +700,7 @@ h1 {
   align-items: center;
   gap: 7px;
   font-size: 8px;
-  background: white;
+  background: var(--surface);
   padding: 10px 13px;
   border-radius: 7px;
   color: #8c789e;
@@ -820,7 +820,7 @@ h1 {
   border: 1px solid #e6e5ec;
   border-radius: 8px;
   padding: 0 13px;
-  background: #fff;
+  background: var(--surface);
   height: 43px;
   flex: 1;
   color: #b4b0bd;
@@ -874,7 +874,7 @@ h1 {
   gap: 6px;
   padding: 8px 11px;
   border: 1px solid #eae8f0;
-  background: white;
+  background: var(--surface);
   border-radius: 6px;
   font-size: 9px;
   color: #9691a1;
@@ -930,7 +930,7 @@ h1 {
 }
 .material-card {
   position: relative;
-  background: white;
+  background: var(--surface);
   border: 1px solid #e8e6ef;
   border-radius: 10px;
   overflow: hidden;
@@ -1128,11 +1128,11 @@ h1 {
 }
 .card-save.saved {
   color: #9776cd;
-  background: #fff;
+  background: var(--surface);
 }
 .card-save:hover {
   color: var(--purple);
-  background: white;
+  background: var(--surface);
 }
 .card-body {
   padding: 16px 16px 0;
@@ -1319,7 +1319,7 @@ h1 {
   gap: 26px;
 }
 .reader {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 32px;
@@ -1425,7 +1425,7 @@ h1 {
   margin-bottom: 18px;
 }
 .aside-panel {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 22px;
@@ -1587,7 +1587,7 @@ h1 {
   align-items: start;
 }
 .editor-card {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 28px;
@@ -1730,7 +1730,7 @@ h1 {
 }
 .podium-card {
   text-align: center;
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 24px 15px;
@@ -1786,7 +1786,7 @@ h1 {
   color: #d7b47f;
 }
 .table-panel {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
@@ -1883,7 +1883,7 @@ td {
   gap: 20px;
   padding: 24px;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--surface);
   border-radius: 10px;
   margin-bottom: 16px;
 }
@@ -1934,7 +1934,7 @@ td {
   display: flex;
   align-items: center;
   gap: 25px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 35px;
@@ -1977,7 +1977,7 @@ td {
   text-align: left;
   align-items: center;
   column-gap: 18px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 24px;
@@ -2013,7 +2013,7 @@ td {
   padding: 20px;
 }
 .modal {
-  background: white;
+  background: var(--surface);
   width: min(530px, 100%);
   border-radius: 13px;
   padding: 25px;
@@ -2083,7 +2083,7 @@ td {
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid #e0d6eb;
   box-shadow: 0 6px 30px #39234e20;
   border-radius: 10px;
@@ -2108,7 +2108,7 @@ td {
   display: grid;
   grid-template-columns: 1fr 1fr;
   min-height: 100vh;
-  background: #fff;
+  background: var(--surface);
 }
 .auth-story {
   padding: 45px 60px;
@@ -2834,11 +2834,11 @@ td {
 .reader-tools { display:flex; justify-content:flex-end; align-items:center; gap:14px; margin:-42px 0 22px; }
 .modal-actions { display:flex; justify-content:flex-end; gap:10px; }
 .prose a { color:#8562bd; text-decoration:underline; text-underline-offset:3px; }
-.api-summary { display:flex; align-items:flex-start; gap:15px; padding:23px; border:1px solid var(--border); border-radius:10px; background:white; color:#9b7fbb; }
+.api-summary { display:flex; align-items:flex-start; gap:15px; padding:23px; border:1px solid var(--border); border-radius:10px; background: var(--surface); color:#9b7fbb; }
 .api-summary strong { font-size:13px; color:#786089; }
 .api-summary p { font-size:11px; color:#a88db9; margin:8px 0 0; overflow-wrap:anywhere; }
 .api-results { margin-top:25px; }
-.api-result { padding:24px; background:#fff; border:1px solid var(--border); border-radius:10px; margin-bottom:16px; }
+.api-result { padding:24px; background: var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:16px; }
 .api-result-heading { display:flex; align-items:center; gap:11px; flex-wrap:wrap; }
 .api-result-heading h2 { font-size:16px; margin:0; }
 .api-code { margin-left:auto; padding:5px 9px; border-radius:5px; background:#f6f3f9; font-size:12px; font-weight:700; }
