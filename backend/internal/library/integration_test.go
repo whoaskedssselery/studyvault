@@ -1053,3 +1053,92 @@ func TestIntegration_Timestamps(t *testing.T) {
 		t.Errorf("published_at = %v, %v", m.PublishedAt, err)
 	}
 }
+
+// recordingIndexer запоминает документы, которые сервис отправляет в поисковый индекс.
+type recordingIndexer struct {
+	docs []search.Doc
+	err  error
+}
+
+func (r *recordingIndexer) Upsert(_ context.Context, d search.Doc) error {
+	r.docs = append(r.docs, d)
+	return r.err
+}
+
+// Индекс узнаёт о каждой смене статуса: иначе библиотека искала бы по устаревшим данным.
+func TestIntegration_EveryStatusChangeReachesTheSearchIndex(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	idx := &recordingIndexer{}
+	lib := library.NewService(e.q, library.WithIndexer(idx))
+	author, mod := e.user(t, "author"), e.moderator(t, "mod")
+	id := e.draft(t, author, "Indexed", "words to find")
+
+	if _, err := lib.Submit(ctx, author, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.Decide(ctx, mod, id, library.DecisionApproved, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(idx.docs) != 2 || idx.docs[0].Status != "pending" || idx.docs[1].Status != "published" {
+		t.Fatalf("indexed documents = %+v, want pending then published", idx.docs)
+	}
+	last := idx.docs[1]
+	if last.ID != id || last.UserID != author || last.Title != "Indexed" || !strings.Contains(last.ContentText, "words to find") {
+		t.Errorf("the document must carry the id, the author, the title and the text: %+v", last)
+	}
+}
+
+// Индекс только ускоритель: его сбой не должен ломать публикацию.
+func TestIntegration_AFailingIndexDoesNotBreakPublishing(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	lib := library.NewService(e.q, library.WithIndexer(&recordingIndexer{err: errors.New("meilisearch is down")}))
+	author, mod := e.user(t, "author"), e.moderator(t, "mod")
+	id := e.draft(t, author, "Still published", "x")
+
+	if _, err := lib.Submit(ctx, author, id); err != nil {
+		t.Fatalf("submit must not fail because of the index: %v", err)
+	}
+	if _, err := lib.Decide(ctx, mod, id, library.DecisionApproved, ""); err != nil {
+		t.Fatalf("approval must not fail because of the index: %v", err)
+	}
+	if m, err := lib.Get(ctx, nil, id); err != nil || m.Status != "published" {
+		t.Errorf("the material must be published: %v, %v", m.Status, err)
+	}
+}
+
+// Транзакция решения: если запись решения не удалась, статус не меняется.
+func TestIntegration_Decide_IsAtomic(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	author, mod := e.user(t, "author"), e.moderator(t, "mod")
+	id := e.pending(t, author, "Atomic", "x")
+
+	// Модератора «убрали» между проверкой роли и записью решения: внешний ключ не даст записать решение.
+	lib := library.NewService(e.q, library.WithTx(func(ctx context.Context, fn func(library.Store) error) error {
+		sp, err := e.tx.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = sp.Rollback(ctx) }()
+		if err := fn(failingDecisions{Store: db.New(sp)}); err != nil {
+			return err
+		}
+		return sp.Commit(ctx)
+	}))
+
+	if _, err := lib.Decide(ctx, mod, id, library.DecisionApproved, ""); err == nil {
+		t.Fatal("the decision record failed, the call must fail")
+	}
+	if m, err := e.lib.Get(ctx, &author, id); err != nil || m.Status != "pending" {
+		t.Errorf("a failed decision must leave the material pending, got %v, %v", m.Status, err)
+	}
+}
+
+type failingDecisions struct{ library.Store }
+
+func (failingDecisions) InsertModerationDecision(context.Context, db.InsertModerationDecisionParams) error {
+	return errors.New("cannot record the decision")
+}

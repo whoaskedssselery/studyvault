@@ -27,6 +27,7 @@ type fakeStore struct {
 	nodes      []db.ListGraphNodesRow
 	edges      []db.NoteLink
 
+	status       string      // статус, который вернёт GetNote
 	libSubject   bool        // чем ответит LibrarySubjectExists
 	rejection    pgtype.Text // причина последнего отказа
 	rejectionErr error
@@ -58,11 +59,11 @@ func (f *fakeStore) SubjectOwnedByUser(context.Context, db.SubjectOwnedByUserPar
 
 func (f *fakeStore) CreateNote(_ context.Context, a db.CreateNoteParams) (db.Note, error) {
 	f.created = a
-	return db.Note{ID: uuid.New(), UserID: a.UserID, SubjectID: a.SubjectID, Title: a.Title, Content: a.Content, ContentText: a.ContentText}, f.err
+	return db.Note{ID: uuid.New(), UserID: a.UserID, SubjectID: a.SubjectID, Title: a.Title, Content: a.Content, ContentText: a.ContentText, Kind: a.Kind, Summary: a.Summary, Semester: a.Semester, LibrarySubjectID: a.LibrarySubjectID, Status: "draft"}, f.err
 }
 
 func (f *fakeStore) GetNote(context.Context, db.GetNoteParams) (db.Note, error) {
-	return db.Note{ID: uuid.New()}, f.err
+	return db.Note{ID: uuid.New(), Status: f.status}, f.err
 }
 
 func (f *fakeStore) UpdateNote(_ context.Context, a db.UpdateNoteParams) (db.Note, error) {
@@ -600,5 +601,104 @@ func TestIndexerFailure_NeverFailsTheOperation(t *testing.T) {
 	}
 	if len(idx.events) != 3 {
 		t.Errorf("the index must have been attempted each time: %v", idx.events)
+	}
+}
+
+func TestCreate_MaterialFields_DefaultToANoteAndArePassedThrough(t *testing.T) {
+	ctx := context.Background()
+	f := &fakeStore{libSubject: true}
+	lib, desc, sem := uuid.New(), "short description", int16(3)
+
+	created, err := note.NewService(f).Create(ctx, uuid.New(), note.Input{
+		Title: "T", Content: doc("x"), Description: &desc, Semester: &sem, LibrarySubjectID: &lib,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := f.created
+	if c.Kind != note.KindNote || c.Summary.String != desc || c.Semester.Int16 != 3 || !c.LibrarySubjectID.Valid || c.LibrarySubjectID.UUID != lib {
+		t.Errorf("stored fields: %+v", c)
+	}
+	if created.Status != note.StatusDraft || created.Kind != note.KindNote {
+		t.Errorf("a new note is a draft of kind note: %s/%s", created.Status, created.Kind)
+	}
+	if created.Description == nil || *created.Description != desc || created.Semester == nil || *created.Semester != 3 {
+		t.Errorf("the response must carry the description and the semester: %+v", created)
+	}
+
+	if _, err := note.NewService(&fakeStore{libSubject: true}).Create(ctx, uuid.New(), note.Input{Title: "T", Content: doc("x"), Kind: note.KindCheatSheet}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCreate_UnknownLibrarySubject_IsRejectedBeforeInsert(t *testing.T) {
+	f := &fakeStore{libSubject: false}
+	missing := uuid.New()
+
+	_, err := note.NewService(f).Create(context.Background(), uuid.New(), note.Input{Title: "T", Content: doc("x"), LibrarySubjectID: &missing})
+
+	if !errors.Is(err, note.ErrInvalidLibrarySubject) {
+		t.Fatalf("err = %v, want ErrInvalidLibrarySubject", err)
+	}
+	if f.created.Title != "" {
+		t.Error("nothing may be inserted for an unknown library subject")
+	}
+}
+
+func TestUpdate_MaterialFields_CarryTheirFlagsToTheQuery(t *testing.T) {
+	ctx := context.Background()
+	f := &fakeStore{libSubject: true}
+	lib, kind, desc, sem := uuid.New(), note.KindCheatSheet, "d", int16(5)
+
+	if _, err := note.NewService(f).Update(ctx, uuid.New(), uuid.New(), note.Patch{
+		Kind: &kind, SetDescription: true, Description: &desc, SetSemester: true, Semester: &sem, SetLibrarySubject: true, LibrarySubjectID: &lib,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	u := f.updated
+	if u.Kind.String != kind || !u.SetSummary || u.Summary.String != desc || !u.SetSemester || u.Semester.Int16 != 5 || !u.SetLibrarySubject || u.LibrarySubjectID.UUID != lib {
+		t.Errorf("update params: %+v", u)
+	}
+
+	// null очищает поля: флаг выставлен, значения нет.
+	if _, err := note.NewService(f).Update(ctx, uuid.New(), uuid.New(), note.Patch{SetDescription: true, SetSemester: true, SetLibrarySubject: true}); err != nil {
+		t.Fatal(err)
+	}
+	u = f.updated
+	if !u.SetSummary || u.Summary.Valid || !u.SetSemester || u.Semester.Valid || !u.SetLibrarySubject || u.LibrarySubjectID.Valid || u.Kind.Valid {
+		t.Errorf("a null must clear and an absent kind must stay untouched: %+v", u)
+	}
+
+	missing := uuid.New()
+	g := &fakeStore{libSubject: false}
+	if _, err := note.NewService(g).Update(ctx, uuid.New(), uuid.New(), note.Patch{SetLibrarySubject: true, LibrarySubjectID: &missing}); !errors.Is(err, note.ErrInvalidLibrarySubject) {
+		t.Errorf("err = %v, want ErrInvalidLibrarySubject", err)
+	}
+}
+
+func TestGet_RejectedNote_CarriesTheReasonOfTheLastRejection(t *testing.T) {
+	ctx := context.Background()
+	f := &fakeStore{status: note.StatusRejected, rejection: pgtype.Text{String: "add sources", Valid: true}}
+
+	n, err := note.NewService(f).Get(ctx, uuid.New(), uuid.New())
+
+	if err != nil || n.RejectionReason == nil || *n.RejectionReason != "add sources" || n.Status != note.StatusRejected {
+		t.Fatalf("note = %+v, err = %v", n, err)
+	}
+
+	// Другие статусы причину не ищут и не показывают.
+	f = &fakeStore{status: note.StatusPublished, rejection: pgtype.Text{String: "old", Valid: true}}
+	if n, _ := note.NewService(f).Get(ctx, uuid.New(), uuid.New()); n.RejectionReason != nil {
+		t.Errorf("a published note must not show an old reason: %v", *n.RejectionReason)
+	}
+
+	// Отказ без записи о причине (старые данные) не ломает чтение.
+	f = &fakeStore{status: note.StatusRejected, rejectionErr: pgx.ErrNoRows}
+	if n, err := note.NewService(f).Get(ctx, uuid.New(), uuid.New()); err != nil || n.RejectionReason != nil {
+		t.Errorf("a missing record must be tolerated: %+v, %v", n.RejectionReason, err)
+	}
+	f = &fakeStore{status: note.StatusRejected, rejectionErr: errors.New("db down")}
+	if _, err := note.NewService(f).Get(ctx, uuid.New(), uuid.New()); err == nil {
+		t.Error("a real database error must surface")
 	}
 }

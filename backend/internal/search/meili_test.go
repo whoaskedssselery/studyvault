@@ -356,3 +356,61 @@ func TestMeili_RetriesSetupAfterTheCooldown(t *testing.T) {
 		t.Error("after the cooldown the server must be tried again, otherwise a short outage would disable search for good")
 	}
 }
+
+// Поиск библиотеки видит опубликованные материалы всех авторов и больше ничего: ни чужие черновики,
+// ни материалы на проверке, ни отклонённые.
+func TestMeili_SearchPublished_SeesEveryonesPublishedAndNothingElse(t *testing.T) {
+	m := newMeili(t)
+	ctx := context.Background()
+	alice, bob := uuid.New(), uuid.New()
+	withStatus := func(user uuid.UUID, status string) search.Doc {
+		d := doc(user, "Derivatives", "the derivative is a rate of change")
+		d.Status = status
+		return d
+	}
+	pubA, pubB := withStatus(alice, "published"), withStatus(bob, "published")
+	hidden := []search.Doc{withStatus(alice, "draft"), withStatus(alice, "pending"), withStatus(bob, "rejected")}
+	for _, d := range append([]search.Doc{pubA, pubB}, hidden...) {
+		if err := m.Upsert(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	settle(t, m)
+
+	hits, err := m.SearchPublished(ctx, "derivative", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[uuid.UUID]bool{}
+	for _, id := range ids(hits) {
+		got[id] = true
+	}
+	if len(got) != 2 || !got[pubA.ID] || !got[pubB.ID] {
+		t.Errorf("hits = %v, want exactly the two published documents of different authors", ids(hits))
+	}
+
+	// Личный поиск по-прежнему ограничен автором и видит его материалы в любом статусе.
+	own, err := m.Search(ctx, alice, "derivative", 20)
+	if err != nil || len(own) != 3 {
+		t.Errorf("alice's own search = %d hits (%v), want her 3 documents of any status", len(own), err)
+	}
+
+	// Когда материал снят с публикации, его новый статус доходит до индекса.
+	demoted := pubA
+	demoted.Status = "pending"
+	if err := m.Upsert(ctx, demoted); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, m)
+	hits, _ = m.SearchPublished(ctx, "derivative", 20)
+	if len(hits) != 1 || hits[0].ID != pubB.ID {
+		t.Errorf("after the demotion: %v, want only bob's material", ids(hits))
+	}
+}
+
+func TestMeili_SearchPublished_Unreachable_ReturnsAnError(t *testing.T) {
+	m := search.NewMeili("http://127.0.0.1:1", "key", "notes_unreachable")
+	if _, err := m.SearchPublished(context.Background(), "x", 5); err == nil {
+		t.Error("an unreachable engine must be reported, not treated as an empty result")
+	}
+}
