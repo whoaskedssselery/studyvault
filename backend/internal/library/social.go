@@ -75,6 +75,9 @@ func (s *Service) AddComment(ctx context.Context, uid, noteID uuid.UUID, body st
 	if n := utf8.RuneCountInString(body); n < 1 || n > maxCommentLen {
 		return Comment{}, fmt.Errorf("%w: comment must be 1 to %d characters", ErrInvalid, maxCommentLen)
 	}
+	if err := s.requireVerified(ctx, uid); err != nil {
+		return Comment{}, err
+	}
 	if _, err := s.publishedAuthor(ctx, noteID); err != nil {
 		return Comment{}, err
 	}
@@ -130,6 +133,9 @@ type RatingResult struct {
 func (s *Service) Rate(ctx context.Context, uid, noteID uuid.UUID, value int) (RatingResult, error) {
 	if value < 1 || value > 5 {
 		return RatingResult{}, fmt.Errorf("%w: rating must be a whole number from 1 to 5", ErrInvalid)
+	}
+	if err := s.requireVerified(ctx, uid); err != nil {
+		return RatingResult{}, err
 	}
 	author, err := s.publishedAuthor(ctx, noteID)
 	if err != nil {
@@ -222,6 +228,9 @@ func (s *Service) EditComment(ctx context.Context, uid, id uuid.UUID, body strin
 	body = strings.TrimSpace(body)
 	if n := utf8.RuneCountInString(body); n < 1 || n > maxCommentLen {
 		return Comment{}, fmt.Errorf("%w: comment must be 1 to %d characters", ErrInvalid, maxCommentLen)
+	}
+	if err := s.requireVerified(ctx, uid); err != nil {
+		return Comment{}, err
 	}
 	c, err := s.store.UpdateComment(ctx, db.UpdateCommentParams{ID: id, UserID: uid, Body: body})
 	if errors.Is(err, pgx.ErrNoRows) {

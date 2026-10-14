@@ -73,6 +73,8 @@ func libraryError(w http.ResponseWriter, r *http.Request, err error, op string) 
 		notFound(w, "not found")
 	case errors.Is(err, library.ErrForbidden):
 		writeError(w, http.StatusForbidden, "forbidden", "you are not allowed to do this")
+	case errors.Is(err, library.ErrEmailNotVerified):
+		writeError(w, http.StatusForbidden, "email_not_verified", "confirm your e-mail first: publishing, commenting and rating need a verified address")
 	case errors.Is(err, library.ErrInvalidTransition):
 		writeError(w, http.StatusConflict, "invalid_transition", trimInvalid(err, library.ErrInvalidTransition))
 	case errors.Is(err, library.ErrInvalid):

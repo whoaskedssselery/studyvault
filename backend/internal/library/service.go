@@ -41,6 +41,8 @@ var (
 	ErrNotFound = errors.New("not found")
 	// ErrForbidden — действие не по роли: не модератор, свой материал, и тому подобное.
 	ErrForbidden = errors.New("forbidden")
+	// ErrEmailNotVerified — публиковать, комментировать и оценивать можно только с подтверждённой почтой.
+	ErrEmailNotVerified = errors.New("e-mail is not verified")
 	// ErrInvalidTransition — материал не в том статусе, из которого допустим этот переход.
 	ErrInvalidTransition = errors.New("invalid status transition")
 	ErrInvalidCursor     = errors.New("invalid cursor")
@@ -492,6 +494,21 @@ func (s *Service) isModerator(ctx context.Context, uid uuid.UUID) (bool, error) 
 		return false, fmt.Errorf("get user: %w", err)
 	}
 	return u.Role == auth.RoleModerator, nil
+}
+
+// requireVerified возвращает ErrEmailNotVerified, если пользователь ещё не подтвердил почту. Аккаунта уже нет: ErrForbidden.
+func (s *Service) requireVerified(ctx context.Context, uid uuid.UUID) error {
+	u, err := s.store.GetUserByID(ctx, uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrForbidden
+	}
+	if err != nil {
+		return fmt.Errorf("get user: %w", err)
+	}
+	if u.EmailVerifiedAt == nil {
+		return ErrEmailNotVerified
+	}
+	return nil
 }
 
 // requireModerator возвращает ErrForbidden, если пользователь не модератор (или его уже нет).

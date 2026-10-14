@@ -67,7 +67,18 @@ func newEnv(t *testing.T) *env {
 	return e
 }
 
+// user — пользователь с подтверждённой почтой: публиковать, комментировать и оценивать можно только с ней.
 func (e *env) user(t *testing.T, name string) uuid.UUID {
+	t.Helper()
+	id := e.unverified(t, name)
+	if _, err := e.q.VerifyUserEmail(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// unverified — только что зарегистрированный пользователь, ещё не открывший ссылку из письма.
+func (e *env) unverified(t *testing.T, name string) uuid.UUID {
 	t.Helper()
 	u, err := e.q.CreateUser(context.Background(), db.CreateUserParams{
 		Email: name + "-" + uuid.NewString() + "@x.io", PasswordHash: "x", DisplayName: name,

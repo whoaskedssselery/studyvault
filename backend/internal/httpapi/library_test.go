@@ -370,6 +370,7 @@ func TestLibraryErrors_AreMappedToTheDocumentedStatusesAndCodes(t *testing.T) {
 	}{
 		{library.ErrNotFound, 404, "not_found"},
 		{library.ErrForbidden, 403, "forbidden"},
+		{library.ErrEmailNotVerified, 403, "email_not_verified"},
 		{library.ErrInvalidTransition, 409, "invalid_transition"},
 		{fmt.Errorf("%w: a rejection needs a reason", library.ErrInvalid), 400, "validation_failed"},
 		{library.ErrInvalidCursor, 400, "validation_failed"},

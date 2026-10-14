@@ -34,6 +34,9 @@ var colorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 // Submit отправляет заметку на проверку: из черновика или после отказа. Для отправки нужны название, содержимое
 // (текст или хотя бы один файл) и общий предмет библиотеки. Опубликованным материал становится только после одобрения.
 func (s *Service) Submit(ctx context.Context, uid, id uuid.UUID) (db.Note, error) {
+	if err := s.requireVerified(ctx, uid); err != nil {
+		return db.Note{}, err
+	}
 	n, err := s.store.GetNote(ctx, db.GetNoteParams{ID: id, UserID: uid})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return db.Note{}, ErrNotFound
