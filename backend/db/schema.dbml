@@ -3,6 +3,8 @@ Table users {
   email text [not null, unique]
   password_hash text [not null]
   display_name text [not null]
+  role text [not null, default: 'student', note: 'student | moderator; назначает только сервер (cmd/promote)']
+  faculty text [note: 'необязательно, до 100 символов']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 }
@@ -43,6 +45,13 @@ Table notes {
   content jsonb [not null, note: 'документ Tiptap']
   content_text text [not null, default: '', note: 'плоский текст для индекса Meilisearch']
   is_pinned boolean [not null, default: false]
+  kind text [not null, default: 'note', note: 'note | cheat_sheet']
+  summary text [note: 'краткое описание, до 500 символов']
+  semester smallint [note: '1..12']
+  status text [not null, default: 'draft', note: 'draft | pending | published | rejected']
+  published_at timestamptz [note: 'задан тогда и только тогда, когда status = published']
+  views bigint [not null, default: 0]
+  library_subject_id uuid [ref: > library_subjects.id, note: 'общий предмет библиотеки']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
   deleted_at timestamptz [note: 'soft delete']
@@ -51,6 +60,10 @@ Table notes {
     (user_id, updated_at)
     subject_id
     (user_id, `lower(title)`) [note: "поиск заметки по названию при разрешении ссылок"]
+    (published_at, id) [note: 'лента библиотеки, только status = published']
+    (views, id) [note: 'сортировка по просмотрам, только status = published']
+    (updated_at, id) [note: 'очередь проверки, только status = pending']
+    library_subject_id [note: 'только status = published']
   }
 }
 
@@ -106,5 +119,61 @@ Table attachments {
   indexes {
     note_id
     user_id
+  }
+}
+
+Table library_subjects {
+  id uuid [pk, default: `gen_random_uuid()`]
+  title text [not null, note: 'уникально без учёта регистра; ведёт модератор']
+  color text [note: '#rrggbb']
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table comments {
+  id uuid [pk, default: `gen_random_uuid()`]
+  note_id uuid [not null, ref: > notes.id]
+  user_id uuid [not null, ref: > users.id]
+  body text [not null, note: '1..2000 символов']
+  created_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz [note: 'soft delete']
+
+  indexes {
+    (note_id, created_at, id) [note: 'только неудалённые']
+  }
+}
+
+Table note_ratings {
+  note_id uuid [not null, ref: > notes.id]
+  user_id uuid [not null, ref: > users.id]
+  value smallint [not null, note: '1..5']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (note_id, user_id) [pk, note: 'одна оценка на пару']
+  }
+}
+
+Table moderation_decisions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  note_id uuid [not null, ref: > notes.id]
+  moderator_id uuid [not null, ref: > users.id]
+  decision text [not null, note: 'approved | rejected']
+  reason text [note: 'обязательна при rejected']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (note_id, created_at)
+  }
+}
+
+Table note_bookmarks {
+  note_id uuid [not null, ref: > notes.id]
+  user_id uuid [not null, ref: > users.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (note_id, user_id) [pk]
+    (user_id, created_at)
   }
 }
