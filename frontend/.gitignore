@@ -5,3 +5,4 @@ playwright-report/
 .env.local
 *.tsbuildinfo
 .vite/
+src/api/schema.d.ts

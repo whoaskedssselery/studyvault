@@ -1,15 +1,19 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
+import type { ApiUser, ApiNote, ApiAttachment } from "../src/api/client";
 const userId = "11111111-1111-4111-8111-111111111111";
 const noteId = "22222222-2222-4222-8222-222222222222";
 const subjectId = "33333333-3333-4333-8333-333333333333";
 const tagId = "44444444-4444-4444-8444-444444444444";
 const attachmentId = "55555555-5555-4555-8555-555555555555";
 const nextId = "66666666-6666-4666-8666-666666666666";
-const user = {
+const user: ApiUser = {
   id: userId,
   email: "api@example.test",
   display_name: "Студент API",
+  email_verified: true,
+  faculty: "Информационные технологии",
+  role: "student",
   created_at: "2026-10-14T10:00:00Z",
 };
 async function setup(page: Page, expire = false) {
@@ -20,11 +24,19 @@ async function setup(page: Page, expire = false) {
     body: any;
     query: string;
   }[] = [];
-  let current = {
+  let current: ApiNote = {
     id: noteId,
     title: "Серверный конспект",
     subject_id: subjectId,
     is_pinned: false,
+    kind: "note",
+    status: "draft",
+    library_subject_id: null,
+    summary: null,
+    semester: null,
+    published_at: null,
+    views: 0,
+    rejection_reason: null,
     tags: [] as { id: string; name: string }[],
     created_at: "2026-10-14T10:00:00Z",
     updated_at: "2026-10-14T10:00:00Z",
@@ -38,7 +50,7 @@ async function setup(page: Page, expire = false) {
       ],
     },
   };
-  const files: any[] = [];
+  const files: ApiAttachment[] = [];
   await page.route("**/backend-api/**", async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
@@ -157,7 +169,7 @@ async function setup(page: Page, expire = false) {
       });
     if (path === "/attachments") {
       if (method === "GET") return respond({ items: files });
-      const file = { id: attachmentId, ...body, created_at: user.created_at };
+      const file = { id: files.length ? `55555555-5555-4555-8555-${String(files.length + 1).padStart(12, "0")}` : attachmentId, ...body, created_at: user.created_at };
       files.push(file);
       return respond(
         {
@@ -167,13 +179,15 @@ async function setup(page: Page, expire = false) {
         201,
       );
     }
-    if (path === `/attachments/${attachmentId}`) {
+    if (path.startsWith("/attachments/")) {
+      const index = files.findIndex(file => path === `/attachments/${file.id}`);
+      if (index < 0) return respond({ type: "about:blank", title: "Not Found", status: 404, code: "not_found", detail: "File not found" }, 404);
       if (method === "DELETE") {
-        files.length = 0;
+        files.splice(index, 1);
         return route.fulfill({ status: 204 });
       }
       return respond({
-        attachment: files[0],
+        attachment: files[index],
         download_url: "https://files.example.test/notes.pdf",
       });
     }
@@ -354,6 +368,33 @@ test("S3 PUT uses the original MIME and sends no Bearer token", async ({
     size_bytes: 14,
   });
 });
+test("API attachments reject unsupported files and over 2 MB, cap at three and free a slot on deletion", async ({ page }) => {
+  const calls = await setup(page);
+  let uploads = 0;
+  await page.route("https://files.example.test/**", async route => { uploads++; await route.fulfill({ status: 200, body: "" }); });
+  await login(page);
+  await page.getByRole("button", { name: /Серверный конспект/ }).first().click();
+  const input = page.getByLabel("Файл API", { exact: true });
+  await expect(input).toBeEnabled();
+  await input.setInputFiles({ name: "animation.gif", mimeType: "image/gif", buffer: Buffer.from("GIF89a") });
+  await expect(page.locator(".api-files [role=alert]")).toContainText("PDF, PNG, JPEG или WebP");
+  await input.setInputFiles({ name: "too-large.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(2 * 1024 * 1024 + 1) });
+  await expect(page.locator(".api-files [role=alert]")).toContainText("до 2 МБ");
+  expect(calls.filter(call => call.path === "/attachments" && call.method === "POST")).toHaveLength(0);
+  expect(uploads).toBe(0);
+  for (let count = 1; count <= 3; count++) {
+    await expect(input).toBeEnabled();
+    await input.setInputFiles({ name: `file-${count}.pdf`, mimeType: "application/pdf", buffer: count === 1 ? Buffer.alloc(2 * 1024 * 1024) : Buffer.from("%PDF-1.4") });
+    await expect(page.locator(".api-files .attachment")).toHaveCount(count);
+  }
+  await expect(input).toBeDisabled();
+  expect(uploads).toBe(3);
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "Удалить файл file-1.pdf", exact: true }).click();
+  await expect(page.locator(".api-files .attachment")).toHaveCount(2);
+  await expect(input).toBeEnabled();
+});
+
 test("wrong credentials never refresh; auth rate limits show Retry-After", async ({
   page,
 }) => {

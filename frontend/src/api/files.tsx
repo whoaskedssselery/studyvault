@@ -2,16 +2,14 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileText, Trash2, Upload } from "lucide-react";
 import { api } from "./client";
+import type { components } from "./schema";
+type Mime = components["schemas"]["AttachmentInput"]["mime_type"];
 const types = [
   "application/pdf",
   "image/png",
   "image/jpeg",
   "image/webp",
-  "image/gif",
-  "text/plain",
-  "text/markdown",
-] as const;
-type Mime = (typeof types)[number];
+] as const satisfies readonly Mime[];
 function url(value: string) {
   const parsed = new URL(value);
   if (!["https:", "http:"].includes(parsed.protocol))
@@ -81,7 +79,7 @@ export function ApiFiles({
     <section className="aside-panel api-files">
       <h3>Файлы на сервере</h3>
       <p className="muted">
-        PDF, изображения, текст или Markdown · до 20 МБ. Загрузка идёт напрямую
+        PDF, PNG, JPEG или WebP · до 3 файлов по 2 МБ. Загрузка идёт напрямую
         в S3 по подписанной ссылке.
       </p>
       <label className="upload-zone">
@@ -91,8 +89,8 @@ export function ApiFiles({
         </strong>
         <input
           type="file"
-          disabled={busy}
-          accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.txt,.md"
+          disabled={busy || files.isPending || (files.data?.items.length || 0) >= 3}
+          accept=".pdf,.png,.jpg,.jpeg,.webp"
           aria-label="Файл API"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -100,11 +98,15 @@ export function ApiFiles({
             if (!file) return;
             const mime = file.type || guess(file.name);
             if (
-              !types.includes(mime as Mime) ||
+              !types.some(type => type === mime) ||
               file.size < 1 ||
-              file.size > 20 * 1024 * 1024
+              file.size > 2 * 1024 * 1024
             ) {
-              setError("Выберите поддерживаемый файл от 1 байта до 20 МБ.");
+              setError("Выберите PDF, PNG, JPEG или WebP от 1 байта до 2 МБ.");
+              return;
+            }
+            if ((files.data?.items.length || 0) >= 3) {
+              setError("К заметке можно прикрепить не больше 3 файлов.");
               return;
             }
             void run(async () => {
@@ -190,9 +192,6 @@ function guess(name: string): string {
         jpg: "image/jpeg",
         jpeg: "image/jpeg",
         webp: "image/webp",
-        gif: "image/gif",
-        txt: "text/plain",
-        md: "text/markdown",
       } as Record<string, string>
     )[ext || ""] || ""
   );
