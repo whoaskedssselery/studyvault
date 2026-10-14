@@ -29,6 +29,11 @@ type fakeAccount struct {
 	gotUA               string
 	changeCalls         int
 	updates             int
+
+	resetErr, confirmErr, deleteErr   error
+	resetEmail, resetToken, resetPass string
+	deletePass                        string
+	deleteCalls                       int
 }
 
 func (f *fakeAccount) GetUser(_ context.Context, id uuid.UUID) (db.User, error) {
@@ -51,6 +56,22 @@ func (f *fakeAccount) UpdateProfile(_ context.Context, id uuid.UUID, p auth.Prof
 		}
 	}
 	return u, f.updateErr
+}
+
+func (f *fakeAccount) RequestPasswordReset(_ context.Context, email string) error {
+	f.resetEmail = email
+	return f.resetErr
+}
+
+func (f *fakeAccount) ConfirmPasswordReset(_ context.Context, token, pass string) error {
+	f.resetToken, f.resetPass = token, pass
+	return f.confirmErr
+}
+
+func (f *fakeAccount) DeleteAccount(_ context.Context, id uuid.UUID, password string) error {
+	f.gotID, f.deletePass = id, password
+	f.deleteCalls++
+	return f.deleteErr
 }
 
 func (f *fakeAccount) ChangePassword(_ context.Context, id uuid.UUID, current, next, ua string) (auth.Tokens, error) {

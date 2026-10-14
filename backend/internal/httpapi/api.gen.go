@@ -216,6 +216,21 @@ type Author struct {
 	Id          openapi_types.UUID        `json:"id"`
 }
 
+// AuthorStats defines model for AuthorStats.
+type AuthorStats struct {
+	Author Author `json:"author"`
+
+	// MaterialsCount Опубликованных материалов
+	MaterialsCount int64         `json:"materials_count"`
+	Rating         RatingSummary `json:"rating"`
+
+	// RatingsCount Оценок всех опубликованных материалов вместе
+	RatingsCount int64 `json:"ratings_count"`
+
+	// Views Просмотров опубликованных материалов вместе
+	Views int64 `json:"views"`
+}
+
 // ChangePasswordRequest defines model for ChangePasswordRequest.
 type ChangePasswordRequest struct {
 	// CurrentPassword Example: correct-horse-battery
@@ -229,10 +244,13 @@ type ChangePasswordRequest struct {
 
 // Comment defines model for Comment.
 type Comment struct {
-	Author    Author             `json:"author"`
-	Body      string             `json:"body"`
-	CreatedAt time.Time          `json:"created_at"`
-	Id        openapi_types.UUID `json:"id"`
+	Author    Author    `json:"author"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// EditedAt Когда комментарий последний раз правили; `null`, если не правили
+	EditedAt nullable.Nullable[time.Time] `json:"edited_at"`
+	Id       openapi_types.UUID           `json:"id"`
 }
 
 // CommentInput defines model for CommentInput.
@@ -245,6 +263,11 @@ type CommentInput struct {
 type CommentPage struct {
 	Items      []Comment                 `json:"items"`
 	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
+
+// CommentPatch defines model for CommentPatch.
+type CommentPatch struct {
+	Body string `json:"body"`
 }
 
 // DecisionInput defines model for DecisionInput.
@@ -267,6 +290,12 @@ type DecisionResult struct {
 	// Status `draft` — черновик, `pending` — на проверке, `published` — опубликован, `rejected` — отклонён.
 	// Переходы: draft → pending, pending → published или rejected, rejected → pending.
 	Status MaterialStatus `json:"status"`
+}
+
+// DeleteAccountRequest defines model for DeleteAccountRequest.
+type DeleteAccountRequest struct {
+	// Password Текущий пароль (удаление необратимо, поэтому его подтверждают)
+	Password string `json:"password"`
 }
 
 // Graph defines model for Graph.
@@ -318,8 +347,11 @@ type LibraryItem struct {
 	Snippet nullable.Nullable[string]     `json:"snippet"`
 	Subject nullable.Nullable[SubjectRef] `json:"subject"`
 	Summary nullable.Nullable[string]     `json:"summary"`
-	Title   string                        `json:"title"`
-	Views   int64                         `json:"views"`
+
+	// Tags Названия тегов автора, привязанных к материалу
+	Tags  []string `json:"tags"`
+	Title string   `json:"title"`
+	Views int64    `json:"views"`
 }
 
 // LibraryPage defines model for LibraryPage.
@@ -537,6 +569,23 @@ type NoteSummary struct {
 	UpdatedAt time.Time                             `json:"updated_at"`
 }
 
+// PasswordResetConfirm defines model for PasswordResetConfirm.
+type PasswordResetConfirm struct {
+	// NewPassword Не длиннее 72 байт (ограничение bcrypt)
+	//
+	// Example: another-long-passphrase
+	NewPassword string `json:"new_password"`
+
+	// Token Значение параметра `token` из ссылки в письме
+	Token string `json:"token"`
+}
+
+// PasswordResetRequest defines model for PasswordResetRequest.
+type PasswordResetRequest struct {
+	// Email Example: anna@example.com
+	Email openapi_types.Email `json:"email"`
+}
+
 // Problem Описание ошибки по RFC 7807 с расширениями `code` и `request_id`
 type Problem struct {
 	// Code Стабильный машиночитаемый код, например `validation_failed` или `not_found`
@@ -602,6 +651,24 @@ type QueueItem struct {
 type QueuePage struct {
 	Items      []QueueItem               `json:"items"`
 	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
+
+// RankedAuthor defines model for RankedAuthor.
+type RankedAuthor struct {
+	Author Author `json:"author"`
+
+	// MaterialsCount Опубликованных материалов
+	MaterialsCount int64 `json:"materials_count"`
+
+	// Rank Место в рейтинге, начиная с 1
+	Rank   int           `json:"rank"`
+	Rating RatingSummary `json:"rating"`
+
+	// RatingsCount Оценок всех опубликованных материалов вместе
+	RatingsCount int64 `json:"ratings_count"`
+
+	// Views Просмотров опубликованных материалов вместе
+	Views int64 `json:"views"`
 }
 
 // RatingInput defines model for RatingInput.
@@ -723,6 +790,12 @@ type TokenResponse struct {
 	ExpiresIn int `json:"expires_in"`
 }
 
+// UnpublishInput defines model for UnpublishInput.
+type UnpublishInput struct {
+	// Reason Example: В материале найдены неточности в формулировке теоремы.
+	Reason string `json:"reason"`
+}
+
 // User defines model for User.
 type User struct {
 	CreatedAt   time.Time           `json:"created_at"`
@@ -796,6 +869,12 @@ type ListLibraryParams struct {
 	Kind             *MaterialKind       `form:"kind,omitempty" json:"kind,omitempty"`
 	Semester         *int                `form:"semester,omitempty" json:"semester,omitempty"`
 
+	// AuthorId Только материалы этого автора
+	AuthorId *openapi_types.UUID `form:"author_id,omitempty" json:"author_id,omitempty"`
+
+	// Tag Только материалы с тегом с таким названием (точное совпадение)
+	Tag *string `form:"tag,omitempty" json:"tag,omitempty"`
+
 	// Sort `new` — новые сверху, `rating` — лучшие по оценке, `views` — самые просматриваемые
 	Sort  *ListLibraryParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
 	Limit *Limit                 `form:"limit,omitempty" json:"limit,omitempty"`
@@ -841,6 +920,11 @@ type SetNoteTagsJSONBody struct {
 	TagIds []openapi_types.UUID `json:"tag_ids"`
 }
 
+// ListAuthorRankingParams defines parameters for ListAuthorRanking.
+type ListAuthorRankingParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // SearchNotesParams defines parameters for SearchNotes.
 type SearchNotesParams struct {
 	Q         string              `form:"q" json:"q"`
@@ -857,8 +941,17 @@ type CreateAttachmentJSONRequestBody = AttachmentInput
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
+// RequestPasswordResetJSONRequestBody defines body for RequestPasswordReset for application/json ContentType.
+type RequestPasswordResetJSONRequestBody = PasswordResetRequest
+
+// ConfirmPasswordResetJSONRequestBody defines body for ConfirmPasswordReset for application/json ContentType.
+type ConfirmPasswordResetJSONRequestBody = PasswordResetConfirm
+
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
+
+// UpdateCommentJSONRequestBody defines body for UpdateComment for application/json ContentType.
+type UpdateCommentJSONRequestBody = CommentPatch
 
 // CreateLibrarySubjectJSONRequestBody defines body for CreateLibrarySubject for application/json ContentType.
 type CreateLibrarySubjectJSONRequestBody = LibrarySubjectInput
@@ -872,6 +965,9 @@ type CreateCommentJSONRequestBody = CommentInput
 // RateMaterialJSONRequestBody defines body for RateMaterial for application/json ContentType.
 type RateMaterialJSONRequestBody = RatingInput
 
+// DeleteMeJSONRequestBody defines body for DeleteMe for application/json ContentType.
+type DeleteMeJSONRequestBody = DeleteAccountRequest
+
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = ProfilePatch
 
@@ -880,6 +976,9 @@ type ChangePasswordJSONRequestBody = ChangePasswordRequest
 
 // DecideMaterialJSONRequestBody defines body for DecideMaterial for application/json ContentType.
 type DecideMaterialJSONRequestBody = DecisionInput
+
+// UnpublishMaterialJSONRequestBody defines body for UnpublishMaterial for application/json ContentType.
+type UnpublishMaterialJSONRequestBody = UnpublishInput
 
 // CreateNoteJSONRequestBody defines body for CreateNote for application/json ContentType.
 type CreateNoteJSONRequestBody = NoteInput
@@ -919,18 +1018,30 @@ type ServerInterface interface {
 	// Logout Выход (отзывает refresh-токен)
 	// (POST /auth/logout)
 	Logout(w http.ResponseWriter, r *http.Request)
+	// RequestPasswordReset Запросить письмо со ссылкой для сброса пароля
+	// (POST /auth/password-reset)
+	RequestPasswordReset(w http.ResponseWriter, r *http.Request)
+	// ConfirmPasswordReset Задать новый пароль по ссылке из письма
+	// (POST /auth/password-reset/confirm)
+	ConfirmPasswordReset(w http.ResponseWriter, r *http.Request)
 	// Refresh Обновить access-токен
 	// (POST /auth/refresh)
 	Refresh(w http.ResponseWriter, r *http.Request)
 	// Register Регистрация
 	// (POST /auth/register)
 	Register(w http.ResponseWriter, r *http.Request)
+	// GetAuthor Публичный профиль автора
+	// (GET /authors/{id})
+	GetAuthor(w http.ResponseWriter, r *http.Request, id Id)
 	// ListBookmarks Моё избранное
 	// (GET /bookmarks)
 	ListBookmarks(w http.ResponseWriter, r *http.Request, params ListBookmarksParams)
 	// DeleteComment Удалить комментарий
 	// (DELETE /comments/{id})
 	DeleteComment(w http.ResponseWriter, r *http.Request, id Id)
+	// UpdateComment Изменить свой комментарий
+	// (PATCH /comments/{id})
+	UpdateComment(w http.ResponseWriter, r *http.Request, id Id)
 	// GetGraph Граф связей между заметками
 	// (GET /graph)
 	GetGraph(w http.ResponseWriter, r *http.Request)
@@ -973,6 +1084,9 @@ type ServerInterface interface {
 	// RateMaterial Поставить или изменить оценку
 	// (PUT /library/{id}/rating)
 	RateMaterial(w http.ResponseWriter, r *http.Request, id Id)
+	// DeleteMe Удалить аккаунт
+	// (DELETE /me)
+	DeleteMe(w http.ResponseWriter, r *http.Request)
 	// GetMe Мой аккаунт
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -988,6 +1102,9 @@ type ServerInterface interface {
 	// DecideMaterial Одобрить или отклонить материал (модератор)
 	// (POST /moderation/{id}/decision)
 	DecideMaterial(w http.ResponseWriter, r *http.Request, id Id)
+	// UnpublishMaterial Снять опубликованный материал с публикации (модератор)
+	// (POST /moderation/{id}/unpublish)
+	UnpublishMaterial(w http.ResponseWriter, r *http.Request, id Id)
 	// ListNotes Список заметок (без содержимого)
 	// (GET /notes)
 	ListNotes(w http.ResponseWriter, r *http.Request, params ListNotesParams)
@@ -1012,6 +1129,12 @@ type ServerInterface interface {
 	// SetNoteTags Заменить набор тегов заметки целиком
 	// (PUT /notes/{id}/tags)
 	SetNoteTags(w http.ResponseWriter, r *http.Request, id Id)
+	// WithdrawNote Забрать материал с проверки
+	// (POST /notes/{id}/withdraw)
+	WithdrawNote(w http.ResponseWriter, r *http.Request, id Id)
+	// ListAuthorRanking Рейтинг авторов
+	// (GET /ranking/authors)
+	ListAuthorRanking(w http.ResponseWriter, r *http.Request, params ListAuthorRankingParams)
 	// SearchNotes Полнотекстовый поиск по заметкам (Meilisearch)
 	// (GET /search)
 	SearchNotes(w http.ResponseWriter, r *http.Request, params SearchNotesParams)
@@ -1078,6 +1201,18 @@ func (_ Unimplemented) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// RequestPasswordReset Запросить письмо со ссылкой для сброса пароля
+// (POST /auth/password-reset)
+func (_ Unimplemented) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ConfirmPasswordReset Задать новый пароль по ссылке из письма
+// (POST /auth/password-reset/confirm)
+func (_ Unimplemented) ConfirmPasswordReset(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Refresh Обновить access-токен
 // (POST /auth/refresh)
 func (_ Unimplemented) Refresh(w http.ResponseWriter, r *http.Request) {
@@ -1090,6 +1225,12 @@ func (_ Unimplemented) Register(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetAuthor Публичный профиль автора
+// (GET /authors/{id})
+func (_ Unimplemented) GetAuthor(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ListBookmarks Моё избранное
 // (GET /bookmarks)
 func (_ Unimplemented) ListBookmarks(w http.ResponseWriter, r *http.Request, params ListBookmarksParams) {
@@ -1099,6 +1240,12 @@ func (_ Unimplemented) ListBookmarks(w http.ResponseWriter, r *http.Request, par
 // DeleteComment Удалить комментарий
 // (DELETE /comments/{id})
 func (_ Unimplemented) DeleteComment(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdateComment Изменить свой комментарий
+// (PATCH /comments/{id})
+func (_ Unimplemented) UpdateComment(w http.ResponseWriter, r *http.Request, id Id) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1186,6 +1333,12 @@ func (_ Unimplemented) RateMaterial(w http.ResponseWriter, r *http.Request, id I
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// DeleteMe Удалить аккаунт
+// (DELETE /me)
+func (_ Unimplemented) DeleteMe(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetMe Мой аккаунт
 // (GET /me)
 func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
@@ -1213,6 +1366,12 @@ func (_ Unimplemented) ListModerationQueue(w http.ResponseWriter, r *http.Reques
 // DecideMaterial Одобрить или отклонить материал (модератор)
 // (POST /moderation/{id}/decision)
 func (_ Unimplemented) DecideMaterial(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UnpublishMaterial Снять опубликованный материал с публикации (модератор)
+// (POST /moderation/{id}/unpublish)
+func (_ Unimplemented) UnpublishMaterial(w http.ResponseWriter, r *http.Request, id Id) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1261,6 +1420,18 @@ func (_ Unimplemented) SubmitNote(w http.ResponseWriter, r *http.Request, id Id)
 // SetNoteTags Заменить набор тегов заметки целиком
 // (PUT /notes/{id}/tags)
 func (_ Unimplemented) SetNoteTags(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// WithdrawNote Забрать материал с проверки
+// (POST /notes/{id}/withdraw)
+func (_ Unimplemented) WithdrawNote(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListAuthorRanking Рейтинг авторов
+// (GET /ranking/authors)
+func (_ Unimplemented) ListAuthorRanking(w http.ResponseWriter, r *http.Request, params ListAuthorRankingParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1448,6 +1619,34 @@ func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request
 	handler.ServeHTTP(w, r)
 }
 
+// RequestPasswordReset operation middleware
+func (siw *ServerInterfaceWrapper) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestPasswordReset(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConfirmPasswordReset operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmPasswordReset(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmPasswordReset(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // Refresh operation middleware
 func (siw *ServerInterfaceWrapper) Refresh(w http.ResponseWriter, r *http.Request) {
 
@@ -1467,6 +1666,32 @@ func (siw *ServerInterfaceWrapper) Register(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Register(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAuthor operation middleware
+func (siw *ServerInterfaceWrapper) GetAuthor(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAuthor(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1539,6 +1764,32 @@ func (siw *ServerInterfaceWrapper) DeleteComment(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DeleteComment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateComment operation middleware
+func (siw *ServerInterfaceWrapper) UpdateComment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateComment(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1633,6 +1884,32 @@ func (siw *ServerInterfaceWrapper) ListLibrary(w http.ResponseWriter, r *http.Re
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "semester"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "semester", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "author_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "author_id", r.URL.Query(), &params.AuthorId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "author_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "author_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "tag" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "tag", r.URL.Query(), &params.Tag, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "tag"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tag", Err: err})
 		}
 		return
 	}
@@ -1987,6 +2264,20 @@ func (siw *ServerInterfaceWrapper) RateMaterial(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteMe operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMe operation middleware
 func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
 
@@ -2092,6 +2383,32 @@ func (siw *ServerInterfaceWrapper) DecideMaterial(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DecideMaterial(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnpublishMaterial operation middleware
+func (siw *ServerInterfaceWrapper) UnpublishMaterial(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnpublishMaterial(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2347,6 +2664,65 @@ func (siw *ServerInterfaceWrapper) SetNoteTags(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SetNoteTags(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// WithdrawNote operation middleware
+func (siw *ServerInterfaceWrapper) WithdrawNote(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.WithdrawNote(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAuthorRanking operation middleware
+func (siw *ServerInterfaceWrapper) ListAuthorRanking(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAuthorRankingParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAuthorRanking(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2691,6 +3067,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/auth/logout", wrapper.Logout)
 	})
 	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/me", wrapper.DeleteMe)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/me", wrapper.GetMe)
 	})
 	r.Group(func(r chi.Router) {
@@ -2793,6 +3172,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Delete(options.BaseURL+"/comments/{id}", wrapper.DeleteComment)
 	})
 	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/comments/{id}", wrapper.UpdateComment)
+	})
+	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/library/{id}/rating", wrapper.RateMaterial)
 	})
 	r.Group(func(r chi.Router) {
@@ -2809,6 +3191,24 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/moderation/{id}/decision", wrapper.DecideMaterial)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/password-reset", wrapper.RequestPasswordReset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/password-reset/confirm", wrapper.ConfirmPasswordReset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/notes/{id}/withdraw", wrapper.WithdrawNote)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/moderation/{id}/unpublish", wrapper.UnpublishMaterial)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/ranking/authors", wrapper.ListAuthorRanking)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/authors/{id}", wrapper.GetAuthor)
 	})
 
 	return r

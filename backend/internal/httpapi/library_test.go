@@ -34,6 +34,9 @@ type fakeLibrary struct {
 	queue    library.QueuePage
 	decided  db.Note
 	att      db.Attachment
+	ranking  []library.RankedAuthor
+	author   library.AuthorStats
+	edited   library.Comment
 
 	calls    int
 	gotUser  *uuid.UUID
@@ -145,6 +148,38 @@ func (f *fakeLibrary) Decide(_ context.Context, uid, id uuid.UUID, decision, rea
 	n := f.decided
 	n.ID = id
 	return n, f.err
+}
+
+func (f *fakeLibrary) Withdraw(_ context.Context, uid, id uuid.UUID) (db.Note, error) {
+	f.calls++
+	f.gotUser, f.gotID = &uid, id
+	return f.decided, f.err
+}
+
+func (f *fakeLibrary) Unpublish(_ context.Context, uid, id uuid.UUID, reason string) (db.Note, error) {
+	f.calls++
+	f.gotUser, f.gotID, f.gotBody = &uid, id, reason
+	n := f.decided
+	n.ID = id
+	return n, f.err
+}
+
+func (f *fakeLibrary) EditComment(_ context.Context, uid, id uuid.UUID, body string) (library.Comment, error) {
+	f.calls++
+	f.gotUser, f.gotID, f.gotBody = &uid, id, body
+	return f.edited, f.err
+}
+
+func (f *fakeLibrary) Ranking(_ context.Context, limit int) ([]library.RankedAuthor, error) {
+	f.calls++
+	f.gotLimit = limit
+	return f.ranking, f.err
+}
+
+func (f *fakeLibrary) AuthorProfile(_ context.Context, id uuid.UUID) (library.AuthorStats, error) {
+	f.calls++
+	f.gotID = id
+	return f.author, f.err
 }
 
 func (f *fakeLibrary) Queue(_ context.Context, uid uuid.UUID, limit int, cursor string) (library.QueuePage, error) {

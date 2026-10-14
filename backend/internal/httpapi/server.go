@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -39,8 +40,9 @@ type Deps struct {
 	Search         SearchService
 	Attachments    AttachmentService
 	Library        LibraryService
-	AllowedOrigins []string // источники для CORS; пусто: CORS выключен
-	AuthRateLimit  int      // попыток входа, регистрации и обновления токена с одного адреса в минуту; 0: без лимита
+	AllowedOrigins []string     // источники для CORS; пусто: CORS выключен
+	AuthRateLimit  int          // попыток входа, регистрации и обновления токена с одного адреса в минуту; 0: без лимита
+	TrustedProxies []*net.IPNet // от этих адресов принимается X-Forwarded-For для определения клиента; пусто: не принимается
 	JWTSecret      []byte
 	CookieSecure   bool
 }
@@ -67,7 +69,7 @@ func NewHandler(deps Deps) http.Handler {
 	r.Use(accessLog)
 	r.Use(recoverer)
 	r.Use(securityHeaders)
-	r.Use(limitAuthAttempts(deps.AuthRateLimit))
+	r.Use(limitAuthAttempts(deps.AuthRateLimit, deps.TrustedProxies))
 	r.Use(corsMiddleware(deps.AllowedOrigins))
 	r.Use(authMiddleware(deps.JWTSecret))
 

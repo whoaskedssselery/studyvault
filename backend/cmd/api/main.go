@@ -20,6 +20,7 @@ import (
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/httpapi"
 	"github.com/whoaskedssselery/studyvault/backend/internal/library"
+	"github.com/whoaskedssselery/studyvault/backend/internal/mail"
 	"github.com/whoaskedssselery/studyvault/backend/internal/note"
 	"github.com/whoaskedssselery/studyvault/backend/internal/search"
 	"github.com/whoaskedssselery/studyvault/backend/internal/storage"
@@ -70,7 +71,19 @@ func run() error {
 	libOpts := []library.Option{library.WithTx(func(ctx context.Context, fn func(library.Store) error) error {
 		return db.InTx(ctx, pool, func(q *db.Queries) error { return fn(q) })
 	})}
-	authSvc := auth.NewService(queries, cfg.JWTSecret)
+	var authOpts []auth.Option
+	if cfg.SMTP.Host != "" {
+		mailer, err := mail.NewSMTP(mail.Config{
+			Host: cfg.SMTP.Host, Port: cfg.SMTP.Port, Username: cfg.SMTP.Username, Password: cfg.SMTP.Password, From: cfg.SMTP.From,
+		})
+		if err != nil {
+			return fmt.Errorf("mail: %w", err)
+		}
+		authOpts = append(authOpts, auth.WithMailer(mailer, cfg.SMTP.ResetURL))
+	} else {
+		slog.Warn("SMTP_HOST is not set: password reset by e-mail is disabled")
+	}
+	authSvc := auth.NewService(queries, cfg.JWTSecret, authOpts...)
 	deps := httpapi.Deps{
 		DB:             pool,
 		Auth:           authSvc,
@@ -81,6 +94,7 @@ func run() error {
 		CookieSecure:   cfg.CookieSecure,
 		AllowedOrigins: cfg.CORSOrigins,
 		AuthRateLimit:  cfg.AuthRateLimit,
+		TrustedProxies: cfg.TrustedProxies,
 	}
 
 	// Без Meilisearch API работает целиком, кроме /search (503).

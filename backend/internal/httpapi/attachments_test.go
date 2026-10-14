@@ -25,6 +25,9 @@ type fakeAttachments struct {
 	download attachment.Download
 	list     []db.Attachment
 	linked   []db.Attachment
+	keys     []string
+	keysErr  error
+	removed  []string
 
 	calls          int
 	gotUser, gotID uuid.UUID
@@ -365,4 +368,14 @@ func (f *fakeAttachments) Link(_ context.Context, row db.Attachment) (attachment
 	f.calls++
 	f.linked = append(f.linked, row)
 	return attachment.Download{Attachment: row, URL: "https://s3.test/get/" + row.ObjectKey}, f.err
+}
+
+func (f *fakeAttachments) UserObjectKeys(_ context.Context, uid uuid.UUID) ([]string, error) {
+	f.calls++
+	f.gotUser = uid
+	return f.keys, f.keysErr
+}
+
+func (f *fakeAttachments) RemoveObjects(_ context.Context, keys []string) {
+	f.removed = append(f.removed, keys...)
 }

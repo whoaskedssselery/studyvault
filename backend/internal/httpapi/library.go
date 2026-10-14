@@ -50,6 +50,11 @@ type LibraryService interface {
 	Submit(ctx context.Context, uid, id uuid.UUID) (db.Note, error)
 	Decide(ctx context.Context, moderatorID, id uuid.UUID, decision, reason string) (db.Note, error)
 	Queue(ctx context.Context, moderatorID uuid.UUID, limit int, cursor string) (library.QueuePage, error)
+	Withdraw(ctx context.Context, uid, id uuid.UUID) (db.Note, error)
+	Unpublish(ctx context.Context, moderatorID, id uuid.UUID, reason string) (db.Note, error)
+	EditComment(ctx context.Context, uid, id uuid.UUID, body string) (library.Comment, error)
+	Ranking(ctx context.Context, limit int) ([]library.RankedAuthor, error)
+	AuthorProfile(ctx context.Context, id uuid.UUID) (library.AuthorStats, error)
 }
 
 // viewer возвращает id зрителя или nil для гостя. Токен, если он есть, проверил authMiddleware.
@@ -97,7 +102,15 @@ func trimInvalid(err, sentinel error) string {
 // ---------------------------------------------------------------------------
 
 func (a *api) ListLibrary(w http.ResponseWriter, r *http.Request, params ListLibraryParams) {
-	f := library.ListFilter{SubjectID: params.LibrarySubjectId}
+	f := library.ListFilter{SubjectID: params.LibrarySubjectId, AuthorID: params.AuthorId}
+	if params.Tag != nil {
+		tag := strings.TrimSpace(*params.Tag)
+		if n := utf8.RuneCountInString(tag); n < 1 || n > maxTagNameLen {
+			badRequest(w, "tag must be 1 to 50 characters")
+			return
+		}
+		f.Tag = &tag
+	}
 	if params.Q != nil {
 		q := strings.TrimSpace(*params.Q)
 		if n := utf8.RuneCountInString(q); n < 1 || n > maxQueryLen {
@@ -541,7 +554,7 @@ func toLibrarySubject(s library.Subject) LibrarySubject {
 }
 
 func toComment(c library.Comment) Comment {
-	return Comment{Id: c.ID, Body: c.Body, Author: toAuthor(c.Author), CreatedAt: c.CreatedAt}
+	return Comment{Id: c.ID, Body: c.Body, Author: toAuthor(c.Author), CreatedAt: c.CreatedAt, EditedAt: nullableTime(c.EditedAt)}
 }
 
 func toLibraryItem(it library.Item) LibraryItem {
@@ -568,6 +581,7 @@ func toLibraryItem(it library.Item) LibraryItem {
 		PublishedAt:    published,
 		MyRating:       nullableInt(it.MyRating),
 		Bookmarked:     it.Bookmarked,
+		Tags:           nonNil(it.Tags),
 		Snippet:        snippet,
 	}
 }
@@ -616,4 +630,108 @@ func toMaterial(m library.Material) (Material, error) {
 		CreatedAt:       m.CreatedAt,
 		UpdatedAt:       m.UpdatedAt,
 	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Отзыв, снятие с публикации, правка комментария, авторы
+// ---------------------------------------------------------------------------
+
+func (a *api) WithdrawNote(w http.ResponseWriter, r *http.Request, id Id) {
+	uid, ok := currentUser(w, r)
+	if !ok {
+		return
+	}
+	if _, err := a.Library.Withdraw(r.Context(), uid, id); err != nil {
+		libraryError(w, r, err, "withdraw note")
+		return
+	}
+	found, err := a.Notes.Get(r.Context(), uid, id)
+	a.respondNote(w, r, http.StatusOK, found, err, "withdraw note")
+}
+
+func (a *api) UnpublishMaterial(w http.ResponseWriter, r *http.Request, id Id) {
+	uid, ok := currentUser(w, r)
+	if !ok {
+		return
+	}
+	var req UnpublishInput
+	if err := decodeJSON(w, r, &req); err != nil {
+		badRequest(w, "invalid request body: "+err.Error())
+		return
+	}
+	down, err := a.Library.Unpublish(r.Context(), uid, id, req.Reason)
+	if err != nil {
+		libraryError(w, r, err, "unpublish material")
+		return
+	}
+	writeJSON(w, http.StatusOK, DecisionResult{Id: down.ID, Status: MaterialStatus(down.Status)})
+}
+
+func (a *api) UpdateComment(w http.ResponseWriter, r *http.Request, id Id) {
+	uid, ok := currentUser(w, r)
+	if !ok {
+		return
+	}
+	var req CommentPatch
+	if err := decodeJSON(w, r, &req); err != nil {
+		badRequest(w, "invalid request body: "+err.Error())
+		return
+	}
+	c, err := a.Library.EditComment(r.Context(), uid, id, req.Body)
+	if err != nil {
+		libraryError(w, r, err, "update comment")
+		return
+	}
+	writeJSON(w, http.StatusOK, toComment(c))
+}
+
+func (a *api) ListAuthorRanking(w http.ResponseWriter, r *http.Request, params ListAuthorRankingParams) {
+	limit := 0
+	if params.Limit != nil {
+		if *params.Limit < minPageLimit || *params.Limit > maxPageLimit {
+			badRequest(w, "limit must be between 1 and 100")
+			return
+		}
+		limit = *params.Limit
+	}
+	ranked, err := a.Library.Ranking(r.Context(), limit)
+	if err != nil {
+		libraryError(w, r, err, "list author ranking")
+		return
+	}
+	items := make([]RankedAuthor, len(ranked))
+	for i, ra := range ranked {
+		s := toAuthorStats(ra.AuthorStats)
+		items[i] = RankedAuthor{
+			Author: s.Author, MaterialsCount: s.MaterialsCount, Rating: s.Rating, RatingsCount: s.RatingsCount, Views: s.Views, Rank: ra.Rank,
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (a *api) GetAuthor(w http.ResponseWriter, r *http.Request, id Id) {
+	st, err := a.Library.AuthorProfile(r.Context(), id)
+	if err != nil {
+		libraryError(w, r, err, "get author")
+		return
+	}
+	writeJSON(w, http.StatusOK, toAuthorStats(st))
+}
+
+func toAuthorStats(st library.AuthorStats) AuthorStats {
+	return AuthorStats{
+		Author:         toAuthor(st.Author),
+		MaterialsCount: st.MaterialsCount,
+		RatingsCount:   st.RatingsCount,
+		Rating:         toRating(st.RatingAverage, st.RatingsCount),
+		Views:          st.Views,
+	}
+}
+
+// nonNil заменяет nil-срез пустым: в JSON должно быть [], а не null.
+func nonNil[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
 }

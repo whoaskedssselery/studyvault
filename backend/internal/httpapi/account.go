@@ -17,6 +17,9 @@ type AccountService interface {
 	GetUser(ctx context.Context, id uuid.UUID) (db.User, error)
 	UpdateProfile(ctx context.Context, id uuid.UUID, p auth.ProfilePatch) (db.User, error)
 	ChangePassword(ctx context.Context, id uuid.UUID, current, next, userAgent string) (auth.Tokens, error)
+	RequestPasswordReset(ctx context.Context, email string) error
+	ConfirmPasswordReset(ctx context.Context, rawToken, newPassword string) error
+	DeleteAccount(ctx context.Context, id uuid.UUID, password string) error
 }
 
 func (a *api) GetMe(w http.ResponseWriter, r *http.Request) {
