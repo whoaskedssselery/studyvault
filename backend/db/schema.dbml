@@ -135,6 +135,7 @@ Table comments {
   user_id uuid [not null, ref: > users.id]
   body text [not null, note: '1..2000 символов']
   created_at timestamptz [not null, default: `now()`]
+  edited_at timestamptz [note: 'когда автор последний раз правил комментарий']
   deleted_at timestamptz [note: 'soft delete']
 
   indexes {
@@ -157,8 +158,8 @@ Table note_ratings {
 Table moderation_decisions {
   id uuid [pk, default: `gen_random_uuid()`]
   note_id uuid [not null, ref: > notes.id]
-  moderator_id uuid [not null, ref: > users.id]
-  decision text [not null, note: 'approved | rejected']
+  moderator_id uuid [ref: > users.id, note: 'null, если аккаунт модератора удалён: решение остаётся в истории']
+  decision text [not null, note: 'approved | rejected | unpublished (снят с публикации)']
   reason text [note: 'обязательна при rejected']
   created_at timestamptz [not null, default: `now()`]
 
@@ -175,5 +176,19 @@ Table note_bookmarks {
   indexes {
     (note_id, user_id) [pk]
     (user_id, created_at)
+  }
+}
+
+Table password_reset_tokens {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, ref: > users.id]
+  token_hash text [not null, unique, note: 'sha256 токена из письма, сам токен не хранится']
+  expires_at timestamptz [not null, note: 'час с момента запроса']
+  used_at timestamptz [note: 'ссылка срабатывает один раз']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    user_id
+    expires_at
   }
 }
