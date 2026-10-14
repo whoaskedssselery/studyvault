@@ -264,7 +264,27 @@ API проверено через Swagger UI (`/docs`) на запущенном
 
 ![reject needs reason](docs/screenshots/21-reject-needs-reason-400.jpg)
 
-**21. Автоматические проверки.** Линтеры, тесты на настоящих Postgres, Meilisearch и S3, проверка покрытия и сквозной прогон всего стека в Docker проходят в GitHub Actions.
+**21. Рейтинг авторов.** `GET /ranking/authors` без токена: места по среднему арифметическому всех оценок опубликованных материалов автора.
+
+![ranking](docs/screenshots/22-author-ranking-200.jpg)
+
+**22. Фильтр по тегу.** `GET /library?tag=шпаргалка&sort=views`: у карточек есть теги, лента отфильтрована и отсортирована по просмотрам.
+
+![tag filter](docs/screenshots/23-library-tag-filter-200.jpg)
+
+**23. Снятие с публикации.** `POST /moderation/{id}/unpublish` переводит опубликованный материал в `rejected`; причина обязательна.
+
+![unpublish](docs/screenshots/24-unpublish-200.jpg)
+
+**24. Автор видит причину.** В своей заметке автор видит статус `rejected` и `rejection_reason`, исправляет и отправляет заново.
+
+![reason](docs/screenshots/25-author-sees-takedown-reason-200.jpg)
+
+**25. Письмо для сброса пароля.** Настоящее письмо по SMTP (локально его ловит Mailpit): русский текст и одноразовая ссылка на час.
+
+![reset mail](docs/screenshots/26-password-reset-mail.jpg)
+
+**26. Автоматические проверки.** Линтеры, тесты на настоящих Postgres, Meilisearch и S3, проверка покрытия и сквозной прогон всего стека в Docker проходят в GitHub Actions.
 
 ![CI](docs/screenshots/13-ci-green.jpg)
 
