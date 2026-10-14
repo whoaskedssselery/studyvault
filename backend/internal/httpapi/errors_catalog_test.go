@@ -22,7 +22,8 @@ func TestErrorCatalog_MatchesTheCodesTheServerCanReturn(t *testing.T) {
 		t.Fatal(err)
 	}
 	documented := map[string]bool{}
-	for _, m := range regexp.MustCompile(`(?m)^## ([a-z_]+)$`).FindAllStringSubmatch(string(doc), -1) {
+	text := strings.ReplaceAll(string(doc), "\r\n", "\n") // на Windows git кладёт CRLF
+	for _, m := range regexp.MustCompile(`(?m)^## ([a-z_]+)$`).FindAllStringSubmatch(text, -1) {
 		documented[m[1]] = true
 	}
 
