@@ -285,8 +285,6 @@ function App() {
     ["/my", "Мои материалы", FileText],
     ["/ranking", "Рейтинг студентов", Trophy],
     ["/moderation", "Модерация", ShieldCheck],
-    ["/api-status", "Проверка API", Code2],
-    ["/workspace", "Кабинет API", UserRound],
   ];
   const currentTitle =
     navigation.find(([path]) => path === pathname)?.[1] ||
@@ -294,7 +292,11 @@ function App() {
       ? "Новый материал"
       : pathname === "/profile"
         ? "Мой профиль"
-        : "Библиотека");
+        : pathname === "/api-status"
+          ? "Проверка API"
+          : pathname === "/workspace"
+            ? "Кабинет API"
+            : "Библиотека");
   return (
     <AppContext.Provider value={state}>
       <div className="app-shell">
@@ -380,10 +382,6 @@ function App() {
             <button className="help-button" onClick={() => setDialog("help")}>
               <HelpCircle size={17} />О проекте <span>↗</span>
             </button>
-            <div className="demo-badge">
-              <span />
-              Локальная демоверсия
-            </div>
           </div>
         </aside>
         <div className="workspace">

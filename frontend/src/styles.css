@@ -325,20 +325,6 @@ kbd {
 .help-button span {
   margin-left: auto;
 }
-.demo-badge {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font-size: 9px;
-  color: #a9a7b2;
-  padding: 10px 8px 0;
-}
-.demo-badge > span {
-  width: 5px;
-  height: 5px;
-  border-radius: 100%;
-  background: #91b7a5;
-}
 .workspace {
   margin-left: 234px;
   width: calc(100% - 234px);
