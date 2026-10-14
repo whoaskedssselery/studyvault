@@ -20,6 +20,12 @@ export default defineConfig({
   webServer: [
     {
       command:
+        "node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 5175 --strictPort",
+      url: "http://127.0.0.1:5175",
+      reuseExistingServer: true,
+    },
+    {
+      command:
         "node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5173 --strictPort",
       url: "http://127.0.0.1:5173",
       reuseExistingServer: true,

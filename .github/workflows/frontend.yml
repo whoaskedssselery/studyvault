@@ -2,9 +2,9 @@ name: frontend
 on:
   push:
     branches: [main]
-    paths: ['frontend/**', 'deliverables/frontend/**', 'backend/api/openapi.yaml', '.github/workflows/frontend.yml']
+    paths: ['frontend/**', 'deliverables/frontend/**', 'backend/**', 'docker-compose.yml', '.env.example', '.github/workflows/frontend.yml']
   pull_request:
-    paths: ['frontend/**', 'deliverables/frontend/**', 'backend/api/openapi.yaml', '.github/workflows/frontend.yml']
+    paths: ['frontend/**', 'deliverables/frontend/**', 'backend/**', 'docker-compose.yml', '.env.example', '.github/workflows/frontend.yml']
 permissions:
   contents: read
 jobs:
@@ -34,3 +34,43 @@ jobs:
             frontend/test-results/
             docs/assignment-2/
             deliverables/frontend/
+  full-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      PASSWORD_RESET_URL: http://127.0.0.1:5175/reset-password
+      EMAIL_VERIFY_URL: http://127.0.0.1:5175/verify-email
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Start the real API, database, search, files and local mailbox
+        working-directory: .
+        run: |
+          cp .env.example .env
+          docker compose --profile app up -d --build
+          curl --retry 30 --retry-all-errors --retry-delay 2 --fail --silent http://127.0.0.1:8080/v1/health
+          docker compose --profile app run --rm --entrypoint /seed api
+      - run: npm run test:integration
+      - name: API logs on failure
+        if: failure()
+        working-directory: .
+        run: docker compose --profile app logs --tail 100 api migrate
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-full-stack-results
+          path: frontend/test-results/
+      - name: Stop the test stack
+        if: always()
+        working-directory: .
+        run: docker compose --profile app down -v
