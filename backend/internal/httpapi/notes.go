@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/oapi-codegen/nullable"
 
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 	"github.com/whoaskedssselery/studyvault/backend/internal/note"
 )
 
@@ -184,6 +185,8 @@ func (a *api) respondNote(w http.ResponseWriter, r *http.Request, status int, n 
 		badRequest(w, "subject does not exist")
 	case errors.Is(err, note.ErrInvalidLibrarySubject):
 		badRequest(w, "library subject does not exist")
+	case errors.Is(err, limits.ErrReached):
+		limitReached(w, err)
 	case err != nil:
 		slog.ErrorContext(r.Context(), op, "err", err)
 		internalError(w)

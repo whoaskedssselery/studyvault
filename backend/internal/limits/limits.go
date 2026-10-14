@@ -1,5 +1,5 @@
 // Package limits собирает квоты на пользователя в одном месте. Без них один аккаунт мог бы бесконечно плодить
-// предметы, теги и файлы, а списки, которые отдаются целиком, росли бы без предела.
+// заметки, предметы, теги и файлы, а списки, которые отдаются целиком, росли бы без предела.
 package limits
 
 import (
@@ -10,7 +10,8 @@ import (
 const (
 	MaxSubjectsPerUser        = 200
 	MaxTagsPerUser            = 500
-	MaxAttachmentsPerNote     = 3 // по ТЗ
+	MaxNotesPerUser           = 5000 // заметок, не считая удалённых
+	MaxAttachmentsPerNote     = 3    // по ТЗ
 	MaxAttachmentsPerUser     = 5000
 	MaxAttachmentBytesPerUser = 1 << 30 // 1 ГиБ на все файлы пользователя
 )

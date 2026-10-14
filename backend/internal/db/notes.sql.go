@@ -13,6 +13,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countUserNotes = `-- name: CountUserNotes :one
+SELECT count(*) FROM notes WHERE user_id = $1 AND deleted_at IS NULL
+`
+
+// Сколько у пользователя заметок, не считая удалённых: по этому числу работает квота.
+func (q *Queries) CountUserNotes(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countUserNotes, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createNote = `-- name: CreateNote :one
 INSERT INTO notes (user_id, subject_id, title, content, content_text, is_pinned, kind, summary, semester, library_subject_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)

@@ -26,6 +26,8 @@ type Querier interface {
 	CountNoteAttachments(ctx context.Context, arg CountNoteAttachmentsParams) (int64, error)
 	CountSubjects(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountTagsByUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Сколько у пользователя заметок, не считая удалённых: по этому числу работает квота.
+	CountUserNotes(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountUserTags(ctx context.Context, arg CountUserTagsParams) (int64, error)
 	CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (Attachment, error)
 	// ---------------------------------------------------------------------------

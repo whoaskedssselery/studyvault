@@ -21,8 +21,8 @@ func TestReached_WrapsTheSentinelAndSaysWhatWasExceeded(t *testing.T) {
 
 // Числа здесь закреплены намеренно: они же написаны в контракте, README и docs/errors.md.
 func TestQuotas_MatchTheDocumentation(t *testing.T) {
-	got := [...]int64{limits.MaxSubjectsPerUser, limits.MaxTagsPerUser, limits.MaxAttachmentsPerNote, limits.MaxAttachmentsPerUser, limits.MaxAttachmentBytesPerUser}
-	want := [...]int64{200, 500, 3, 5000, 1 << 30}
+	got := [...]int64{limits.MaxSubjectsPerUser, limits.MaxTagsPerUser, limits.MaxNotesPerUser, limits.MaxAttachmentsPerNote, limits.MaxAttachmentsPerUser, limits.MaxAttachmentBytesPerUser}
+	want := [...]int64{200, 500, 5000, 3, 5000, 1 << 30}
 	if got != want {
 		t.Errorf("quotas = %v, documented %v", got, want)
 	}
