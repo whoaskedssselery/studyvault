@@ -51,3 +51,27 @@ DELETE FROM password_reset_tokens WHERE expires_at <= $1 OR used_at IS NOT NULL;
 -- иначе чужую почту можно заваливать письмами с разных адресов, обходя лимит по адресу клиента.
 -- name: LatestPasswordResetExpiry :one
 SELECT COALESCE(max(expires_at), 'epoch'::timestamptz)::timestamptz AS expires_at FROM password_reset_tokens WHERE user_id = $1 AND used_at IS NULL;
+
+-- Подтверждение почты. Повторное подтверждение ничего не меняет и не сдвигает время.
+-- name: VerifyUserEmail :execrows
+UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()), updated_at = now() WHERE id = $1;
+
+-- name: CreateEmailVerificationToken :exec
+INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3);
+
+-- Новая ссылка гасит прежние: действует только последняя.
+-- name: DeleteUserEmailVerificationTokens :exec
+DELETE FROM email_verification_tokens WHERE user_id = $1;
+
+-- Токен «забирается» одним запросом, поэтому ссылка срабатывает один раз даже при одновременных запросах.
+-- name: ClaimEmailVerificationToken :one
+UPDATE email_verification_tokens SET used_at = now()
+WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $2
+RETURNING user_id;
+
+-- name: DeleteExpiredEmailVerificationTokens :execrows
+DELETE FROM email_verification_tokens WHERE expires_at <= $1 OR used_at IS NOT NULL;
+
+-- Когда истекает самая свежая неиспользованная ссылка (1970 год, если таких нет): по ней письма ограничиваются раз в минуту на аккаунт.
+-- name: LatestEmailVerificationExpiry :one
+SELECT COALESCE(max(expires_at), 'epoch'::timestamptz)::timestamptz AS expires_at FROM email_verification_tokens WHERE user_id = $1 AND used_at IS NULL;

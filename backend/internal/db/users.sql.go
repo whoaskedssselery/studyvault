@@ -13,6 +13,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimEmailVerificationToken = `-- name: ClaimEmailVerificationToken :one
+UPDATE email_verification_tokens SET used_at = now()
+WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $2
+RETURNING user_id
+`
+
+type ClaimEmailVerificationTokenParams struct {
+	TokenHash string    `json:"token_hash"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// Токен «забирается» одним запросом, поэтому ссылка срабатывает один раз даже при одновременных запросах.
+func (q *Queries) ClaimEmailVerificationToken(ctx context.Context, arg ClaimEmailVerificationTokenParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, claimEmailVerificationToken, arg.TokenHash, arg.ExpiresAt)
+	var user_id uuid.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const claimPasswordResetToken = `-- name: ClaimPasswordResetToken :one
 UPDATE password_reset_tokens SET used_at = now()
 WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $2
@@ -30,6 +49,21 @@ func (q *Queries) ClaimPasswordResetToken(ctx context.Context, arg ClaimPassword
 	var user_id uuid.UUID
 	err := row.Scan(&user_id)
 	return user_id, err
+}
+
+const createEmailVerificationToken = `-- name: CreateEmailVerificationToken :exec
+INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)
+`
+
+type CreateEmailVerificationTokenParams struct {
+	UserID    uuid.UUID `json:"user_id"`
+	TokenHash string    `json:"token_hash"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+func (q *Queries) CreateEmailVerificationToken(ctx context.Context, arg CreateEmailVerificationTokenParams) error {
+	_, err := q.db.Exec(ctx, createEmailVerificationToken, arg.UserID, arg.TokenHash, arg.ExpiresAt)
+	return err
 }
 
 const createPasswordResetToken = `-- name: CreatePasswordResetToken :exec
@@ -51,7 +85,7 @@ func (q *Queries) CreatePasswordResetToken(ctx context.Context, arg CreatePasswo
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, display_name)
 VALUES ($1, $2, $3)
-RETURNING id, email, password_hash, display_name, created_at, updated_at, role, faculty
+RETURNING id, email, password_hash, display_name, created_at, updated_at, role, faculty, email_verified_at
 `
 
 type CreateUserParams struct {
@@ -72,8 +106,21 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.Role,
 		&i.Faculty,
+		&i.EmailVerifiedAt,
 	)
 	return i, err
+}
+
+const deleteExpiredEmailVerificationTokens = `-- name: DeleteExpiredEmailVerificationTokens :execrows
+DELETE FROM email_verification_tokens WHERE expires_at <= $1 OR used_at IS NOT NULL
+`
+
+func (q *Queries) DeleteExpiredEmailVerificationTokens(ctx context.Context, expiresAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredEmailVerificationTokens, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteExpiredPasswordResetTokens = `-- name: DeleteExpiredPasswordResetTokens :execrows
@@ -102,6 +149,16 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
+const deleteUserEmailVerificationTokens = `-- name: DeleteUserEmailVerificationTokens :exec
+DELETE FROM email_verification_tokens WHERE user_id = $1
+`
+
+// Новая ссылка гасит прежние: действует только последняя.
+func (q *Queries) DeleteUserEmailVerificationTokens(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserEmailVerificationTokens, userID)
+	return err
+}
+
 const deleteUserPasswordResetTokens = `-- name: DeleteUserPasswordResetTokens :exec
 DELETE FROM password_reset_tokens WHERE user_id = $1
 `
@@ -113,7 +170,7 @@ func (q *Queries) DeleteUserPasswordResetTokens(ctx context.Context, userID uuid
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, display_name, created_at, updated_at, role, faculty FROM users WHERE lower(email) = lower($1)
+SELECT id, email, password_hash, display_name, created_at, updated_at, role, faculty, email_verified_at FROM users WHERE lower(email) = lower($1)
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error) {
@@ -128,12 +185,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error
 		&i.UpdatedAt,
 		&i.Role,
 		&i.Faculty,
+		&i.EmailVerifiedAt,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, display_name, created_at, updated_at, role, faculty FROM users WHERE id = $1
+SELECT id, email, password_hash, display_name, created_at, updated_at, role, faculty, email_verified_at FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -148,8 +206,21 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.UpdatedAt,
 		&i.Role,
 		&i.Faculty,
+		&i.EmailVerifiedAt,
 	)
 	return i, err
+}
+
+const latestEmailVerificationExpiry = `-- name: LatestEmailVerificationExpiry :one
+SELECT COALESCE(max(expires_at), 'epoch'::timestamptz)::timestamptz AS expires_at FROM email_verification_tokens WHERE user_id = $1 AND used_at IS NULL
+`
+
+// Когда истекает самая свежая неиспользованная ссылка (1970 год, если таких нет): по ней письма ограничиваются раз в минуту на аккаунт.
+func (q *Queries) LatestEmailVerificationExpiry(ctx context.Context, userID uuid.UUID) (time.Time, error) {
+	row := q.db.QueryRow(ctx, latestEmailVerificationExpiry, userID)
+	var expires_at time.Time
+	err := row.Scan(&expires_at)
+	return expires_at, err
 }
 
 const latestPasswordResetExpiry = `-- name: LatestPasswordResetExpiry :one
@@ -206,7 +277,7 @@ UPDATE users SET
     faculty      = CASE WHEN $2::boolean THEN $3::text ELSE faculty END,
     updated_at   = now()
 WHERE id = $4
-RETURNING id, email, password_hash, display_name, created_at, updated_at, role, faculty
+RETURNING id, email, password_hash, display_name, created_at, updated_at, role, faculty, email_verified_at
 `
 
 type UpdateUserProfileParams struct {
@@ -234,6 +305,20 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		&i.UpdatedAt,
 		&i.Role,
 		&i.Faculty,
+		&i.EmailVerifiedAt,
 	)
 	return i, err
+}
+
+const verifyUserEmail = `-- name: VerifyUserEmail :execrows
+UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()), updated_at = now() WHERE id = $1
+`
+
+// Подтверждение почты. Повторное подтверждение ничего не меняет и не сдвигает время.
+func (q *Queries) VerifyUserEmail(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, verifyUserEmail, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

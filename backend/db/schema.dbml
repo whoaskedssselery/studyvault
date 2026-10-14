@@ -5,6 +5,7 @@ Table users {
   display_name text [not null]
   role text [not null, default: 'student', note: 'student | moderator; назначает только сервер (cmd/promote)']
   faculty text [note: 'необязательно, до 100 символов']
+  email_verified_at timestamptz [note: 'null = почта не подтверждена; до подтверждения нельзя публиковать, комментировать и оценивать']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 }
@@ -176,6 +177,20 @@ Table note_bookmarks {
   indexes {
     (note_id, user_id) [pk]
     (user_id, created_at)
+  }
+}
+
+Table email_verification_tokens {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, ref: > users.id]
+  token_hash text [not null, unique, note: 'sha256 токена из письма, сам токен не хранится']
+  expires_at timestamptz [not null, note: '24 часа с момента отправки']
+  used_at timestamptz [note: 'ссылка срабатывает один раз']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    user_id
+    expires_at
   }
 }
 

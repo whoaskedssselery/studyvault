@@ -32,6 +32,15 @@ type Comment struct {
 	EditedAt  *time.Time `json:"edited_at"`
 }
 
+type EmailVerificationToken struct {
+	ID        uuid.UUID  `json:"id"`
+	UserID    uuid.UUID  `json:"user_id"`
+	TokenHash string     `json:"token_hash"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	UsedAt    *time.Time `json:"used_at"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
 type LibraryItem struct {
 	ID               uuid.UUID     `json:"id"`
 	UserID           uuid.UUID     `json:"user_id"`
@@ -155,12 +164,13 @@ type Tag struct {
 }
 
 type User struct {
-	ID           uuid.UUID   `json:"id"`
-	Email        string      `json:"email"`
-	PasswordHash string      `json:"password_hash"`
-	DisplayName  string      `json:"display_name"`
-	CreatedAt    time.Time   `json:"created_at"`
-	UpdatedAt    time.Time   `json:"updated_at"`
-	Role         string      `json:"role"`
-	Faculty      pgtype.Text `json:"faculty"`
+	ID              uuid.UUID   `json:"id"`
+	Email           string      `json:"email"`
+	PasswordHash    string      `json:"password_hash"`
+	DisplayName     string      `json:"display_name"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+	Role            string      `json:"role"`
+	Faculty         pgtype.Text `json:"faculty"`
+	EmailVerifiedAt *time.Time  `json:"email_verified_at"`
 }

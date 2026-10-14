@@ -19,6 +19,8 @@ type Querier interface {
 	AddBookmark(ctx context.Context, arg AddBookmarkParams) error
 	// Решение принимается только по материалу, который сейчас на проверке (защита от гонки двух модераторов).
 	ApproveNote(ctx context.Context, id uuid.UUID) (Note, error)
+	// Токен «забирается» одним запросом, поэтому ссылка срабатывает один раз даже при одновременных запросах.
+	ClaimEmailVerificationToken(ctx context.Context, arg ClaimEmailVerificationTokenParams) (uuid.UUID, error)
 	// Токен «забирается» одним запросом: из двух одновременных подтверждений выиграет одно.
 	ClaimPasswordResetToken(ctx context.Context, arg ClaimPasswordResetTokenParams) (uuid.UUID, error)
 	CountNoteAttachments(ctx context.Context, arg CountNoteAttachmentsParams) (int64, error)
@@ -30,6 +32,7 @@ type Querier interface {
 	// Комментарии
 	// ---------------------------------------------------------------------------
 	CreateComment(ctx context.Context, arg CreateCommentParams) (Comment, error)
+	CreateEmailVerificationToken(ctx context.Context, arg CreateEmailVerificationTokenParams) error
 	CreateLibrarySubject(ctx context.Context, arg CreateLibrarySubjectParams) (LibrarySubject, error)
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
 	// Сброс пароля по почте.
@@ -40,6 +43,7 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	// Возвращает удалённую строку: из неё берётся ключ объекта, который надо убрать из хранилища.
 	DeleteAttachment(ctx context.Context, arg DeleteAttachmentParams) (Attachment, error)
+	DeleteExpiredEmailVerificationTokens(ctx context.Context, expiresAt time.Time) (int64, error)
 	DeleteExpiredPasswordResetTokens(ctx context.Context, expiresAt time.Time) (int64, error)
 	// Удаляются только истёкшие токены. Отозванные, но ещё не истёкшие должны остаться:
 	// по ним распознаётся повторное предъявление использованного токена.
@@ -51,6 +55,8 @@ type Querier interface {
 	// Удаление аккаунта: каскадом уходят заметки, предметы, теги, файлы (записи), комментарии, оценки, избранное и сессии.
 	// Решения модератора остаются, но без указания, кто их принял.
 	DeleteUser(ctx context.Context, id uuid.UUID) (int64, error)
+	// Новая ссылка гасит прежние: действует только последняя.
+	DeleteUserEmailVerificationTokens(ctx context.Context, userID uuid.UUID) error
 	// Прежние неиспользованные ссылки пользователя гасятся, когда он просит новую: действует только последняя.
 	DeleteUserPasswordResetTokens(ctx context.Context, userID uuid.UUID) error
 	// Смена пароля стирает сессии, а не отзывает их: устаревшее устройство, предъявив старый токен, получит
@@ -86,6 +92,8 @@ type Querier interface {
 	// Просмотр засчитывается только у опубликованных материалов.
 	IncrementViews(ctx context.Context, id uuid.UUID) error
 	InsertModerationDecision(ctx context.Context, arg InsertModerationDecisionParams) error
+	// Когда истекает самая свежая неиспользованная ссылка (1970 год, если таких нет): по ней письма ограничиваются раз в минуту на аккаунт.
+	LatestEmailVerificationExpiry(ctx context.Context, userID uuid.UUID) (time.Time, error)
 	// Когда истекает самая свежая неиспользованная ссылка пользователя (1970 год, если таких нет). Нужно, чтобы не слать письма чаще, чем раз в минуту:
 	// иначе чужую почту можно заваливать письмами с разных адресов, обходя лимит по адресу клиента.
 	LatestPasswordResetExpiry(ctx context.Context, userID uuid.UUID) (time.Time, error)
@@ -197,6 +205,8 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	UpsertRating(ctx context.Context, arg UpsertRatingParams) error
 	UserAttachmentUsage(ctx context.Context, userID uuid.UUID) (UserAttachmentUsageRow, error)
+	// Подтверждение почты. Повторное подтверждение ничего не меняет и не сдвигает время.
+	VerifyUserEmail(ctx context.Context, id uuid.UUID) (int64, error)
 	// ---------------------------------------------------------------------------
 	// Отзыв с проверки и снятие с публикации
 	// ---------------------------------------------------------------------------
