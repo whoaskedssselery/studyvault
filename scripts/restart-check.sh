@@ -22,6 +22,16 @@ pw="${SEED_PASSWORD:-demo-password-123}"
 author="restart-$(date +%s)-$RANDOM@example.com"
 req POST /auth/register "" "{\"email\":\"$author\",\"password\":\"$pw-author\",\"display_name\":\"Restart Check\"}"; [ "$code" = 201 ] || fail "register: $code"
 at="$(jget access_token)"
+# Публиковать можно только с подтверждённой почтой: ссылку берём из письма в Mailpit (при настроенной почте).
+for _ in $(seq 1 20); do
+  curl -sS -G -o "$tmp/mail" --data-urlencode "query=to:$author" "${MAILPIT_URL:-http://localhost:8025}/api/v1/search" || true
+  mid="$(perl -MJSON::PP -e 'local $/; my $d = eval { decode_json(<STDIN>) } or exit; print $d->{messages}[0]{ID} // ""' < "$tmp/mail")"
+  [ -n "$mid" ] && break; sleep 0.5
+done
+[ -n "$mid" ] || fail "no verification mail in Mailpit"
+curl -sS -o "$tmp/mail" "${MAILPIT_URL:-http://localhost:8025}/api/v1/message/$mid"
+vt="$(perl -MJSON::PP -e 'local $/; my $d = decode_json(<STDIN>); print $1 if $d->{Text} =~ m{verify-email\?token=([A-Za-z0-9_-]+)}' < "$tmp/mail")"
+req POST /auth/email-verification/confirm "" "{\"token\":\"$vt\"}"; [ "$code" = 204 ] || fail "verify e-mail: $code"
 req POST /auth/login "" "{\"email\":\"moderator@example.com\",\"password\":\"$pw\"}"; [ "$code" = 200 ] || fail "moderator login: $code (run the seed first)"
 mt="$(jget access_token)"
 req GET /library-subjects; subject="$(jget items.0.id)"

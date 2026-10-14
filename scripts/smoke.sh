@@ -28,6 +28,33 @@ jget() { perl -CO -MJSON::PP -e 'local $/; my $d = decode_json(<STDIN>); $d = re
 
 token=""
 
+# mail_token АДРЕС СТРАНИЦА: токен из ссылки на страницу фронтенда (verify-email, reset-password) в письме, пришедшем в
+# Mailpit на этот адрес. Письмо уходит в фоне, поэтому ждём до 10 секунд. Печатает токен или ничего.
+mailpit="${MAILPIT_URL:-http://localhost:8025}"
+mail_token() {
+  local to="$1" page="$2" id found=""
+  for _ in $(seq 1 20); do
+    curl -sS -G -o "$tmp/mail" --data-urlencode "query=to:$to" "$mailpit/api/v1/search" || true
+    for id in $(perl -MJSON::PP -e 'local $/; my $d = eval { decode_json(<STDIN>) } or exit; print "$_->{ID} " for @{$d->{messages} // []}' < "$tmp/mail"); do
+      curl -sS -o "$tmp/mail" "$mailpit/api/v1/message/$id"
+      found="$(perl -MJSON::PP -e 'local $/; my $d = decode_json(<STDIN>); print $1 if $d->{Text} =~ m{$ARGV[0]\?token=([A-Za-z0-9_-]+)}' "$page" < "$tmp/mail")"
+      [ -n "$found" ] && break 2
+    done
+    sleep 0.5
+  done
+  printf '%s' "$found"
+}
+# verify_email АДРЕС: открывает ссылку подтверждения из письма, как это сделает страница фронтенда (без токена доступа).
+verify_email() {
+  local saved="$token" link
+  link="$(mail_token "$1" verify-email)"
+  [ -n "$link" ] || fail "no verification link arrived in Mailpit ($mailpit) for $1"
+  token=""
+  call POST /auth/email-verification/confirm "{\"token\":\"$link\"}"; expect 204 "the verification link is opened"
+  token="$saved"
+  VERIFY_LINK="$link"
+}
+
 step "service is alive"
 call GET /health;                 expect 200 "GET /health"
 grep -q '"ok"' "$tmp/body" || fail "health body: $(cat "$tmp/body")"
@@ -53,6 +80,9 @@ expect 201 "POST /auth/register"
 token="$(jget access_token)"; [ -n "$token" ] || fail "no access_token in the response"
 call GET /me;                     expect 200 "GET /me"
 grep -q "$email" "$tmp/body" || fail "GET /me does not return the account: $(cat "$tmp/body")"
+[ "$(jget email_verified)" = "0" ] || fail "a new address must be unverified (is SMTP configured?): $(cat "$tmp/body")"
+call POST /me/email-verification;  expect 429 "a second verification mail within a minute is refused"
+grep -qi '^retry-after: ' "$tmp/headers" || fail "the refusal must carry Retry-After"
 
 step "subject, notes and a link between them"
 call POST /subjects '{"title":"Smoke subject"}';  expect 201 "POST /subjects"
@@ -104,6 +134,15 @@ material="$(jget id)"
 token=""
 call GET "/library/$material";    expect 404 "a draft is invisible to a guest"
 token="$author_token"
+call POST "/notes/$material/submit";   expect 403 "an unverified address cannot publish"
+grep -q '"code":"email_not_verified"' "$tmp/body" || fail "the refusal must say email_not_verified: $(cat "$tmp/body")"
+verify_email "$email"
+call GET /me;                      expect 200 "GET /me after the link"
+[ "$(jget email_verified)" = "1" ] || fail "the address must be verified now: $(cat "$tmp/body")"
+call POST /me/email-verification;  expect 204 "a verified address asks for nothing more"
+token=""
+call POST /auth/email-verification/confirm "{\"token\":\"$VERIFY_LINK\"}";  expect 401 "the link works once"
+token="$author_token"
 call POST "/notes/$material/submit";   expect 200 "POST /notes/{id}/submit"
 [ "$(jget status)" = "pending" ] || fail "the material must be pending: $(cat "$tmp/body")"
 
@@ -132,6 +171,11 @@ call POST /auth/register "{\"email\":\"$reader\",\"password\":\"$password\",\"di
 expect 201 "a second student registers"
 token="$(jget access_token)"
 reader_token="$token"
+call POST "/library/$material/comments" '{"body":"Thanks, this helped!"}';   expect 403 "an unverified reader cannot comment"
+call PUT "/library/$material/rating" '{"value":4}';                          expect 403 "an unverified reader cannot rate"
+call PUT "/library/$material/bookmark";                                      expect 204 "an unverified reader can still bookmark"
+call DELETE "/library/$material/bookmark";                                   expect 204 "and remove the bookmark"
+verify_email "$reader"
 call POST "/library/$material/comments" '{"body":"Thanks, this helped!"}';   expect 201 "POST comment"
 comment_id="$(jget id)"
 call POST "/library/$material/comments" '{"body":"   "}';                    expect 400 "an empty comment is refused"
@@ -221,23 +265,12 @@ call POST /auth/login "{\"email\":\"$email\",\"password\":\"smoke-password-2\"}"
 
 
 step "password reset by e-mail (the mail is read from Mailpit)"
-mailpit="${MAILPIT_URL:-http://localhost:8025}"
 forgetful="forgetful-$(date +%s)-$RANDOM@example.com"
 token=""
 call POST /auth/register "{\"email\":\"$forgetful\",\"password\":\"forgotten-pass-1\",\"display_name\":\"Forgetful\"}"; expect 201 "another student registers"
 call POST /auth/password-reset "{\"email\":\"nobody-$RANDOM@example.com\"}";  expect 204 "an unknown address gets the same answer"
 call POST /auth/password-reset "{\"email\":\"$forgetful\"}";                  expect 204 "a known address gets the same answer"
-reset_token=""
-for _ in $(seq 1 20); do   # письмо уходит в фоне
-  curl -sS -o "$tmp/body" "$mailpit/api/v1/search?query=to:$forgetful" || true
-  mail_id="$(jget messages.0.ID 2>/dev/null || true)"
-  if [ -n "$mail_id" ]; then
-    curl -sS -o "$tmp/body" "$mailpit/api/v1/message/$mail_id"
-    reset_token="$(jget Text | perl -ne 'print $1 if /token=([A-Za-z0-9_-]+)/')"
-    [ -n "$reset_token" ] && break
-  fi
-  sleep 0.5
-done
+reset_token="$(mail_token "$forgetful" reset-password)"
 [ -n "$reset_token" ] || fail "no reset link arrived in Mailpit ($mailpit)"
 echo "ok  the reset link arrived by mail"
 call POST /auth/password-reset/confirm "{\"token\":\"$reset_token\",\"new_password\":\"remembered-pass-2\"}";  expect 204 "POST /auth/password-reset/confirm"
