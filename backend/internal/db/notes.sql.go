@@ -16,7 +16,7 @@ import (
 const createNote = `-- name: CreateNote :one
 INSERT INTO notes (user_id, subject_id, title, content, content_text, is_pinned, kind, summary, semester, library_subject_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id
+RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id, rating_count, rating_avg
 `
 
 type CreateNoteParams struct {
@@ -64,12 +64,14 @@ func (q *Queries) CreateNote(ctx context.Context, arg CreateNoteParams) (Note, e
 		&i.PublishedAt,
 		&i.Views,
 		&i.LibrarySubjectID,
+		&i.RatingCount,
+		&i.RatingAvg,
 	)
 	return i, err
 }
 
 const getNote = `-- name: GetNote :one
-SELECT id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id FROM notes
+SELECT id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id, rating_count, rating_avg FROM notes
 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
 `
 
@@ -99,6 +101,8 @@ func (q *Queries) GetNote(ctx context.Context, arg GetNoteParams) (Note, error) 
 		&i.PublishedAt,
 		&i.Views,
 		&i.LibrarySubjectID,
+		&i.RatingCount,
+		&i.RatingAvg,
 	)
 	return i, err
 }
@@ -285,7 +289,7 @@ UPDATE notes SET
              THEN NULL ELSE published_at END,
     updated_at         = now()
 WHERE id = $14 AND user_id = $15 AND deleted_at IS NULL
-RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id
+RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id, rating_count, rating_avg
 `
 
 type UpdateNoteParams struct {
@@ -349,6 +353,8 @@ func (q *Queries) UpdateNote(ctx context.Context, arg UpdateNoteParams) (Note, e
 		&i.PublishedAt,
 		&i.Views,
 		&i.LibrarySubjectID,
+		&i.RatingCount,
+		&i.RatingAvg,
 	)
 	return i, err
 }

@@ -35,7 +35,9 @@ WHERE (sqlc.narg('library_subject_id')::uuid IS NULL OR li.library_subject_id = 
   AND (sqlc.narg('kind')::text IS NULL OR li.kind = sqlc.narg('kind'))
   AND (sqlc.narg('semester')::smallint IS NULL OR li.semester = sqlc.narg('semester'))
   AND (sqlc.narg('author_id')::uuid IS NULL OR li.user_id = sqlc.narg('author_id'))
-  AND (sqlc.narg('tag')::text IS NULL OR sqlc.narg('tag')::text = ANY (li.tags))
+  AND (sqlc.narg('tag')::text IS NULL OR EXISTS (
+        SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
+        WHERE nt.note_id = li.id AND t.name = sqlc.narg('tag')::text))
   AND (sqlc.narg('cursor_published_at')::timestamptz IS NULL
        OR (li.published_at, li.id) < (sqlc.narg('cursor_published_at')::timestamptz, sqlc.narg('cursor_id')::uuid))
 ORDER BY li.published_at DESC, li.id DESC
@@ -48,7 +50,9 @@ WHERE (sqlc.narg('library_subject_id')::uuid IS NULL OR li.library_subject_id = 
   AND (sqlc.narg('kind')::text IS NULL OR li.kind = sqlc.narg('kind'))
   AND (sqlc.narg('semester')::smallint IS NULL OR li.semester = sqlc.narg('semester'))
   AND (sqlc.narg('author_id')::uuid IS NULL OR li.user_id = sqlc.narg('author_id'))
-  AND (sqlc.narg('tag')::text IS NULL OR sqlc.narg('tag')::text = ANY (li.tags))
+  AND (sqlc.narg('tag')::text IS NULL OR EXISTS (
+        SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
+        WHERE nt.note_id = li.id AND t.name = sqlc.narg('tag')::text))
   AND (sqlc.narg('cursor_rating')::float8 IS NULL
        OR (li.rating_avg, li.rating_count, li.id)
           < (sqlc.narg('cursor_rating')::float8, sqlc.narg('cursor_count')::bigint, sqlc.narg('cursor_id')::uuid))
@@ -62,7 +66,9 @@ WHERE (sqlc.narg('library_subject_id')::uuid IS NULL OR li.library_subject_id = 
   AND (sqlc.narg('kind')::text IS NULL OR li.kind = sqlc.narg('kind'))
   AND (sqlc.narg('semester')::smallint IS NULL OR li.semester = sqlc.narg('semester'))
   AND (sqlc.narg('author_id')::uuid IS NULL OR li.user_id = sqlc.narg('author_id'))
-  AND (sqlc.narg('tag')::text IS NULL OR sqlc.narg('tag')::text = ANY (li.tags))
+  AND (sqlc.narg('tag')::text IS NULL OR EXISTS (
+        SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
+        WHERE nt.note_id = li.id AND t.name = sqlc.narg('tag')::text))
   AND (sqlc.narg('cursor_views')::bigint IS NULL
        OR (li.views, li.id) < (sqlc.narg('cursor_views')::bigint, sqlc.narg('cursor_id')::uuid))
 ORDER BY li.views DESC, li.id DESC
@@ -100,14 +106,13 @@ SELECT n.id, n.user_id, n.title, n.summary, n.kind, n.semester, n.status, n.publ
        ls.color                    AS subject_color,
        u.display_name              AS author_name,
        u.faculty                   AS author_faculty,
-       COALESCE(r.cnt, 0)::bigint  AS rating_count,
-       COALESCE(r.avg, 0)::float8  AS rating_avg,
+       n.rating_count,
+       n.rating_avg,
        COALESCE(c.cnt, 0)::bigint  AS comments_count,
        COALESCE(b.cnt, 0)::bigint  AS bookmarks_count
 FROM notes n
 JOIN users u ON u.id = n.user_id
 LEFT JOIN library_subjects ls ON ls.id = n.library_subject_id
-LEFT JOIN LATERAL (SELECT count(*) AS cnt, avg(value) AS avg FROM note_ratings WHERE note_id = n.id) r ON true
 LEFT JOIN LATERAL (SELECT count(*) AS cnt FROM comments WHERE note_id = n.id AND deleted_at IS NULL) c ON true
 LEFT JOIN LATERAL (SELECT count(*) AS cnt FROM note_bookmarks WHERE note_id = n.id) b ON true
 WHERE n.id = sqlc.arg('id')

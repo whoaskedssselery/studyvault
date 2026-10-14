@@ -35,7 +35,7 @@ func (q *Queries) AddBookmark(ctx context.Context, arg AddBookmarkParams) error 
 const approveNote = `-- name: ApproveNote :one
 UPDATE notes SET status = 'published', published_at = now()
 WHERE id = $1 AND status = 'pending' AND deleted_at IS NULL
-RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id
+RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id, rating_count, rating_avg
 `
 
 // Решение принимается только по материалу, который сейчас на проверке (защита от гонки двух модераторов).
@@ -60,6 +60,8 @@ func (q *Queries) ApproveNote(ctx context.Context, id uuid.UUID) (Note, error) {
 		&i.PublishedAt,
 		&i.Views,
 		&i.LibrarySubjectID,
+		&i.RatingCount,
+		&i.RatingAvg,
 	)
 	return i, err
 }
@@ -208,14 +210,13 @@ SELECT n.id, n.user_id, n.title, n.summary, n.kind, n.semester, n.status, n.publ
        ls.color                    AS subject_color,
        u.display_name              AS author_name,
        u.faculty                   AS author_faculty,
-       COALESCE(r.cnt, 0)::bigint  AS rating_count,
-       COALESCE(r.avg, 0)::float8  AS rating_avg,
+       n.rating_count,
+       n.rating_avg,
        COALESCE(c.cnt, 0)::bigint  AS comments_count,
        COALESCE(b.cnt, 0)::bigint  AS bookmarks_count
 FROM notes n
 JOIN users u ON u.id = n.user_id
 LEFT JOIN library_subjects ls ON ls.id = n.library_subject_id
-LEFT JOIN LATERAL (SELECT count(*) AS cnt, avg(value) AS avg FROM note_ratings WHERE note_id = n.id) r ON true
 LEFT JOIN LATERAL (SELECT count(*) AS cnt FROM comments WHERE note_id = n.id AND deleted_at IS NULL) c ON true
 LEFT JOIN LATERAL (SELECT count(*) AS cnt FROM note_bookmarks WHERE note_id = n.id) b ON true
 WHERE n.id = $1
@@ -676,7 +677,9 @@ WHERE ($1::uuid IS NULL OR li.library_subject_id = $1)
   AND ($2::text IS NULL OR li.kind = $2)
   AND ($3::smallint IS NULL OR li.semester = $3)
   AND ($4::uuid IS NULL OR li.user_id = $4)
-  AND ($5::text IS NULL OR $5::text = ANY (li.tags))
+  AND ($5::text IS NULL OR EXISTS (
+        SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
+        WHERE nt.note_id = li.id AND t.name = $5::text))
   AND ($6::bigint IS NULL
        OR (li.views, li.id) < ($6::bigint, $7::uuid))
 ORDER BY li.views DESC, li.id DESC
@@ -750,7 +753,9 @@ WHERE ($1::uuid IS NULL OR li.library_subject_id = $1)
   AND ($2::text IS NULL OR li.kind = $2)
   AND ($3::smallint IS NULL OR li.semester = $3)
   AND ($4::uuid IS NULL OR li.user_id = $4)
-  AND ($5::text IS NULL OR $5::text = ANY (li.tags))
+  AND ($5::text IS NULL OR EXISTS (
+        SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
+        WHERE nt.note_id = li.id AND t.name = $5::text))
   AND ($6::timestamptz IS NULL
        OR (li.published_at, li.id) < ($6::timestamptz, $7::uuid))
 ORDER BY li.published_at DESC, li.id DESC
@@ -872,7 +877,9 @@ WHERE ($1::uuid IS NULL OR li.library_subject_id = $1)
   AND ($2::text IS NULL OR li.kind = $2)
   AND ($3::smallint IS NULL OR li.semester = $3)
   AND ($4::uuid IS NULL OR li.user_id = $4)
-  AND ($5::text IS NULL OR $5::text = ANY (li.tags))
+  AND ($5::text IS NULL OR EXISTS (
+        SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
+        WHERE nt.note_id = li.id AND t.name = $5::text))
   AND ($6::float8 IS NULL
        OR (li.rating_avg, li.rating_count, li.id)
           < ($6::float8, $7::bigint, $8::uuid))
@@ -1091,7 +1098,7 @@ func (q *Queries) ListViewerState(ctx context.Context, arg ListViewerStateParams
 const rejectNote = `-- name: RejectNote :one
 UPDATE notes SET status = 'rejected', published_at = NULL
 WHERE id = $1 AND status = 'pending' AND deleted_at IS NULL
-RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id
+RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id, rating_count, rating_avg
 `
 
 func (q *Queries) RejectNote(ctx context.Context, id uuid.UUID) (Note, error) {
@@ -1115,6 +1122,8 @@ func (q *Queries) RejectNote(ctx context.Context, id uuid.UUID) (Note, error) {
 		&i.PublishedAt,
 		&i.Views,
 		&i.LibrarySubjectID,
+		&i.RatingCount,
+		&i.RatingAvg,
 	)
 	return i, err
 }
@@ -1158,7 +1167,7 @@ const submitNote = `-- name: SubmitNote :one
 
 UPDATE notes SET status = 'pending', updated_at = now()
 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL AND status IN ('draft', 'rejected')
-RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id
+RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id, rating_count, rating_avg
 `
 
 type SubmitNoteParams struct {
@@ -1191,6 +1200,8 @@ func (q *Queries) SubmitNote(ctx context.Context, arg SubmitNoteParams) (Note, e
 		&i.PublishedAt,
 		&i.Views,
 		&i.LibrarySubjectID,
+		&i.RatingCount,
+		&i.RatingAvg,
 	)
 	return i, err
 }
@@ -1198,7 +1209,7 @@ func (q *Queries) SubmitNote(ctx context.Context, arg SubmitNoteParams) (Note, e
 const unpublishNote = `-- name: UnpublishNote :one
 UPDATE notes SET status = 'rejected', published_at = NULL
 WHERE id = $1 AND status = 'published' AND deleted_at IS NULL
-RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id
+RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id, rating_count, rating_avg
 `
 
 // Модератор снимает опубликованный материал с публикации. Он становится отклонённым: автор видит причину,
@@ -1224,6 +1235,8 @@ func (q *Queries) UnpublishNote(ctx context.Context, id uuid.UUID) (Note, error)
 		&i.PublishedAt,
 		&i.Views,
 		&i.LibrarySubjectID,
+		&i.RatingCount,
+		&i.RatingAvg,
 	)
 	return i, err
 }
@@ -1317,7 +1330,7 @@ const withdrawNote = `-- name: WithdrawNote :one
 
 UPDATE notes SET status = 'draft', updated_at = now()
 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL AND status = 'pending'
-RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id
+RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id, rating_count, rating_avg
 `
 
 type WithdrawNoteParams struct {
@@ -1350,6 +1363,8 @@ func (q *Queries) WithdrawNote(ctx context.Context, arg WithdrawNoteParams) (Not
 		&i.PublishedAt,
 		&i.Views,
 		&i.LibrarySubjectID,
+		&i.RatingCount,
+		&i.RatingAvg,
 	)
 	return i, err
 }

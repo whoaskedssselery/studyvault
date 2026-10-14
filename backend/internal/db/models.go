@@ -87,6 +87,8 @@ type Note struct {
 	PublishedAt      *time.Time    `json:"published_at"`
 	Views            int64         `json:"views"`
 	LibrarySubjectID uuid.NullUUID `json:"library_subject_id"`
+	RatingCount      int64         `json:"rating_count"`
+	RatingAvg        float64       `json:"rating_avg"`
 }
 
 type NoteBookmark struct {
