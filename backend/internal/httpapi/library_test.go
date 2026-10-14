@@ -205,14 +205,14 @@ func TestLibrary_GuestsReadButCannotWrite(t *testing.T) {
 	e := newLibEnv(&fakeLibrary{page: library.Page{Items: []library.Item{sampleItem()}}, comments: library.CommentPage{}})
 	id := uuid.NewString()
 
-	for _, path := range []string{"/v1/library", "/v1/library/subjects", "/v1/library/" + id, "/v1/library/" + id + "/comments", "/v1/library/" + id + "/attachments/" + id} {
+	for _, path := range []string{"/v1/library", "/v1/library-subjects", "/v1/library/" + id, "/v1/library/" + id + "/comments", "/v1/library/" + id + "/attachments/" + id} {
 		rec := e.do(http.MethodGet, path, "", "")
 		if rec.Code == http.StatusUnauthorized {
 			t.Errorf("GET %s must be open to guests, got 401", path)
 		}
 	}
 	for _, c := range [][2]string{
-		{"POST", "/v1/library/subjects"}, {"PATCH", "/v1/library/subjects/" + id}, {"DELETE", "/v1/library/subjects/" + id},
+		{"POST", "/v1/library-subjects"}, {"PATCH", "/v1/library-subjects/" + id}, {"DELETE", "/v1/library-subjects/" + id},
 		{"POST", "/v1/library/" + id + "/comments"}, {"DELETE", "/v1/comments/" + id},
 		{"PUT", "/v1/library/" + id + "/rating"}, {"PUT", "/v1/library/" + id + "/bookmark"}, {"DELETE", "/v1/library/" + id + "/bookmark"},
 		{"GET", "/v1/bookmarks"}, {"GET", "/v1/moderation/queue"}, {"POST", "/v1/moderation/" + id + "/decision"}, {"POST", "/v1/notes/" + id + "/submit"},
@@ -592,7 +592,7 @@ func TestLibrarySubjects_ListCreateUpdateDelete(t *testing.T) {
 	e := newLibEnv(f)
 	id := uuid.New()
 
-	rec := e.do(http.MethodGet, "/v1/library/subjects", "", "")
+	rec := e.do(http.MethodGet, "/v1/library-subjects", "", "")
 	items := decodeMap(t, rec)["items"].([]any)
 	if rec.Code != http.StatusOK || len(items) != 1 || items[0].(map[string]any)["materials_count"] != float64(3) {
 		t.Errorf("list: %d %s", rec.Code, rec.Body)
@@ -601,25 +601,25 @@ func TestLibrarySubjects_ListCreateUpdateDelete(t *testing.T) {
 		t.Errorf("color must be present and null: %v", v)
 	}
 
-	rec = e.as(http.MethodPost, "/v1/library/subjects", `{"title":"Databases","color":"#f97316"}`)
+	rec = e.as(http.MethodPost, "/v1/library-subjects", `{"title":"Databases","color":"#f97316"}`)
 	if rec.Code != http.StatusCreated || f.gotBody != "Databases" {
 		t.Errorf("create: status = %d, body = %s", rec.Code, rec.Body)
 	}
-	if rec := e.as(http.MethodPost, "/v1/library/subjects", `{"title":"x","color":5}`); rec.Code != http.StatusBadRequest {
+	if rec := e.as(http.MethodPost, "/v1/library-subjects", `{"title":"x","color":5}`); rec.Code != http.StatusBadRequest {
 		t.Errorf("a malformed body: status = %d", rec.Code)
 	}
 
-	if rec := e.as(http.MethodPatch, "/v1/library/subjects/"+id.String(), `{"title":"Renamed"}`); rec.Code != http.StatusOK || f.gotID != id {
+	if rec := e.as(http.MethodPatch, "/v1/library-subjects/"+id.String(), `{"title":"Renamed"}`); rec.Code != http.StatusOK || f.gotID != id {
 		t.Errorf("update: status = %d", rec.Code)
 	}
-	if rec := e.as(http.MethodPatch, "/v1/library/subjects/"+id.String(), `{}`); rec.Code != http.StatusBadRequest {
+	if rec := e.as(http.MethodPatch, "/v1/library-subjects/"+id.String(), `{}`); rec.Code != http.StatusBadRequest {
 		t.Errorf("update without fields: status = %d", rec.Code)
 	}
-	if rec := e.as(http.MethodDelete, "/v1/library/subjects/"+id.String(), ""); rec.Code != http.StatusNoContent {
+	if rec := e.as(http.MethodDelete, "/v1/library-subjects/"+id.String(), ""); rec.Code != http.StatusNoContent {
 		t.Errorf("delete: status = %d", rec.Code)
 	}
 	f.err = library.ErrSubjectInUse
-	if rec := e.as(http.MethodDelete, "/v1/library/subjects/"+id.String(), ""); rec.Code != http.StatusConflict || errorCode(t, rec) != "subject_in_use" {
+	if rec := e.as(http.MethodDelete, "/v1/library-subjects/"+id.String(), ""); rec.Code != http.StatusConflict || errorCode(t, rec) != "subject_in_use" {
 		t.Errorf("delete a used subject: status = %d", rec.Code)
 	}
 }

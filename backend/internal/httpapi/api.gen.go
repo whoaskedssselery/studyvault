@@ -467,7 +467,7 @@ type NoteInput struct {
 	// Example: note
 	Kind *MaterialKind `json:"kind,omitempty"`
 
-	// LibrarySubjectId Общий предмет из `GET /library/subjects`
+	// LibrarySubjectId Общий предмет из `GET /library-subjects`
 	LibrarySubjectId nullable.Nullable[openapi_types.UUID] `json:"library_subject_id,omitempty"`
 	Semester         nullable.Nullable[int]                `json:"semester,omitempty"`
 	SubjectId        nullable.Nullable[openapi_types.UUID] `json:"subject_id,omitempty"`
@@ -502,7 +502,7 @@ type NotePatch struct {
 	// Example: note
 	Kind *MaterialKind `json:"kind,omitempty"`
 
-	// LibrarySubjectId Общий предмет из `GET /library/subjects`
+	// LibrarySubjectId Общий предмет из `GET /library-subjects`
 	LibrarySubjectId nullable.Nullable[openapi_types.UUID] `json:"library_subject_id,omitempty"`
 	Semester         nullable.Nullable[int]                `json:"semester,omitempty"`
 	SubjectId        nullable.Nullable[openapi_types.UUID] `json:"subject_id,omitempty"`
@@ -941,16 +941,16 @@ type ServerInterface interface {
 	// (GET /library)
 	ListLibrary(w http.ResponseWriter, r *http.Request, params ListLibraryParams)
 	// ListLibrarySubjects Общие предметы библиотеки
-	// (GET /library/subjects)
+	// (GET /library-subjects)
 	ListLibrarySubjects(w http.ResponseWriter, r *http.Request)
 	// CreateLibrarySubject Добавить общий предмет (модератор)
-	// (POST /library/subjects)
+	// (POST /library-subjects)
 	CreateLibrarySubject(w http.ResponseWriter, r *http.Request)
 	// DeleteLibrarySubject Удалить общий предмет (модератор)
-	// (DELETE /library/subjects/{id})
+	// (DELETE /library-subjects/{id})
 	DeleteLibrarySubject(w http.ResponseWriter, r *http.Request, id Id)
 	// UpdateLibrarySubject Изменить общий предмет (модератор)
-	// (PATCH /library/subjects/{id})
+	// (PATCH /library-subjects/{id})
 	UpdateLibrarySubject(w http.ResponseWriter, r *http.Request, id Id)
 	// GetMaterial Страница материала
 	// (GET /library/{id})
@@ -1121,25 +1121,25 @@ func (_ Unimplemented) ListLibrary(w http.ResponseWriter, r *http.Request, param
 }
 
 // ListLibrarySubjects Общие предметы библиотеки
-// (GET /library/subjects)
+// (GET /library-subjects)
 func (_ Unimplemented) ListLibrarySubjects(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // CreateLibrarySubject Добавить общий предмет (модератор)
-// (POST /library/subjects)
+// (POST /library-subjects)
 func (_ Unimplemented) CreateLibrarySubject(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // DeleteLibrarySubject Удалить общий предмет (модератор)
-// (DELETE /library/subjects/{id})
+// (DELETE /library-subjects/{id})
 func (_ Unimplemented) DeleteLibrarySubject(w http.ResponseWriter, r *http.Request, id Id) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // UpdateLibrarySubject Изменить общий предмет (модератор)
-// (PATCH /library/subjects/{id})
+// (PATCH /library-subjects/{id})
 func (_ Unimplemented) UpdateLibrarySubject(w http.ResponseWriter, r *http.Request, id Id) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
@@ -2766,16 +2766,16 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/library", wrapper.ListLibrary)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/library/subjects", wrapper.ListLibrarySubjects)
+		r.Get(options.BaseURL+"/library-subjects", wrapper.ListLibrarySubjects)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/library/subjects", wrapper.CreateLibrarySubject)
+		r.Post(options.BaseURL+"/library-subjects", wrapper.CreateLibrarySubject)
 	})
 	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/library/subjects/{id}", wrapper.DeleteLibrarySubject)
+		r.Delete(options.BaseURL+"/library-subjects/{id}", wrapper.DeleteLibrarySubject)
 	})
 	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/library/subjects/{id}", wrapper.UpdateLibrarySubject)
+		r.Patch(options.BaseURL+"/library-subjects/{id}", wrapper.UpdateLibrarySubject)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/library/{id}", wrapper.GetMaterial)

@@ -830,7 +830,7 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
-  /library/subjects:
+  /library-subjects:
     get:
       tags: [library]
       operationId: listLibrarySubjects
@@ -877,7 +877,7 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
-  /library/subjects/{id}:
+  /library-subjects/{id}:
     parameters:
       - $ref: "#/components/parameters/Id"
     patch:
@@ -1634,7 +1634,7 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Общий предмет из `GET /library/subjects`
+          description: Общий предмет из `GET /library-subjects`
 
     NotePatch:
       type: object
@@ -1670,7 +1670,7 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Общий предмет из `GET /library/subjects`
+          description: Общий предмет из `GET /library-subjects`
 
     Graph:
       type: object
@@ -1872,6 +1872,7 @@ components:
 
     SubjectRef:
       type: object
+      nullable: true
       required: [id, title, color]
       properties:
         id:
@@ -1918,9 +1919,7 @@ components:
           minimum: 1
           maximum: 12
         subject:
-          allOf:
-            - $ref: "#/components/schemas/SubjectRef"
-          nullable: true
+          $ref: "#/components/schemas/SubjectRef"
         author:
           $ref: "#/components/schemas/Author"
         rating:
@@ -1985,9 +1984,7 @@ components:
           type: integer
           nullable: true
         subject:
-          allOf:
-            - $ref: "#/components/schemas/SubjectRef"
-          nullable: true
+          $ref: "#/components/schemas/SubjectRef"
         author:
           $ref: "#/components/schemas/Author"
         rating:
@@ -2111,9 +2108,7 @@ components:
           type: integer
           nullable: true
         subject:
-          allOf:
-            - $ref: "#/components/schemas/SubjectRef"
-          nullable: true
+          $ref: "#/components/schemas/SubjectRef"
         author:
           $ref: "#/components/schemas/Author"
         submitted_at:

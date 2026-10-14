@@ -26,7 +26,7 @@ func isPublicRead(r *http.Request) bool {
 		return false
 	}
 	p := r.URL.Path
-	return p == apiPrefix+"/library" || strings.HasPrefix(p, apiPrefix+"/library/")
+	return p == apiPrefix+"/library" || p == apiPrefix+"/library-subjects" || strings.HasPrefix(p, apiPrefix+"/library/")
 }
 
 func authMiddleware(secret []byte) func(http.Handler) http.Handler {
