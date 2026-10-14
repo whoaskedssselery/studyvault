@@ -15,8 +15,11 @@ import (
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 )
 
-// PasswordResetTTL — сколько живёт ссылка для сброса пароля.
-const PasswordResetTTL = time.Hour
+// PasswordResetTTL — сколько живёт ссылка для сброса пароля. PasswordResetCooldown — как часто на один аккаунт можно слать письмо.
+const (
+	PasswordResetTTL      = time.Hour
+	PasswordResetCooldown = time.Minute
+)
 
 // ErrResetUnavailable: почтовый сервер не настроен, письма с ссылкой отправить нечем. Это не зависит от того,
 // есть ли аккаунт с такой почтой, поэтому ответ ничего не раскрывает.
@@ -34,8 +37,9 @@ func WithMailer(m Mailer, resetURL string) Option {
 }
 
 // RequestPasswordReset отправляет на почту ссылку для сброса пароля, если такой аккаунт есть. Для неизвестной почты
-// ничего не происходит, а ответ и время ответа те же: письмо уходит в фоне, поэтому по скорости ответа
-// существование аккаунта не угадать. Новая ссылка гасит прежние. Сбой отправки только логируется по той же причине.
+// ничего не происходит, а ответ тот же. Письмо уходит в фоне, чтобы по задержке ответа не угадывалось, есть ли аккаунт
+// (разница остаётся в паре обращений к базе, это доли миллисекунды). Новая ссылка гасит прежние. Сбой отправки только
+// логируется по той же причине. Чаще раза в минуту на аккаунт письма не уходят.
 func (s *Service) RequestPasswordReset(ctx context.Context, email string) error {
 	if s.mailer == nil {
 		return ErrResetUnavailable
@@ -46,6 +50,15 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) error 
 	}
 	if err != nil {
 		return fmt.Errorf("get user: %w", err)
+	}
+	// Не чаще одного письма в минуту на аккаунт: лимит по адресу клиента не мешает заваливать чужую почту с разных адресов.
+	// Ответ при этом прежний, а действует ссылка из уже отправленного письма.
+	latest, err := s.store.LatestPasswordResetExpiry(ctx, user.ID)
+	if err != nil {
+		return fmt.Errorf("check the last reset link: %w", err)
+	}
+	if latest.After(s.now().Add(PasswordResetTTL - PasswordResetCooldown)) {
+		return nil
 	}
 	raw, hash, err := NewRefreshToken()
 	if err != nil {

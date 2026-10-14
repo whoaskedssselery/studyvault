@@ -116,6 +116,16 @@ func (f *fakeStore) ClaimPasswordResetToken(_ context.Context, a db.ClaimPasswor
 	return r.userID, nil
 }
 
+func (f *fakeStore) LatestPasswordResetExpiry(_ context.Context, userID uuid.UUID) (time.Time, error) {
+	latest := time.Unix(0, 0)
+	for _, r := range f.resets {
+		if r.userID == userID && !r.used && r.expires.After(latest) {
+			latest = r.expires
+		}
+	}
+	return latest, nil
+}
+
 func (f *fakeStore) DeleteExpiredPasswordResetTokens(_ context.Context, now time.Time) (int64, error) {
 	var n int64
 	for h, r := range f.resets {
@@ -791,11 +801,13 @@ func TestConfirmPasswordReset_ExpiredUnknownAndEmptyTokens_AreRejected(t *testin
 
 func TestRequestPasswordReset_ANewLinkCancelsTheOldOne(t *testing.T) {
 	ctx := context.Background()
+	now := time.Now()
 	mailer := newMailer()
-	svc := newRecoveryService(newFakeStore(), mailer, time.Now)
+	svc := newRecoveryService(newFakeStore(), mailer, func() time.Time { return now })
 	loggedIn(t, svc)
 	_ = svc.RequestPasswordReset(ctx, "a@x.io")
 	first := tokenFrom(t, mailer.next(t))
+	now = now.Add(auth.PasswordResetCooldown + time.Second)
 	_ = svc.RequestPasswordReset(ctx, "a@x.io")
 	second := tokenFrom(t, mailer.next(t))
 
@@ -902,5 +914,50 @@ func TestConfirmPasswordReset_FailureOnAnyStepIsReported(t *testing.T) {
 		if _, err := svc.Login(ctx, "a@x.io", "brand-new-pass", ""); err == nil && name != "sessions cannot be ended" {
 			t.Errorf("%s: the new password must not be active", name)
 		}
+	}
+}
+
+// Один аккаунт не заваливают письмами, даже если просят с разных адресов: лимит по адресу клиента этого не ловит.
+func TestRequestPasswordReset_AtMostOneMailPerMinutePerAccount(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now()
+	store, mailer := newFakeStore(), newMailer()
+	svc := newRecoveryService(store, mailer, func() time.Time { return now })
+	loggedIn(t, svc)
+
+	for i := 0; i < 5; i++ {
+		if err := svc.RequestPasswordReset(ctx, "a@x.io"); err != nil {
+			t.Fatalf("request %d: %v (the answer must stay the same)", i, err)
+		}
+	}
+	first := tokenFrom(t, mailer.next(t))
+	mailer.none(t)
+	if len(store.resets) != 1 {
+		t.Errorf("%d links stored, want the one from the first mail", len(store.resets))
+	}
+
+	// Ссылка из единственного письма работает. Что после паузы письмо уходит снова, проверяет тест про отмену старой ссылки.
+	now = now.Add(auth.PasswordResetCooldown - time.Second)
+	if err := svc.ConfirmPasswordReset(ctx, first, "brand-new-pass"); err != nil {
+		t.Errorf("the link from the only mail must work: %v", err)
+	}
+}
+
+// Другой аккаунт не страдает от паузы первого.
+func TestRequestPasswordReset_TheCooldownIsPerAccount(t *testing.T) {
+	ctx := context.Background()
+	store, mailer := newFakeStore(), newMailer()
+	svc := newRecoveryService(store, mailer, time.Now)
+	loggedIn(t, svc)
+	if _, err := svc.Register(ctx, "b@x.io", "password123", "Bob", ""); err != nil {
+		t.Fatal(err)
+	}
+	_ = svc.RequestPasswordReset(ctx, "a@x.io")
+	_ = svc.RequestPasswordReset(ctx, "b@x.io")
+	if m := mailer.next(t); m.to != "a@x.io" {
+		t.Errorf("first mail to %s", m.to)
+	}
+	if m := mailer.next(t); m.to != "b@x.io" {
+		t.Errorf("second mail to %s", m.to)
 	}
 }

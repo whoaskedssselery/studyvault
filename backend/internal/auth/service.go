@@ -41,6 +41,7 @@ type Store interface {
 	DeleteUserPasswordResetTokens(ctx context.Context, userID uuid.UUID) error
 	ClaimPasswordResetToken(ctx context.Context, arg db.ClaimPasswordResetTokenParams) (uuid.UUID, error)
 	DeleteExpiredPasswordResetTokens(ctx context.Context, expiresAt time.Time) (int64, error)
+	LatestPasswordResetExpiry(ctx context.Context, userID uuid.UUID) (time.Time, error)
 	DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	GetUserByID(ctx context.Context, id uuid.UUID) (db.User, error)
 	UpdateUserProfile(ctx context.Context, arg db.UpdateUserProfileParams) (db.User, error)

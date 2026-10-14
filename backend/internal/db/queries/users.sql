@@ -46,3 +46,8 @@ RETURNING user_id;
 
 -- name: DeleteExpiredPasswordResetTokens :execrows
 DELETE FROM password_reset_tokens WHERE expires_at <= $1 OR used_at IS NOT NULL;
+
+-- Когда истекает самая свежая неиспользованная ссылка пользователя (1970 год, если таких нет). Нужно, чтобы не слать письма чаще, чем раз в минуту:
+-- иначе чужую почту можно заваливать письмами с разных адресов, обходя лимит по адресу клиента.
+-- name: LatestPasswordResetExpiry :one
+SELECT COALESCE(max(expires_at), 'epoch'::timestamptz)::timestamptz AS expires_at FROM password_reset_tokens WHERE user_id = $1 AND used_at IS NULL;

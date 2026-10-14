@@ -86,6 +86,9 @@ type Querier interface {
 	// Просмотр засчитывается только у опубликованных материалов.
 	IncrementViews(ctx context.Context, id uuid.UUID) error
 	InsertModerationDecision(ctx context.Context, arg InsertModerationDecisionParams) error
+	// Когда истекает самая свежая неиспользованная ссылка пользователя (1970 год, если таких нет). Нужно, чтобы не слать письма чаще, чем раз в минуту:
+	// иначе чужую почту можно заваливать письмами с разных адресов, обходя лимит по адресу клиента.
+	LatestPasswordResetExpiry(ctx context.Context, userID uuid.UUID) (time.Time, error)
 	// Общий предмет библиотеки должен существовать.
 	LibrarySubjectExists(ctx context.Context, id uuid.UUID) (bool, error)
 	ListAttachmentsByNote(ctx context.Context, arg ListAttachmentsByNoteParams) ([]Attachment, error)

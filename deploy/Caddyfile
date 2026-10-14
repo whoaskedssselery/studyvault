@@ -27,8 +27,15 @@
 		-Server
 	}
 
+	# Ссылка сброса пароля несёт токен в адресе страницы клиента (?token=...). В журнал доступа он попадать не должен:
+	# тот, кто читает журнал, мог бы сбросить чужой пароль, пока ссылка жива.
 	log {
 		output stdout
-		format json
+		format filter {
+			wrap json
+			request>uri query {
+				replace token REDACTED
+			}
+		}
 	}
 }
