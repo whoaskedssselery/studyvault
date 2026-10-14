@@ -19,6 +19,7 @@ import (
 	"github.com/whoaskedssselery/studyvault/backend/internal/config"
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/httpapi"
+	"github.com/whoaskedssselery/studyvault/backend/internal/library"
 	"github.com/whoaskedssselery/studyvault/backend/internal/note"
 	"github.com/whoaskedssselery/studyvault/backend/internal/search"
 	"github.com/whoaskedssselery/studyvault/backend/internal/storage"
@@ -66,6 +67,9 @@ func run() error {
 	noteOpts := []note.Option{note.WithTx(func(ctx context.Context, fn func(note.Store) error) error {
 		return db.InTx(ctx, pool, func(q *db.Queries) error { return fn(q) })
 	})}
+	libOpts := []library.Option{library.WithTx(func(ctx context.Context, fn func(library.Store) error) error {
+		return db.InTx(ctx, pool, func(q *db.Queries) error { return fn(q) })
+	})}
 	authSvc := auth.NewService(queries, cfg.JWTSecret)
 	deps := httpapi.Deps{
 		DB:             pool,
@@ -83,6 +87,7 @@ func run() error {
 	if cfg.MeiliURL != "" {
 		meili := search.NewMeili(cfg.MeiliURL, cfg.MeiliKey, search.IndexUID)
 		noteOpts = append(noteOpts, note.WithIndexer(meili))
+		libOpts = append(libOpts, library.WithIndexer(meili), library.WithEngine(meili))
 		deps.Search = search.NewService(meili, queries)
 	} else {
 		slog.Warn("MEILI_URL is not set: search is disabled")
@@ -107,6 +112,7 @@ func run() error {
 	}
 
 	deps.Notes = note.NewService(queries, noteOpts...)
+	deps.Library = library.NewService(queries, libOpts...)
 
 	// Горутина живёт до сигнала остановки: ctx отменяется вместе с ним.
 	go authSvc.RunTokenPurge(ctx, time.Hour)
