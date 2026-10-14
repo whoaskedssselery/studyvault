@@ -7,10 +7,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
+	"github.com/whoaskedssselery/studyvault/backend/internal/pgconv"
 )
 
 // ErrNotFound возвращается и для чужого предмета: снаружи они неотличимы.
@@ -63,8 +63,8 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (db.Su
 	subj, err := s.store.CreateSubject(ctx, db.CreateSubjectParams{
 		UserID:   userID,
 		Title:    in.Title,
-		Color:    toText(in.Color),
-		Semester: toInt2(in.Semester),
+		Color:    pgconv.ToText(in.Color),
+		Semester: pgconv.ToInt2(in.Semester),
 	})
 	if err != nil {
 		return db.Subject{}, fmt.Errorf("create subject: %w", err)
@@ -76,11 +76,11 @@ func (s *Service) Update(ctx context.Context, userID, id uuid.UUID, p Patch) (db
 	subj, err := s.store.UpdateSubject(ctx, db.UpdateSubjectParams{
 		ID:          id,
 		UserID:      userID,
-		Title:       toText(p.Title),
+		Title:       pgconv.ToText(p.Title),
 		SetColor:    p.SetColor,
-		Color:       toText(p.Color),
+		Color:       pgconv.ToText(p.Color),
 		SetSemester: p.SetSemester,
-		Semester:    toInt2(p.Semester),
+		Semester:    pgconv.ToInt2(p.Semester),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return db.Subject{}, ErrNotFound
@@ -100,18 +100,4 @@ func (s *Service) Delete(ctx context.Context, userID, id uuid.UUID) error {
 		return ErrNotFound
 	}
 	return nil
-}
-
-func toText(s *string) pgtype.Text {
-	if s == nil {
-		return pgtype.Text{}
-	}
-	return pgtype.Text{String: *s, Valid: true}
-}
-
-func toInt2(n *int16) pgtype.Int2 {
-	if n == nil {
-		return pgtype.Int2{}
-	}
-	return pgtype.Int2{Int16: *n, Valid: true}
 }

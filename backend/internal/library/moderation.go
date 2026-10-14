@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/pgconv"
 )
 
 const (
@@ -172,12 +173,12 @@ func (s *Service) Queue(ctx context.Context, moderatorID uuid.UUID, limit int, c
 	page.Items = make([]QueueItem, len(rows))
 	for i, r := range rows {
 		qi := QueueItem{
-			ID: r.ID, Title: r.Title, Summary: fromText(r.Summary), Kind: r.Kind, Semester: fromInt2(r.Semester),
-			Author:      Author{ID: r.UserID, DisplayName: r.AuthorName, Faculty: fromText(r.AuthorFaculty)},
+			ID: r.ID, Title: r.Title, Summary: pgconv.FromText(r.Summary), Kind: r.Kind, Semester: pgconv.FromInt2(r.Semester),
+			Author:      Author{ID: r.UserID, DisplayName: r.AuthorName, Faculty: pgconv.FromText(r.AuthorFaculty)},
 			SubmittedAt: r.UpdatedAt, CreatedAt: r.CreatedAt,
 		}
 		if r.LibrarySubjectID.Valid {
-			qi.Subject = &SubjectRef{ID: r.LibrarySubjectID.UUID, Title: r.SubjectTitle.String, Color: fromText(r.SubjectColor)}
+			qi.Subject = &SubjectRef{ID: r.LibrarySubjectID.UUID, Title: r.SubjectTitle.String, Color: pgconv.FromText(r.SubjectColor)}
 		}
 		page.Items[i] = qi
 	}
@@ -202,7 +203,7 @@ func (s *Service) ListSubjects(ctx context.Context) ([]Subject, error) {
 	}
 	out := make([]Subject, len(rows))
 	for i, r := range rows {
-		out[i] = Subject{ID: r.ID, Title: r.Title, Color: fromText(r.Color), MaterialsCount: r.MaterialsCount}
+		out[i] = Subject{ID: r.ID, Title: r.Title, Color: pgconv.FromText(r.Color), MaterialsCount: r.MaterialsCount}
 	}
 	return out, nil
 }
@@ -218,14 +219,14 @@ func (s *Service) CreateSubject(ctx context.Context, uid uuid.UUID, title string
 	if err := validColor(color); err != nil {
 		return Subject{}, err
 	}
-	row, err := s.store.CreateLibrarySubject(ctx, db.CreateLibrarySubjectParams{Title: title, Color: toText(color)})
+	row, err := s.store.CreateLibrarySubject(ctx, db.CreateLibrarySubjectParams{Title: title, Color: pgconv.ToText(color)})
 	if isPgCode(err, pgUniqueViolation) {
 		return Subject{}, ErrSubjectExists
 	}
 	if err != nil {
 		return Subject{}, fmt.Errorf("create library subject: %w", err)
 	}
-	return Subject{ID: row.ID, Title: row.Title, Color: fromText(row.Color)}, nil
+	return Subject{ID: row.ID, Title: row.Title, Color: pgconv.FromText(row.Color)}, nil
 }
 
 // SubjectPatch: nil в Title значит «не менять»; цвет можно очистить, поэтому его «передан ли» хранится флагом.
@@ -239,13 +240,13 @@ func (s *Service) UpdateSubject(ctx context.Context, uid, id uuid.UUID, p Subjec
 	if err := s.requireModerator(ctx, uid); err != nil {
 		return Subject{}, err
 	}
-	arg := db.UpdateLibrarySubjectParams{ID: id, SetColor: p.SetColor, Color: toText(p.Color)}
+	arg := db.UpdateLibrarySubjectParams{ID: id, SetColor: p.SetColor, Color: pgconv.ToText(p.Color)}
 	if p.Title != nil {
 		title, err := validSubjectTitle(*p.Title)
 		if err != nil {
 			return Subject{}, err
 		}
-		arg.Title = toText(&title)
+		arg.Title = pgconv.ToText(&title)
 	}
 	if err := validColor(p.Color); err != nil {
 		return Subject{}, err
@@ -260,7 +261,7 @@ func (s *Service) UpdateSubject(ctx context.Context, uid, id uuid.UUID, p Subjec
 	if err != nil {
 		return Subject{}, fmt.Errorf("update library subject: %w", err)
 	}
-	return Subject{ID: row.ID, Title: row.Title, Color: fromText(row.Color)}, nil
+	return Subject{ID: row.ID, Title: row.Title, Color: pgconv.FromText(row.Color)}, nil
 }
 
 func (s *Service) DeleteSubject(ctx context.Context, uid, id uuid.UUID) error {

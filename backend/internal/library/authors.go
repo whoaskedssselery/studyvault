@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/whoaskedssselery/studyvault/backend/internal/pgconv"
 )
 
 // AuthorStats — публичные сведения об авторе: кто он и как оценены его опубликованные материалы.
@@ -61,7 +63,7 @@ func (s *Service) AuthorProfile(ctx context.Context, id uuid.UUID) (AuthorStats,
 
 func authorStats(id uuid.UUID, name string, faculty pgtype.Text, materials, ratings int64, avg float64, views int64) AuthorStats {
 	st := AuthorStats{
-		Author:         Author{ID: id, DisplayName: name, Faculty: fromText(faculty)},
+		Author:         Author{ID: id, DisplayName: name, Faculty: pgconv.FromText(faculty)},
 		MaterialsCount: materials,
 		RatingsCount:   ratings,
 		Views:          views,

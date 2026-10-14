@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/pgconv"
 )
 
 const maxCommentLen = 2000
@@ -59,7 +60,7 @@ func (s *Service) ListComments(ctx context.Context, noteID uuid.UUID, limit int,
 		page.Items[i] = Comment{
 			ID:        r.ID,
 			Body:      r.Body,
-			Author:    Author{ID: r.UserID, DisplayName: r.AuthorName, Faculty: fromText(r.AuthorFaculty)},
+			Author:    Author{ID: r.UserID, DisplayName: r.AuthorName, Faculty: pgconv.FromText(r.AuthorFaculty)},
 			CreatedAt: r.CreatedAt,
 			EditedAt:  r.EditedAt,
 		}
@@ -95,7 +96,7 @@ func commentFromRow(c db.Comment, author db.User) Comment {
 	return Comment{
 		ID:        c.ID,
 		Body:      c.Body,
-		Author:    Author{ID: author.ID, DisplayName: author.DisplayName, Faculty: fromText(author.Faculty)},
+		Author:    Author{ID: author.ID, DisplayName: author.DisplayName, Faculty: pgconv.FromText(author.Faculty)},
 		CreatedAt: c.CreatedAt,
 		EditedAt:  c.EditedAt,
 	}

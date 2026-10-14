@@ -21,6 +21,7 @@ import (
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/auth"
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/pgconv"
 	"github.com/whoaskedssselery/studyvault/backend/internal/search"
 )
 
@@ -252,8 +253,8 @@ func (s *Service) List(ctx context.Context, uid *uuid.UUID, f ListFilter) (Page,
 }
 
 func (s *Service) browse(ctx context.Context, f ListFilter, limit int) ([]db.LibraryItem, string, error) {
-	subject, kind, semester := toNullUUID(f.SubjectID), toText(f.Kind), toInt2(f.Semester)
-	author, tag := toNullUUID(f.AuthorID), toText(f.Tag)
+	subject, kind, semester := pgconv.ToNullUUID(f.SubjectID), pgconv.ToText(f.Kind), pgconv.ToInt2(f.Semester)
+	author, tag := pgconv.ToNullUUID(f.AuthorID), pgconv.ToText(f.Tag)
 	pageSize := int32(limit + 1) // лишняя строка нужна, чтобы узнать, есть ли следующая страница
 
 	var rows []db.LibraryItem
@@ -332,8 +333,8 @@ func (s *Service) searchItems(ctx context.Context, f ListFilter, limit int) ([]d
 		ids[i] = h.ID
 	}
 	rows, err := s.store.ListLibraryByIDs(ctx, db.ListLibraryByIDsParams{
-		Ids: ids, LibrarySubjectID: toNullUUID(f.SubjectID), Kind: toText(f.Kind), Semester: toInt2(f.Semester),
-		AuthorID: toNullUUID(f.AuthorID), Tag: toText(f.Tag),
+		Ids: ids, LibrarySubjectID: pgconv.ToNullUUID(f.SubjectID), Kind: pgconv.ToText(f.Kind), Semester: pgconv.ToInt2(f.Semester),
+		AuthorID: pgconv.ToNullUUID(f.AuthorID), Tag: pgconv.ToText(f.Tag),
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("check search results: %w", err)
@@ -400,7 +401,7 @@ func (s *Service) Get(ctx context.Context, uid *uuid.UUID, id uuid.UUID) (Materi
 			return Material{}, err
 		}
 	}
-	row, err := s.store.GetMaterial(ctx, db.GetMaterialParams{ID: id, ViewerID: toNullUUID(uid), IsModerator: moderator})
+	row, err := s.store.GetMaterial(ctx, db.GetMaterialParams{ID: id, ViewerID: pgconv.ToNullUUID(uid), IsModerator: moderator})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Material{}, ErrNotFound
 	}
@@ -457,7 +458,7 @@ func (s *Service) Attachment(ctx context.Context, uid *uuid.UUID, noteID, attach
 			return db.Attachment{}, err
 		}
 	}
-	if _, err := s.store.GetMaterial(ctx, db.GetMaterialParams{ID: noteID, ViewerID: toNullUUID(uid), IsModerator: moderator}); err != nil {
+	if _, err := s.store.GetMaterial(ctx, db.GetMaterialParams{ID: noteID, ViewerID: pgconv.ToNullUUID(uid), IsModerator: moderator}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return db.Attachment{}, ErrNotFound
 		}
@@ -516,10 +517,10 @@ func itemFromView(li db.LibraryItem) Item {
 	it := Item{
 		ID:             li.ID,
 		Title:          li.Title,
-		Summary:        fromText(li.Summary),
+		Summary:        pgconv.FromText(li.Summary),
 		Kind:           li.Kind,
-		Semester:       fromInt2(li.Semester),
-		Author:         Author{ID: li.UserID, DisplayName: li.AuthorName, Faculty: fromText(li.AuthorFaculty)},
+		Semester:       pgconv.FromInt2(li.Semester),
+		Author:         Author{ID: li.UserID, DisplayName: li.AuthorName, Faculty: pgconv.FromText(li.AuthorFaculty)},
 		RatingCount:    li.RatingCount,
 		Views:          li.Views,
 		CommentsCount:  li.CommentsCount,
@@ -532,7 +533,7 @@ func itemFromView(li db.LibraryItem) Item {
 		it.RatingAverage = &avg
 	}
 	if li.LibrarySubjectID.Valid {
-		it.Subject = &SubjectRef{ID: li.LibrarySubjectID.UUID, Title: li.SubjectTitle.String, Color: fromText(li.SubjectColor)}
+		it.Subject = &SubjectRef{ID: li.LibrarySubjectID.UUID, Title: li.SubjectTitle.String, Color: pgconv.FromText(li.SubjectColor)}
 	}
 	return it
 }
@@ -624,41 +625,4 @@ func decodeCursor(s string, dst any) error {
 		}
 	}
 	return nil
-}
-
-func toNullUUID(id *uuid.UUID) uuid.NullUUID {
-	if id == nil {
-		return uuid.NullUUID{}
-	}
-	return uuid.NullUUID{UUID: *id, Valid: true}
-}
-
-func toText(s *string) pgtype.Text {
-	if s == nil {
-		return pgtype.Text{}
-	}
-	return pgtype.Text{String: *s, Valid: true}
-}
-
-func fromText(t pgtype.Text) *string {
-	if !t.Valid {
-		return nil
-	}
-	v := t.String
-	return &v
-}
-
-func toInt2(v *int16) pgtype.Int2 {
-	if v == nil {
-		return pgtype.Int2{}
-	}
-	return pgtype.Int2{Int16: *v, Valid: true}
-}
-
-func fromInt2(v pgtype.Int2) *int16 {
-	if !v.Valid {
-		return nil
-	}
-	x := v.Int16
-	return &x
 }

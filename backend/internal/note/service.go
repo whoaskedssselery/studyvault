@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/pgconv"
 	"github.com/whoaskedssselery/studyvault/backend/internal/search"
 )
 
@@ -180,15 +181,15 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (Note,
 	err := s.inTx(ctx, func(st Store) error {
 		n, err := st.CreateNote(ctx, db.CreateNoteParams{
 			UserID:           userID,
-			SubjectID:        toNullUUID(in.SubjectID),
+			SubjectID:        pgconv.ToNullUUID(in.SubjectID),
 			Title:            in.Title,
 			Content:          in.Content,
 			ContentText:      ExtractText(in.Content),
 			IsPinned:         in.IsPinned,
 			Kind:             kind,
-			Summary:          toText(in.Description),
-			Semester:         toInt2(in.Semester),
-			LibrarySubjectID: toNullUUID(in.LibrarySubjectID),
+			Summary:          pgconv.ToText(in.Description),
+			Semester:         pgconv.ToInt2(in.Semester),
+			LibrarySubjectID: pgconv.ToNullUUID(in.LibrarySubjectID),
 		})
 		if err != nil {
 			return fmt.Errorf("create note: %w", err)
@@ -249,14 +250,14 @@ func (s *Service) Update(ctx context.Context, userID, id uuid.UUID, p Patch) (No
 		ID:                id,
 		UserID:            userID,
 		SetSubject:        p.SetSubject,
-		SubjectID:         toNullUUID(p.SubjectID),
+		SubjectID:         pgconv.ToNullUUID(p.SubjectID),
 		Content:           p.Content,
 		SetSummary:        p.SetDescription,
-		Summary:           toText(p.Description),
+		Summary:           pgconv.ToText(p.Description),
 		SetSemester:       p.SetSemester,
-		Semester:          toInt2(p.Semester),
+		Semester:          pgconv.ToInt2(p.Semester),
 		SetLibrarySubject: p.SetLibrarySubject,
-		LibrarySubjectID:  toNullUUID(p.LibrarySubjectID),
+		LibrarySubjectID:  pgconv.ToNullUUID(p.LibrarySubjectID),
 	}
 	if p.Kind != nil {
 		arg.Kind = pgtype.Text{String: *p.Kind, Valid: true}
@@ -327,7 +328,7 @@ func (s *Service) List(ctx context.Context, userID uuid.UUID, f ListFilter) (Pag
 
 	arg := db.ListNotesParams{
 		UserID:    userID,
-		SubjectID: toNullUUID(f.SubjectID),
+		SubjectID: pgconv.ToNullUUID(f.SubjectID),
 		PageSize:  int32(limit + 1), // лишняя строка нужна, чтобы узнать, есть ли следующая страница
 	}
 	if f.Pinned != nil {
@@ -445,36 +446,6 @@ const (
 	StatusRejected  = "rejected"
 )
 
-func toText(s *string) pgtype.Text {
-	if s == nil {
-		return pgtype.Text{}
-	}
-	return pgtype.Text{String: *s, Valid: true}
-}
-
-func fromText(t pgtype.Text) *string {
-	if !t.Valid {
-		return nil
-	}
-	v := t.String
-	return &v
-}
-
-func toInt2(v *int16) pgtype.Int2 {
-	if v == nil {
-		return pgtype.Int2{}
-	}
-	return pgtype.Int2{Int16: *v, Valid: true}
-}
-
-func fromInt2(v pgtype.Int2) *int16 {
-	if !v.Valid {
-		return nil
-	}
-	x := v.Int16
-	return &x
-}
-
 func searchDoc(userID uuid.UUID, n db.Note) search.Doc {
 	return search.Doc{ID: n.ID, UserID: userID, Title: n.Title, ContentText: n.ContentText, Status: n.Status}
 }
@@ -543,12 +514,12 @@ func (s *Service) summaries(ctx context.Context, rows []db.ListNotesRow) ([]Summ
 	for i, r := range rows {
 		out[i] = Summary{
 			ID:               r.ID,
-			SubjectID:        fromNullUUID(r.SubjectID),
+			SubjectID:        pgconv.FromNullUUID(r.SubjectID),
 			Title:            r.Title,
 			IsPinned:         r.IsPinned,
 			Kind:             r.Kind,
 			Status:           r.Status,
-			LibrarySubjectID: fromNullUUID(r.LibrarySubjectID),
+			LibrarySubjectID: pgconv.FromNullUUID(r.LibrarySubjectID),
 			CreatedAt:        r.CreatedAt,
 			UpdatedAt:        r.UpdatedAt,
 			Tags:             tags[r.ID],
@@ -590,35 +561,20 @@ func toNote(n db.Note, tags []Tag) Note {
 	return Note{
 		Summary: Summary{
 			ID:               n.ID,
-			SubjectID:        fromNullUUID(n.SubjectID),
+			SubjectID:        pgconv.FromNullUUID(n.SubjectID),
 			Title:            n.Title,
 			IsPinned:         n.IsPinned,
 			Kind:             n.Kind,
 			Status:           n.Status,
-			LibrarySubjectID: fromNullUUID(n.LibrarySubjectID),
+			LibrarySubjectID: pgconv.FromNullUUID(n.LibrarySubjectID),
 			CreatedAt:        n.CreatedAt,
 			UpdatedAt:        n.UpdatedAt,
 			Tags:             tags,
 		},
 		Content:     n.Content,
-		Description: fromText(n.Summary),
-		Semester:    fromInt2(n.Semester),
+		Description: pgconv.FromText(n.Summary),
+		Semester:    pgconv.FromInt2(n.Semester),
 		PublishedAt: n.PublishedAt,
 		Views:       n.Views,
 	}
-}
-
-func toNullUUID(id *uuid.UUID) uuid.NullUUID {
-	if id == nil {
-		return uuid.NullUUID{}
-	}
-	return uuid.NullUUID{UUID: *id, Valid: true}
-}
-
-func fromNullUUID(id uuid.NullUUID) *uuid.UUID {
-	if !id.Valid {
-		return nil
-	}
-	v := id.UUID
-	return &v
 }

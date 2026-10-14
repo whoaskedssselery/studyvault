@@ -12,6 +12,7 @@ import (
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
+	"github.com/whoaskedssselery/studyvault/backend/internal/pgconv"
 	"github.com/whoaskedssselery/studyvault/backend/internal/storage"
 )
 
@@ -99,7 +100,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (Uploa
 		if !owned {
 			return Upload{}, ErrNoteNotFound
 		}
-		count, err := s.store.CountNoteAttachments(ctx, db.CountNoteAttachmentsParams{NoteID: toNullUUID(in.NoteID), UserID: userID})
+		count, err := s.store.CountNoteAttachments(ctx, db.CountNoteAttachmentsParams{NoteID: pgconv.ToNullUUID(in.NoteID), UserID: userID})
 		if err != nil {
 			return Upload{}, fmt.Errorf("count note attachments: %w", err)
 		}
@@ -125,7 +126,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (Uploa
 	}
 	row, err := s.store.CreateAttachment(ctx, db.CreateAttachmentParams{
 		UserID:    userID,
-		NoteID:    toNullUUID(in.NoteID),
+		NoteID:    pgconv.ToNullUUID(in.NoteID),
 		ObjectKey: key,
 		FileName:  in.FileName,
 		MimeType:  in.MimeType,
@@ -173,7 +174,7 @@ func (s *Service) List(ctx context.Context, userID, noteID uuid.UUID) ([]db.Atta
 	if !owned {
 		return nil, ErrNoteNotFound
 	}
-	rows, err := s.store.ListAttachmentsByNote(ctx, db.ListAttachmentsByNoteParams{NoteID: toNullUUID(&noteID), UserID: userID})
+	rows, err := s.store.ListAttachmentsByNote(ctx, db.ListAttachmentsByNoteParams{NoteID: pgconv.ToNullUUID(&noteID), UserID: userID})
 	if err != nil {
 		return nil, fmt.Errorf("list attachments: %w", err)
 	}
@@ -224,13 +225,6 @@ func validate(in Input) error {
 		return fmt.Errorf("%w: file type %q is not allowed", ErrInvalid, in.MimeType)
 	}
 	return nil
-}
-
-func toNullUUID(id *uuid.UUID) uuid.NullUUID {
-	if id == nil {
-		return uuid.NullUUID{}
-	}
-	return uuid.NullUUID{UUID: *id, Valid: true}
 }
 
 // UserObjectKeys возвращает ключи всех файлов пользователя в хранилище. Вызывается перед удалением аккаунта: после него
