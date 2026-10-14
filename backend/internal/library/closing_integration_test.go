@@ -577,3 +577,38 @@ func TestIntegration_PasswordReset_OnARealDatabase(t *testing.T) {
 		t.Errorf("an expired link: %v", err)
 	}
 }
+
+// Сам запрос «забрать токен» должен быть атомарным и одноразовым, независимо от того, что потом чистит сервис.
+func TestIntegration_ClaimPasswordResetToken_IsOneShotAndHonoursExpiry(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	user := e.user(t, "claimer")
+	now := time.Now()
+	create := func(hash string, expires time.Time) {
+		t.Helper()
+		if err := e.q.CreatePasswordResetToken(ctx, db.CreatePasswordResetTokenParams{UserID: user, TokenHash: hash, ExpiresAt: expires}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	claim := func(hash string, at time.Time) (uuid.UUID, error) {
+		return e.q.ClaimPasswordResetToken(ctx, db.ClaimPasswordResetTokenParams{TokenHash: hash, ExpiresAt: at})
+	}
+	create("live-"+uuid.NewString(), now.Add(time.Hour))
+	create("old-"+uuid.NewString(), now.Add(-time.Minute))
+	var live, old string
+	_ = e.tx.QueryRow(ctx, `SELECT token_hash FROM password_reset_tokens WHERE token_hash LIKE 'live-%' AND user_id = $1`, user).Scan(&live)
+	_ = e.tx.QueryRow(ctx, `SELECT token_hash FROM password_reset_tokens WHERE token_hash LIKE 'old-%' AND user_id = $1`, user).Scan(&old)
+
+	if got, err := claim(live, now); err != nil || got != user {
+		t.Fatalf("the first claim: %v, %v", got, err)
+	}
+	if _, err := claim(live, now); err == nil {
+		t.Error("a token must be claimable once")
+	}
+	if _, err := claim(old, now); err == nil {
+		t.Error("an expired token must not be claimable")
+	}
+	if _, err := claim("no-such-hash", now); err == nil {
+		t.Error("an unknown token must not be claimable")
+	}
+}

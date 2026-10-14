@@ -392,3 +392,25 @@ func TestListLibrary_PassesTheAuthorAndTagFilters_AndCardsCarryTags(t *testing.T
 		}
 	}
 }
+
+// Любой эндпоинт библиотеки при неожиданной ошибке сервиса отвечает 500 в общем формате и не выдаёт подробностей.
+func TestLibraryEndpoints_UnexpectedErrorsAreHiddenBehind500(t *testing.T) {
+	id := uuid.NewString()
+	for _, c := range []struct{ method, path, body string }{
+		{"GET", "/v1/library", ""}, {"GET", "/v1/library/" + id, ""}, {"GET", "/v1/library-subjects", ""},
+		{"POST", "/v1/library-subjects", `{"title":"x"}`}, {"PATCH", "/v1/library-subjects/" + id, `{"title":"x"}`}, {"DELETE", "/v1/library-subjects/" + id, ""},
+		{"GET", "/v1/library/" + id + "/comments", ""}, {"POST", "/v1/library/" + id + "/comments", `{"body":"x"}`},
+		{"PATCH", "/v1/comments/" + id, `{"body":"x"}`}, {"DELETE", "/v1/comments/" + id, ""},
+		{"PUT", "/v1/library/" + id + "/rating", `{"value":3}`}, {"PUT", "/v1/library/" + id + "/bookmark", ""},
+		{"DELETE", "/v1/library/" + id + "/bookmark", ""}, {"GET", "/v1/bookmarks", ""},
+		{"GET", "/v1/moderation/queue", ""}, {"POST", "/v1/moderation/" + id + "/decision", `{"decision":"approved"}`},
+		{"POST", "/v1/moderation/" + id + "/unpublish", `{"reason":"x"}`}, {"POST", "/v1/notes/" + id + "/submit", ""},
+		{"POST", "/v1/notes/" + id + "/withdraw", ""}, {"GET", "/v1/ranking/authors", ""}, {"GET", "/v1/authors/" + id, ""},
+	} {
+		e := newLibEnv(&fakeLibrary{err: errors.New("pq: secret internal detail")})
+		rec := e.as(c.method, c.path, c.body)
+		if rec.Code != http.StatusInternalServerError || errorCode(t, rec) != "internal" || strings.Contains(rec.Body.String(), "secret") {
+			t.Errorf("%s %s: status = %d, body = %s", c.method, c.path, rec.Code, rec.Body)
+		}
+	}
+}

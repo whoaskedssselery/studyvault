@@ -852,3 +852,55 @@ func TestDeleteAccount_NeedsTheRightPassword(t *testing.T) {
 		t.Errorf("deleting twice: err = %v", err)
 	}
 }
+
+// Сбой на любом шаге подтверждения сброса не должен выглядеть успехом.
+type resetFailures struct {
+	*fakeStore
+	endSessions, setPassword error
+	setPasswordRows          *int64
+}
+
+func (r resetFailures) DeleteUserRefreshTokens(ctx context.Context, id uuid.UUID) error {
+	if r.endSessions != nil {
+		return r.endSessions
+	}
+	return r.fakeStore.DeleteUserRefreshTokens(ctx, id)
+}
+
+func (r resetFailures) UpdateUserPassword(ctx context.Context, a db.UpdateUserPasswordParams) (int64, error) {
+	if r.setPassword != nil {
+		return 0, r.setPassword
+	}
+	if r.setPasswordRows != nil {
+		return *r.setPasswordRows, nil
+	}
+	return r.fakeStore.UpdateUserPassword(ctx, a)
+}
+
+func TestConfirmPasswordReset_FailureOnAnyStepIsReported(t *testing.T) {
+	ctx := context.Background()
+	zero := int64(0)
+	for name, st := range map[string]func(*fakeStore) resetFailures{
+		"sessions cannot be ended": func(f *fakeStore) resetFailures {
+			return resetFailures{fakeStore: f, endSessions: errors.New("db down")}
+		},
+		"password cannot be saved": func(f *fakeStore) resetFailures {
+			return resetFailures{fakeStore: f, setPassword: errors.New("db down")}
+		},
+		"the account vanished": func(f *fakeStore) resetFailures { return resetFailures{fakeStore: f, setPasswordRows: &zero} },
+	} {
+		base, mailer := newFakeStore(), newMailer()
+		svc := newRecoveryService(base, mailer, time.Now)
+		loggedIn(t, svc)
+		_ = svc.RequestPasswordReset(ctx, "a@x.io")
+		token := tokenFrom(t, mailer.next(t))
+
+		failing := auth.NewService(st(base), secret, auth.WithBcryptCost(bcrypt.MinCost))
+		if err := failing.ConfirmPasswordReset(ctx, token, "brand-new-pass"); err == nil {
+			t.Errorf("%s: the failure must be reported", name)
+		}
+		if _, err := svc.Login(ctx, "a@x.io", "brand-new-pass", ""); err == nil && name != "sessions cannot be ended" {
+			t.Errorf("%s: the new password must not be active", name)
+		}
+	}
+}
