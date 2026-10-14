@@ -128,6 +128,10 @@ jobs:
       - name: Wait for the API
         run: curl --retry 60 --retry-all-errors --retry-delay 1 -fsS http://localhost:8080/v1/health
 
+      # Демо-данные нужны не только для показа: сквозной прогон входит под seed-модератором.
+      - name: Demo data
+        run: docker compose --profile app run --rm --entrypoint /seed api
+
       - name: Smoke test
         run: bash scripts/smoke.sh http://localhost:8080
 
