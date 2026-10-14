@@ -954,10 +954,9 @@ func TestRequestPasswordReset_TheCooldownIsPerAccount(t *testing.T) {
 	}
 	_ = svc.RequestPasswordReset(ctx, "a@x.io")
 	_ = svc.RequestPasswordReset(ctx, "b@x.io")
-	if m := mailer.next(t); m.to != "a@x.io" {
-		t.Errorf("first mail to %s", m.to)
-	}
-	if m := mailer.next(t); m.to != "b@x.io" {
-		t.Errorf("second mail to %s", m.to)
+	// Письма уходят в фоне, порядок их отправки не определён: сравниваем набор адресатов.
+	got := map[string]bool{mailer.next(t).to: true, mailer.next(t).to: true}
+	if !got["a@x.io"] || !got["b@x.io"] || len(got) != 2 {
+		t.Errorf("mails went to %v, want one each to a@x.io and b@x.io", got)
 	}
 }
