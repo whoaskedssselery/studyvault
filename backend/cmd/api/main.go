@@ -79,9 +79,9 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("mail: %w", err)
 		}
-		authOpts = append(authOpts, auth.WithMailer(mailer, cfg.SMTP.ResetURL))
+		authOpts = append(authOpts, auth.WithMailer(mailer, cfg.SMTP.ResetURL), auth.WithEmailVerification(cfg.SMTP.VerifyURL))
 	} else {
-		slog.Warn("SMTP_HOST is not set: password reset by e-mail is disabled")
+		slog.Warn("SMTP_HOST is not set: password reset and e-mail verification are disabled, new accounts count as verified")
 	}
 	authSvc := auth.NewService(queries, cfg.JWTSecret, authOpts...)
 	deps := httpapi.Deps{

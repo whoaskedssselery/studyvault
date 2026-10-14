@@ -43,6 +43,12 @@ type Store interface {
 	DeleteExpiredPasswordResetTokens(ctx context.Context, expiresAt time.Time) (int64, error)
 	LatestPasswordResetExpiry(ctx context.Context, userID uuid.UUID) (time.Time, error)
 	DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
+	VerifyUserEmail(ctx context.Context, id uuid.UUID) (int64, error)
+	CreateEmailVerificationToken(ctx context.Context, arg db.CreateEmailVerificationTokenParams) error
+	DeleteUserEmailVerificationTokens(ctx context.Context, userID uuid.UUID) error
+	ClaimEmailVerificationToken(ctx context.Context, arg db.ClaimEmailVerificationTokenParams) (uuid.UUID, error)
+	DeleteExpiredEmailVerificationTokens(ctx context.Context, expiresAt time.Time) (int64, error)
+	LatestEmailVerificationExpiry(ctx context.Context, userID uuid.UUID) (time.Time, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (db.User, error)
 	UpdateUserProfile(ctx context.Context, arg db.UpdateUserProfileParams) (db.User, error)
 	SetUserRoleByEmail(ctx context.Context, arg db.SetUserRoleByEmailParams) (int64, error)
@@ -69,6 +75,7 @@ type Service struct {
 	dummyHash []byte // для выравнивания времени ответа, если пользователя нет
 	mailer    Mailer // nil: сброс пароля по почте выключен
 	resetURL  string
+	verifyURL string // пусто: подтверждения почты нет
 }
 
 type Option func(*Service)
@@ -103,7 +110,29 @@ func (s *Service) Register(ctx context.Context, email, password, displayName, us
 		}
 		return Result{}, fmt.Errorf("create user: %w", err)
 	}
+	user, err = s.confirmOrAskToVerify(ctx, user)
+	if err != nil {
+		return Result{}, err
+	}
 	return s.startSession(ctx, user, userAgent)
+}
+
+// confirmOrAskToVerify: при настроенной почте новому аккаунту уходит письмо со ссылкой, а без почты подтверждать нечем, и
+// адрес сразу считается подтверждённым, иначе аккаунты навсегда остались бы без права публиковать. Сбой отправки письма
+// не отменяет регистрацию: ссылку можно запросить заново.
+func (s *Service) confirmOrAskToVerify(ctx context.Context, user db.User) (db.User, error) {
+	if s.verificationEnabled() {
+		if err := s.sendVerification(ctx, user); err != nil {
+			slog.ErrorContext(ctx, "send the verification mail after registration", "err", err)
+		}
+		return user, nil
+	}
+	if _, err := s.store.VerifyUserEmail(ctx, user.ID); err != nil {
+		return db.User{}, fmt.Errorf("verify email: %w", err)
+	}
+	now := s.now()
+	user.EmailVerifiedAt = &now
+	return user, nil
 }
 
 func (s *Service) Login(ctx context.Context, email, password, userAgent string) (Result, error) {
@@ -226,7 +255,7 @@ func sanitizeUserAgent(ua string) string {
 	return strings.TrimSpace(ua)
 }
 
-// PurgeExpiredTokens удаляет истёкшие refresh-токены и ссылки сброса пароля (истёкшие и уже использованные) и возвращает их число. Без этого таблица росла бы вечно:
+// PurgeExpiredTokens удаляет истёкшие refresh-токены и ссылки сброса пароля и подтверждения почты (истёкшие и уже использованные) и возвращает их число. Без этого таблица росла бы вечно:
 // каждый вход и каждое обновление добавляют строку. Отозванные, но ещё не истёкшие токены остаются,
 // потому что по ним распознаётся повторное предъявление уже использованного токена.
 func (s *Service) PurgeExpiredTokens(ctx context.Context) (int64, error) {
@@ -238,7 +267,11 @@ func (s *Service) PurgeExpiredTokens(ctx context.Context) (int64, error) {
 	if err != nil {
 		return n, fmt.Errorf("purge expired password reset tokens: %w", err)
 	}
-	return n + m, nil
+	k, err := s.store.DeleteExpiredEmailVerificationTokens(ctx, s.now())
+	if err != nil {
+		return n + m, fmt.Errorf("purge expired verification tokens: %w", err)
+	}
+	return n + m + k, nil
 }
 
 // RunTokenPurge чистит истёкшие токены сразу и затем каждые every, пока не отменён ctx. Ошибка очистки не

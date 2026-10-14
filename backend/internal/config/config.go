@@ -86,6 +86,7 @@ func Load() (Config, error) {
 	cfg.SMTP = SMTP{
 		Host: os.Getenv("SMTP_HOST"), Port: getenv("SMTP_PORT", "587"), Username: os.Getenv("SMTP_USERNAME"),
 		Password: os.Getenv("SMTP_PASSWORD"), From: os.Getenv("SMTP_FROM"), ResetURL: os.Getenv("PASSWORD_RESET_URL"),
+		VerifyURL: os.Getenv("EMAIL_VERIFY_URL"),
 	}
 	if cfg.SMTP.Host != "" {
 		if cfg.SMTP.From == "" || cfg.SMTP.ResetURL == "" {
@@ -93,6 +94,13 @@ func Load() (Config, error) {
 		}
 		if u, err := url.Parse(cfg.SMTP.ResetURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 			return Config{}, fmt.Errorf("PASSWORD_RESET_URL must be an http(s) address, got %q", cfg.SMTP.ResetURL)
+		}
+		if cfg.SMTP.VerifyURL == "" { // по умолчанию та же страница фронтенда, что и для сброса пароля, но с путём /verify-email
+			u, _ := url.Parse(cfg.SMTP.ResetURL)
+			cfg.SMTP.VerifyURL = u.Scheme + "://" + u.Host + "/verify-email"
+		}
+		if u, err := url.Parse(cfg.SMTP.VerifyURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return Config{}, fmt.Errorf("EMAIL_VERIFY_URL must be an http(s) address, got %q", cfg.SMTP.VerifyURL)
 		}
 		if (cfg.SMTP.Username == "") != (cfg.SMTP.Password == "") {
 			return Config{}, errors.New("SMTP_USERNAME and SMTP_PASSWORD must be set together")
@@ -120,7 +128,7 @@ func getenv(key, fallback string) string {
 	return fallback
 }
 
-// SMTP описывает почтовый сервер для писем со ссылкой сброса пароля.
+// SMTP описывает почтовый сервер для писем со ссылками сброса пароля и подтверждения почты.
 type SMTP struct {
 	Host     string
 	Port     string
@@ -128,6 +136,8 @@ type SMTP struct {
 	Password string
 	From     string
 	ResetURL string // адрес страницы фронтенда, куда ведёт ссылка из письма; токен добавляется параметром token
+	// VerifyURL — страница фронтенда для ссылки подтверждения почты; по умолчанию /verify-email на том же сайте, что ResetURL.
+	VerifyURL string
 }
 
 // S3 описывает S3-совместимое хранилище файлов.

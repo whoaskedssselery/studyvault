@@ -267,6 +267,28 @@ func TestLoad_SMTP_IsOptional_AndAllOrNothing(t *testing.T) {
 	}
 }
 
+func TestLoad_EmailVerifyURL_DefaultsToTheSiteOfTheResetPage_AndMustBeAnHTTPAddress(t *testing.T) {
+	smtpEnv(t, "mailpit", "studyvault@example.com", "https://app.example.com/reset-password?lang=ru", "", "")
+	t.Setenv("EMAIL_VERIFY_URL", "")
+	cfg, err := config.Load()
+	if err != nil || cfg.SMTP.VerifyURL != "https://app.example.com/verify-email" {
+		t.Errorf("default = %q, %v, want /verify-email on the same site", cfg.SMTP.VerifyURL, err)
+	}
+
+	t.Setenv("EMAIL_VERIFY_URL", "https://other.example.com/confirm")
+	cfg, err = config.Load()
+	if err != nil || cfg.SMTP.VerifyURL != "https://other.example.com/confirm" {
+		t.Errorf("an explicit address must win: %q, %v", cfg.SMTP.VerifyURL, err)
+	}
+
+	for _, bad := range []string{"javascript:alert(1)", "/verify-email", "ftp://x.example.com/v"} {
+		t.Setenv("EMAIL_VERIFY_URL", bad)
+		if _, err := config.Load(); err == nil {
+			t.Errorf("EMAIL_VERIFY_URL=%q must be rejected", bad)
+		}
+	}
+}
+
 func TestLoad_TrustedProxies(t *testing.T) {
 	setValidEnv(t)
 	t.Setenv("TRUSTED_PROXIES", "")

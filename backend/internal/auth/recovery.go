@@ -74,7 +74,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) error 
 		return fmt.Errorf("store reset token: %w", err)
 	}
 
-	link, err := resetLink(s.resetURL, raw)
+	link, err := linkWithToken(s.resetURL, raw)
 	if err != nil {
 		return fmt.Errorf("build reset link: %w", err)
 	}
@@ -124,6 +124,10 @@ func (s *Service) ConfirmPasswordReset(ctx context.Context, rawToken, newPasswor
 	if err := s.store.DeleteUserPasswordResetTokens(ctx, userID); err != nil {
 		slog.ErrorContext(ctx, "drop used reset tokens", "err", err) // уже использованные чистит и фоновая очистка
 	}
+	// Ссылка пришла на почту аккаунта, и пользователь её открыл: адрес его, подтверждать ещё раз незачем.
+	if _, err := s.store.VerifyUserEmail(ctx, userID); err != nil {
+		slog.ErrorContext(ctx, "mark e-mail verified after password reset", "err", err)
+	}
 	return nil
 }
 
@@ -148,11 +152,11 @@ func (s *Service) DeleteAccount(ctx context.Context, id uuid.UUID, password stri
 	return nil
 }
 
-// resetLink добавляет токен к адресу страницы сброса, сохраняя уже имеющиеся параметры адреса.
-func resetLink(base, token string) (string, error) {
+// linkWithToken добавляет токен к адресу страницы фронтенда, сохраняя уже имеющиеся параметры адреса.
+func linkWithToken(base, token string) (string, error) {
 	u, err := url.Parse(base)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return "", fmt.Errorf("reset URL %q is not an http(s) address", base)
+		return "", fmt.Errorf("link URL %q is not an http(s) address", base)
 	}
 	q := u.Query()
 	q.Set("token", token)
