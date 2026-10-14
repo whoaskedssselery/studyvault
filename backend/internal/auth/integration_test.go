@@ -107,9 +107,10 @@ func TestIntegration_ChangePasswordAndProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	renamed, err := svc.UpdateDisplayName(ctx, reg.User.ID, "Patricia")
+	patricia := "Patricia"
+	renamed, err := svc.UpdateProfile(ctx, reg.User.ID, auth.ProfilePatch{DisplayName: &patricia})
 	if err != nil || renamed.DisplayName != "Patricia" {
-		t.Fatalf("UpdateDisplayName = %+v, %v", renamed, err)
+		t.Fatalf("UpdateProfile = %+v, %v", renamed, err)
 	}
 	fresh, err := svc.ChangePassword(ctx, reg.User.ID, "password123", "brand-new-pass", "phone")
 	if err != nil {

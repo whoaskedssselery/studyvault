@@ -53,7 +53,7 @@ SELECT id, sqlc.arg('target_id') FROM sources
 ON CONFLICT DO NOTHING;
 
 -- name: ListBacklinks :many
-SELECT n.id, n.subject_id, n.title, n.is_pinned, n.created_at, n.updated_at
+SELECT n.id, n.subject_id, n.title, n.is_pinned, n.kind, n.status, n.library_subject_id, n.created_at, n.updated_at
 FROM note_links l
 JOIN notes n ON n.id = l.source_note_id
 WHERE l.target_note_id = $1 AND n.user_id = $2 AND n.deleted_at IS NULL

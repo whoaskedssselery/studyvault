@@ -9,14 +9,26 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	// ---------------------------------------------------------------------------
+	// Избранное
+	// ---------------------------------------------------------------------------
+	AddBookmark(ctx context.Context, arg AddBookmarkParams) error
+	// Решение принимается только по материалу, который сейчас на проверке (защита от гонки двух модераторов).
+	ApproveNote(ctx context.Context, id uuid.UUID) (Note, error)
 	CountNoteAttachments(ctx context.Context, arg CountNoteAttachmentsParams) (int64, error)
 	CountSubjects(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountTagsByUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountUserTags(ctx context.Context, arg CountUserTagsParams) (int64, error)
 	CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (Attachment, error)
+	// ---------------------------------------------------------------------------
+	// Комментарии
+	// ---------------------------------------------------------------------------
+	CreateComment(ctx context.Context, arg CreateCommentParams) (Comment, error)
+	CreateLibrarySubject(ctx context.Context, arg CreateLibrarySubjectParams) (LibrarySubject, error)
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSubject(ctx context.Context, arg CreateSubjectParams) (Subject, error)
@@ -27,32 +39,82 @@ type Querier interface {
 	// Удаляются только истёкшие токены. Отозванные, но ещё не истёкшие должны остаться:
 	// по ним распознаётся повторное предъявление использованного токена.
 	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time.Time) (int64, error)
+	// Предмет, на который ссылаются материалы, удалить нельзя (ON DELETE RESTRICT): вернётся ошибка внешнего ключа.
+	DeleteLibrarySubject(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSubject(ctx context.Context, arg DeleteSubjectParams) (int64, error)
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	// Смена пароля стирает сессии, а не отзывает их: устаревшее устройство, предъявив старый токен, получит
 	// обычный отказ, а не срабатывание защиты от кражи, которое закрыло бы и новую сессию.
 	DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
+	// Изменение вложений опубликованного материала возвращает его на проверку: иначе файл можно было бы
+	// подменить уже после одобрения.
+	DemotePublishedNote(ctx context.Context, arg DemotePublishedNoteParams) error
 	// Перепроверка результатов поиска в Postgres: Meilisearch лишь предлагает кандидатов, а решает БД.
 	// Чужие и удалённые заметки отсекаются здесь, даже если индекс устарел.
 	FilterLiveNotes(ctx context.Context, arg FilterLiveNotesParams) ([]FilterLiveNotesRow, error)
 	GetAttachment(ctx context.Context, arg GetAttachmentParams) (Attachment, error)
+	// Причина последнего отказа: автор видит её рядом со своим материалом.
+	GetLastRejectionReason(ctx context.Context, noteID uuid.UUID) (pgtype.Text, error)
+	// ---------------------------------------------------------------------------
+	// Страница материала. Видимость: опубликованный видят все; черновик, отклонённый и материал на проверке — автор;
+	// модератор видит всё, кроме чужих черновиков. Для остальных запрос не вернёт строк (то есть 404).
+	// ---------------------------------------------------------------------------
+	GetMaterial(ctx context.Context, arg GetMaterialParams) (GetMaterialRow, error)
 	GetNote(ctx context.Context, arg GetNoteParams) (Note, error)
+	GetNoteAttachment(ctx context.Context, arg GetNoteAttachmentParams) (Attachment, error)
+	// Состояние материала для решения модератора.
+	GetNoteStatus(ctx context.Context, id uuid.UUID) (GetNoteStatusRow, error)
+	// Автор опубликованного материала. Нет строки: материала нет, он не опубликован или удалён.
+	GetPublishedAuthor(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	GetRatingSummary(ctx context.Context, noteID uuid.UUID) (GetRatingSummaryRow, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, lower string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	// Просмотр засчитывается только у опубликованных материалов.
+	IncrementViews(ctx context.Context, id uuid.UUID) error
+	InsertModerationDecision(ctx context.Context, arg InsertModerationDecisionParams) error
+	// Общий предмет библиотеки должен существовать.
+	LibrarySubjectExists(ctx context.Context, id uuid.UUID) (bool, error)
 	ListAttachmentsByNote(ctx context.Context, arg ListAttachmentsByNoteParams) ([]Attachment, error)
 	ListBacklinks(ctx context.Context, arg ListBacklinksParams) ([]ListBacklinksRow, error)
+	// Избранное пользователя: новые сверху; снятые с публикации материалы пропадают (их нет в library_items).
+	ListBookmarkedLibrary(ctx context.Context, arg ListBookmarkedLibraryParams) ([]ListBookmarkedLibraryRow, error)
+	// Старые сверху. Курсор: (created_at, id) последней строки предыдущей страницы.
+	ListComments(ctx context.Context, arg ListCommentsParams) ([]ListCommentsRow, error)
 	ListGraphEdges(ctx context.Context, userID uuid.UUID) ([]NoteLink, error)
 	ListGraphNodes(ctx context.Context, userID uuid.UUID) ([]ListGraphNodesRow, error)
+	// Перепроверка результатов поиска: движок предлагает кандидатов, а решает база. Снятый с публикации
+	// или удалённый материал сюда не попадает, даже если индекс отстал.
+	ListLibraryByIDs(ctx context.Context, arg ListLibraryByIDsParams) ([]LibraryItem, error)
+	// Самые просматриваемые.
+	ListLibraryMostViewed(ctx context.Context, arg ListLibraryMostViewedParams) ([]LibraryItem, error)
+	// ---------------------------------------------------------------------------
+	// Лента библиотеки: только опубликованные материалы (так устроено представление library_items)
+	// ---------------------------------------------------------------------------
+	// Новые сверху. Курсор: (published_at, id) последней строки предыдущей страницы.
+	ListLibraryNewest(ctx context.Context, arg ListLibraryNewestParams) ([]LibraryItem, error)
+	// ---------------------------------------------------------------------------
+	// Общий список предметов библиотеки (ведёт модератор)
+	// ---------------------------------------------------------------------------
+	ListLibrarySubjects(ctx context.Context) ([]ListLibrarySubjectsRow, error)
+	// Лучшие по средней оценке; при равенстве выигрывает материал с большим числом оценок.
+	ListLibraryTopRated(ctx context.Context, arg ListLibraryTopRatedParams) ([]LibraryItem, error)
+	ListNoteAttachmentsAny(ctx context.Context, noteID uuid.NullUUID) ([]Attachment, error)
 	ListNoteTags(ctx context.Context, noteIds []uuid.UUID) ([]ListNoteTagsRow, error)
 	// Список без содержимого. Страницы по ключу (updated_at, id): курсор — это последняя строка
 	// предыдущей страницы. Все фильтры необязательные: NULL значит «не фильтровать».
 	ListNotes(ctx context.Context, arg ListNotesParams) ([]ListNotesRow, error)
 	// Постраничная выгрузка живых заметок для полной пересборки индекса.
 	ListNotesForIndex(ctx context.Context, arg ListNotesForIndexParams) ([]ListNotesForIndexRow, error)
+	// Очередь модератора: старые сверху. Курсор: (updated_at, id) последней строки предыдущей страницы.
+	ListPendingMaterials(ctx context.Context, arg ListPendingMaterialsParams) ([]ListPendingMaterialsRow, error)
 	ListSubjects(ctx context.Context, userID uuid.UUID) ([]Subject, error)
 	ListTags(ctx context.Context, userID uuid.UUID) ([]Tag, error)
+	// Личное состояние зрителя для набора материалов: его оценка и отметка «в избранном».
+	ListViewerState(ctx context.Context, arg ListViewerStateParams) ([]ListViewerStateRow, error)
 	NoteOwnedByUser(ctx context.Context, arg NoteOwnedByUserParams) (bool, error)
+	RejectNote(ctx context.Context, id uuid.UUID) (Note, error)
+	RemoveBookmark(ctx context.Context, arg RemoveBookmarkParams) error
 	// Входящие связи заметки: кто из живых заметок пользователя упоминает её текущее название.
 	// Нужно, когда заметка создана или переименована позже, чем на неё сослались. Поиск идёт по индексу
 	// упоминаний. Устаревшие рёбра (текст больше не содержит такого названия) удаляются.
@@ -72,16 +134,35 @@ type Querier interface {
 	// Возвращает число изменённых строк: 0 значит, что токен уже отозван (или его нет).
 	// Это делает ротацию атомарной: из двух параллельных запросов выиграет только один.
 	RevokeRefreshToken(ctx context.Context, tokenHash string) (int64, error)
+	// Назначение роли: только доверенная операция на сервере (cmd/promote), через API она недоступна.
+	SetUserRoleByEmail(ctx context.Context, arg SetUserRoleByEmailParams) (int64, error)
+	// Удалить комментарий может его автор или модератор. 0 строк: комментария нет или он чужой.
+	SoftDeleteComment(ctx context.Context, arg SoftDeleteCommentParams) (int64, error)
 	SoftDeleteNote(ctx context.Context, arg SoftDeleteNoteParams) (int64, error)
 	SubjectOwnedByUser(ctx context.Context, arg SubjectOwnedByUserParams) (bool, error)
-	// Частичное обновление. NULL в title, content, content_text и is_pinned значит «не менять».
-	// subject_id может быть очищен, поэтому «менять или нет» передаётся флагом set_subject.
+	// ---------------------------------------------------------------------------
+	// Публикация и модерация
+	// ---------------------------------------------------------------------------
+	// Отправка автором на проверку: из черновика или после отказа. 0 строк: заметки нет или статус не тот.
+	SubmitNote(ctx context.Context, arg SubmitNoteParams) (Note, error)
+	UpdateLibrarySubject(ctx context.Context, arg UpdateLibrarySubjectParams) (LibrarySubject, error)
+	// Частичное обновление. NULL в title, content, content_text, is_pinned и kind значит «не менять».
+	// subject_id, summary, semester и library_subject_id можно очистить, поэтому «менять или нет» для них
+	// передаётся флагами set_*.
+	// Правка самого материала (текст, название, тип, описание, семестр, общий предмет) возвращает опубликованный
+	// материал на проверку: он пропадает из библиотеки, пока модератор не одобрит его снова. Закрепление и личный
+	// предмет на публикацию не влияют.
 	UpdateNote(ctx context.Context, arg UpdateNoteParams) (Note, error)
 	// Частичное обновление. title: NULL значит «не менять». Для color и semester NULL тоже
 	// осмысленное значение (очистить поле), поэтому «менять или нет» передаётся отдельным флагом.
 	UpdateSubject(ctx context.Context, arg UpdateSubjectParams) (Subject, error)
-	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (int64, error)
+	// Имя меняется, только если передано; факультет можно очистить, поэтому «менять или нет» задаёт флаг.
+	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error)
+	// ---------------------------------------------------------------------------
+	// Оценки
+	// ---------------------------------------------------------------------------
+	UpsertRating(ctx context.Context, arg UpsertRatingParams) error
 	UserAttachmentUsage(ctx context.Context, userID uuid.UUID) (UserAttachmentUsageRow, error)
 }
 

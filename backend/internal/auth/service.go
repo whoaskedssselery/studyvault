@@ -38,7 +38,8 @@ type Store interface {
 	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time.Time) (int64, error)
 	DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	GetUserByID(ctx context.Context, id uuid.UUID) (db.User, error)
-	UpdateUserDisplayName(ctx context.Context, arg db.UpdateUserDisplayNameParams) (db.User, error)
+	UpdateUserProfile(ctx context.Context, arg db.UpdateUserProfileParams) (db.User, error)
+	SetUserRoleByEmail(ctx context.Context, arg db.SetUserRoleByEmailParams) (int64, error)
 	UpdateUserPassword(ctx context.Context, arg db.UpdateUserPasswordParams) (int64, error)
 }
 
@@ -266,15 +267,52 @@ func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (db.User, error) {
 	return u, nil
 }
 
-func (s *Service) UpdateDisplayName(ctx context.Context, id uuid.UUID, displayName string) (db.User, error) {
-	u, err := s.store.UpdateUserDisplayName(ctx, db.UpdateUserDisplayNameParams{ID: id, DisplayName: displayName})
+// ProfilePatch — частичное изменение профиля. nil в DisplayName значит «не менять»; факультет можно очистить,
+// поэтому «передан ли он» хранится отдельным флагом.
+type ProfilePatch struct {
+	DisplayName *string
+	SetFaculty  bool
+	Faculty     *string
+}
+
+func (s *Service) UpdateProfile(ctx context.Context, id uuid.UUID, p ProfilePatch) (db.User, error) {
+	arg := db.UpdateUserProfileParams{ID: id, SetFaculty: p.SetFaculty}
+	if p.DisplayName != nil {
+		arg.DisplayName = pgtype.Text{String: *p.DisplayName, Valid: true}
+	}
+	if p.Faculty != nil {
+		arg.Faculty = pgtype.Text{String: *p.Faculty, Valid: true}
+	}
+	u, err := s.store.UpdateUserProfile(ctx, arg)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return db.User{}, ErrUserNotFound
 	}
 	if err != nil {
-		return db.User{}, fmt.Errorf("update display name: %w", err)
+		return db.User{}, fmt.Errorf("update profile: %w", err)
 	}
 	return u, nil
+}
+
+// Роли пользователя. Назначить роль можно только доверенной операцией на сервере (SetRole, cmd/promote):
+// через HTTP API этого нет.
+const (
+	RoleStudent   = "student"
+	RoleModerator = "moderator"
+)
+
+// SetRole назначает роль пользователю с этой почтой. ErrUserNotFound: такой почты нет.
+func (s *Service) SetRole(ctx context.Context, email, role string) error {
+	if role != RoleStudent && role != RoleModerator {
+		return fmt.Errorf("unknown role %q", role)
+	}
+	n, err := s.store.SetUserRoleByEmail(ctx, db.SetUserRoleByEmailParams{Email: email, Role: role})
+	if err != nil {
+		return fmt.Errorf("set role: %w", err)
+	}
+	if n == 0 {
+		return ErrUserNotFound
+	}
+	return nil
 }
 
 // ChangePassword проверяет текущий пароль, сохраняет новый и стирает все сессии пользователя, включая

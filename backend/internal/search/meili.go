@@ -35,6 +35,7 @@ type Doc struct {
 	UserID      uuid.UUID `json:"user_id"`
 	Title       string    `json:"title"`
 	ContentText string    `json:"content_text"`
+	Status      string    `json:"status"` // draft, pending, published или rejected: по нему библиотека ищет только опубликованное
 }
 
 // Meili — адаптер к Meilisearch. Настройки индекса применяются при первом обращении
@@ -101,7 +102,7 @@ func (m *Meili) setup(ctx context.Context) error {
 
 	task, err := m.client.Index(m.uid).UpdateSettings(&meilisearch.Settings{
 		SearchableAttributes: []string{"title", "content_text"},
-		FilterableAttributes: []string{"user_id"},
+		FilterableAttributes: []string{"user_id", "status"},
 	})
 	if err != nil {
 		return fmt.Errorf("update index settings: %w", err)
@@ -134,12 +135,22 @@ func (m *Meili) Remove(ctx context.Context, id uuid.UUID) error {
 // Search возвращает кандидатов только для одного пользователя: фильтр по user_id обязателен
 // и собирается из uuid.UUID, подставить в него постороннюю строку нельзя.
 func (m *Meili) Search(ctx context.Context, userID uuid.UUID, query string, limit int) ([]Hit, error) {
+	return m.searchWithFilter(ctx, fmt.Sprintf("user_id = %q", userID.String()), query, limit)
+}
+
+// SearchPublished ищет по опубликованным материалам всех авторов (поиск библиотеки). Фильтр по статусу
+// зашит в код, а перепроверку в Postgres делает вызывающая сторона: индекс мог отстать.
+func (m *Meili) SearchPublished(ctx context.Context, query string, limit int) ([]Hit, error) {
+	return m.searchWithFilter(ctx, `status = "published"`, query, limit)
+}
+
+func (m *Meili) searchWithFilter(ctx context.Context, filter, query string, limit int) ([]Hit, error) {
 	if err := m.ensure(ctx); err != nil {
 		return nil, err
 	}
 	resp, err := m.client.Index(m.uid).SearchWithContext(ctx, query, &meilisearch.SearchRequest{
 		Limit:                 int64(limit),
-		Filter:                fmt.Sprintf("user_id = %q", userID.String()),
+		Filter:                filter,
 		AttributesToRetrieve:  []string{primaryKey},
 		AttributesToCrop:      []string{"content_text"},
 		CropLength:            cropLength,

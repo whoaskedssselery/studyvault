@@ -9,12 +9,13 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, display_name)
 VALUES ($1, $2, $3)
-RETURNING id, email, password_hash, display_name, created_at, updated_at
+RETURNING id, email, password_hash, display_name, created_at, updated_at, role, faculty
 `
 
 type CreateUserParams struct {
@@ -33,12 +34,14 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.DisplayName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Role,
+		&i.Faculty,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, display_name, created_at, updated_at FROM users WHERE lower(email) = lower($1)
+SELECT id, email, password_hash, display_name, created_at, updated_at, role, faculty FROM users WHERE lower(email) = lower($1)
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error) {
@@ -51,12 +54,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error
 		&i.DisplayName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Role,
+		&i.Faculty,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, display_name, created_at, updated_at FROM users WHERE id = $1
+SELECT id, email, password_hash, display_name, created_at, updated_at, role, faculty FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -69,32 +74,28 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.DisplayName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Role,
+		&i.Faculty,
 	)
 	return i, err
 }
 
-const updateUserDisplayName = `-- name: UpdateUserDisplayName :one
-UPDATE users SET display_name = $2, updated_at = now() WHERE id = $1
-RETURNING id, email, password_hash, display_name, created_at, updated_at
+const setUserRoleByEmail = `-- name: SetUserRoleByEmail :execrows
+UPDATE users SET role = $1, updated_at = now() WHERE lower(email) = lower($2)
 `
 
-type UpdateUserDisplayNameParams struct {
-	ID          uuid.UUID `json:"id"`
-	DisplayName string    `json:"display_name"`
+type SetUserRoleByEmailParams struct {
+	Role  string `json:"role"`
+	Email string `json:"email"`
 }
 
-func (q *Queries) UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUserDisplayName, arg.ID, arg.DisplayName)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.PasswordHash,
-		&i.DisplayName,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+// Назначение роли: только доверенная операция на сервере (cmd/promote), через API она недоступна.
+func (q *Queries) SetUserRoleByEmail(ctx context.Context, arg SetUserRoleByEmailParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserRoleByEmail, arg.Role, arg.Email)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateUserPassword = `-- name: UpdateUserPassword :execrows
@@ -112,4 +113,42 @@ func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPassword
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const updateUserProfile = `-- name: UpdateUserProfile :one
+UPDATE users SET
+    display_name = COALESCE($1::text, display_name),
+    faculty      = CASE WHEN $2::boolean THEN $3::text ELSE faculty END,
+    updated_at   = now()
+WHERE id = $4
+RETURNING id, email, password_hash, display_name, created_at, updated_at, role, faculty
+`
+
+type UpdateUserProfileParams struct {
+	DisplayName pgtype.Text `json:"display_name"`
+	SetFaculty  bool        `json:"set_faculty"`
+	Faculty     pgtype.Text `json:"faculty"`
+	ID          uuid.UUID   `json:"id"`
+}
+
+// Имя меняется, только если передано; факультет можно очистить, поэтому «менять или нет» задаёт флаг.
+func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserProfile,
+		arg.DisplayName,
+		arg.SetFaculty,
+		arg.Faculty,
+		arg.ID,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.DisplayName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Role,
+		&i.Faculty,
+	)
+	return i, err
 }

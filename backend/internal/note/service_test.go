@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
 	"github.com/whoaskedssselery/studyvault/backend/internal/note"
@@ -26,6 +27,10 @@ type fakeStore struct {
 	nodes      []db.ListGraphNodesRow
 	edges      []db.NoteLink
 
+	libSubject   bool        // чем ответит LibrarySubjectExists
+	rejection    pgtype.Text // причина последнего отказа
+	rejectionErr error
+
 	owned     bool // чем ответит SubjectOwnedByUser
 	subjectQs int  // сколько раз проверяли владельца предмета
 
@@ -36,6 +41,14 @@ type fakeStore struct {
 	created db.CreateNoteParams
 	updated db.UpdateNoteParams
 	err     error
+}
+
+func (f *fakeStore) LibrarySubjectExists(context.Context, uuid.UUID) (bool, error) {
+	return f.libSubject, f.err
+}
+
+func (f *fakeStore) GetLastRejectionReason(context.Context, uuid.UUID) (pgtype.Text, error) {
+	return f.rejection, f.rejectionErr
 }
 
 func (f *fakeStore) SubjectOwnedByUser(context.Context, db.SubjectOwnedByUserParams) (bool, error) {

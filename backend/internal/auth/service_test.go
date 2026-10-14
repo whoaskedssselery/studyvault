@@ -84,15 +84,30 @@ func (f *fakeStore) GetUserByID(_ context.Context, id uuid.UUID) (db.User, error
 	return db.User{}, pgx.ErrNoRows
 }
 
-func (f *fakeStore) UpdateUserDisplayName(_ context.Context, a db.UpdateUserDisplayNameParams) (db.User, error) {
+func (f *fakeStore) UpdateUserProfile(_ context.Context, a db.UpdateUserProfileParams) (db.User, error) {
 	for k, u := range f.users {
 		if u.ID == a.ID {
-			u.DisplayName = a.DisplayName
+			if a.DisplayName.Valid {
+				u.DisplayName = a.DisplayName.String
+			}
+			if a.SetFaculty {
+				u.Faculty = a.Faculty
+			}
 			f.users[k] = u
 			return u, nil
 		}
 	}
 	return db.User{}, pgx.ErrNoRows
+}
+
+func (f *fakeStore) SetUserRoleByEmail(_ context.Context, a db.SetUserRoleByEmailParams) (int64, error) {
+	u, ok := f.users[lower(a.Email)]
+	if !ok {
+		return 0, nil
+	}
+	u.Role = a.Role
+	f.users[lower(a.Email)] = u
+	return 1, nil
 }
 
 func (f *fakeStore) UpdateUserPassword(_ context.Context, a db.UpdateUserPasswordParams) (int64, error) {
@@ -452,16 +467,45 @@ func TestGetUser_ReturnsTheAccount_OrErrUserNotFound(t *testing.T) {
 	}
 }
 
-func TestUpdateDisplayName(t *testing.T) {
+func TestUpdateProfile_NameFacultyAndClearing(t *testing.T) {
+	ctx := context.Background()
 	svc := newService(newFakeStore())
 	res := loggedIn(t, svc)
+	anna, it := "Anna", "Information Technology"
 
-	u, err := svc.UpdateDisplayName(context.Background(), res.User.ID, "Anna")
-	if err != nil || u.DisplayName != "Anna" {
-		t.Fatalf("UpdateDisplayName = %+v, %v", u, err)
+	u, err := svc.UpdateProfile(ctx, res.User.ID, auth.ProfilePatch{DisplayName: &anna, SetFaculty: true, Faculty: &it})
+	if err != nil || u.DisplayName != "Anna" || u.Faculty.String != it || !u.Faculty.Valid {
+		t.Fatalf("UpdateProfile = %+v, %v", u, err)
 	}
-	if _, err := svc.UpdateDisplayName(context.Background(), uuid.New(), "X"); !errors.Is(err, auth.ErrUserNotFound) {
+
+	// Имя не передано: остаётся прежним. Факультет передан как null: очищается.
+	u, err = svc.UpdateProfile(ctx, res.User.ID, auth.ProfilePatch{SetFaculty: true})
+	if err != nil || u.DisplayName != "Anna" || u.Faculty.Valid {
+		t.Fatalf("partial update = %+v, %v", u, err)
+	}
+
+	if _, err := svc.UpdateProfile(ctx, uuid.New(), auth.ProfilePatch{DisplayName: &anna}); !errors.Is(err, auth.ErrUserNotFound) {
 		t.Errorf("unknown id: err = %v, want ErrUserNotFound", err)
+	}
+}
+
+func TestSetRole_OnlyKnownRoles_OnlyExistingUsers(t *testing.T) {
+	ctx := context.Background()
+	store := newFakeStore()
+	svc := newService(store)
+	res := loggedIn(t, svc)
+
+	if err := svc.SetRole(ctx, "A@X.io", auth.RoleModerator); err != nil { // регистр почты не важен
+		t.Fatal(err)
+	}
+	if got, _ := svc.GetUser(ctx, res.User.ID); got.Role != auth.RoleModerator {
+		t.Errorf("role = %q, want moderator", got.Role)
+	}
+	if err := svc.SetRole(ctx, "nobody@x.io", auth.RoleModerator); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("unknown email: err = %v, want ErrUserNotFound", err)
+	}
+	if err := svc.SetRole(ctx, "a@x.io", "admin"); err == nil {
+		t.Error("an unknown role must be rejected")
 	}
 }
 

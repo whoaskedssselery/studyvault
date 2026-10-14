@@ -73,7 +73,7 @@ func (q *Queries) FilterLiveNotes(ctx context.Context, arg FilterLiveNotesParams
 }
 
 const listNotesForIndex = `-- name: ListNotesForIndex :many
-SELECT id, user_id, title, content_text
+SELECT id, user_id, title, content_text, status
 FROM notes
 WHERE deleted_at IS NULL AND id > $1
 ORDER BY id
@@ -90,6 +90,7 @@ type ListNotesForIndexRow struct {
 	UserID      uuid.UUID `json:"user_id"`
 	Title       string    `json:"title"`
 	ContentText string    `json:"content_text"`
+	Status      string    `json:"status"`
 }
 
 // Постраничная выгрузка живых заметок для полной пересборки индекса.
@@ -107,6 +108,7 @@ func (q *Queries) ListNotesForIndex(ctx context.Context, arg ListNotesForIndexPa
 			&i.UserID,
 			&i.Title,
 			&i.ContentText,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}

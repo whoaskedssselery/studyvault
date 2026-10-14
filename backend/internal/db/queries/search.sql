@@ -14,7 +14,7 @@ WHERE n.user_id = sqlc.arg('user_id')
 
 -- Постраничная выгрузка живых заметок для полной пересборки индекса.
 -- name: ListNotesForIndex :many
-SELECT id, user_id, title, content_text
+SELECT id, user_id, title, content_text, status
 FROM notes
 WHERE deleted_at IS NULL AND id > sqlc.arg('after')
 ORDER BY id

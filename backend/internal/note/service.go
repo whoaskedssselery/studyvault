@@ -24,11 +24,15 @@ var (
 	// ErrNotFound возвращается и для чужой, и для удалённой заметки: снаружи они неотличимы.
 	ErrNotFound       = errors.New("note not found")
 	ErrInvalidSubject = errors.New("subject does not exist")
-	ErrInvalidCursor  = errors.New("invalid cursor")
+	// ErrInvalidLibrarySubject: общего предмета библиотеки с таким id нет.
+	ErrInvalidLibrarySubject = errors.New("library subject does not exist")
+	ErrInvalidCursor         = errors.New("invalid cursor")
 )
 
 type Store interface {
 	SubjectOwnedByUser(ctx context.Context, arg db.SubjectOwnedByUserParams) (bool, error)
+	LibrarySubjectExists(ctx context.Context, id uuid.UUID) (bool, error)
+	GetLastRejectionReason(ctx context.Context, noteID uuid.UUID) (pgtype.Text, error)
 	NoteOwnedByUser(ctx context.Context, arg db.NoteOwnedByUserParams) (bool, error)
 	CreateNote(ctx context.Context, arg db.CreateNoteParams) (db.Note, error)
 	GetNote(ctx context.Context, arg db.GetNoteParams) (db.Note, error)
@@ -67,25 +71,37 @@ type Tag struct {
 }
 
 type Summary struct {
-	ID        uuid.UUID
-	SubjectID *uuid.UUID
-	Title     string
-	IsPinned  bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Tags      []Tag
+	ID               uuid.UUID
+	SubjectID        *uuid.UUID
+	Title            string
+	IsPinned         bool
+	Kind             string // note или cheat_sheet
+	Status           string // draft, pending, published или rejected
+	LibrarySubjectID *uuid.UUID
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	Tags             []Tag
 }
 
 type Note struct {
 	Summary
-	Content []byte
+	Content         []byte
+	Description     *string // краткое описание материала (поле summary в API; имя Summary занято)
+	Semester        *int16
+	PublishedAt     *time.Time
+	Views           int64
+	RejectionReason *string // причина последнего отказа, пока заметка в статусе rejected
 }
 
 type Input struct {
-	Title     string
-	Content   []byte
-	SubjectID *uuid.UUID
-	IsPinned  bool
+	Title            string
+	Content          []byte
+	SubjectID        *uuid.UUID
+	IsPinned         bool
+	Kind             string // пусто: note
+	Description      *string
+	Semester         *int16
+	LibrarySubjectID *uuid.UUID
 }
 
 // Patch описывает частичное изменение. Content == nil значит «не менять».
@@ -96,6 +112,16 @@ type Patch struct {
 	SetSubject bool
 	SubjectID  *uuid.UUID
 	IsPinned   *bool
+
+	// Поля материала. Правка любого из них, как и заголовка или текста, возвращает опубликованный
+	// материал на проверку.
+	Kind              *string
+	SetDescription    bool
+	Description       *string
+	SetSemester       bool
+	Semester          *int16
+	SetLibrarySubject bool
+	LibrarySubjectID  *uuid.UUID
 }
 
 type ListFilter struct {
@@ -143,15 +169,26 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (Note,
 	if err := s.checkSubject(ctx, userID, in.SubjectID); err != nil {
 		return Note{}, err
 	}
+	if err := s.checkLibrarySubject(ctx, in.LibrarySubjectID); err != nil {
+		return Note{}, err
+	}
+	kind := in.Kind
+	if kind == "" {
+		kind = KindNote
+	}
 	var created db.Note
 	err := s.inTx(ctx, func(st Store) error {
 		n, err := st.CreateNote(ctx, db.CreateNoteParams{
-			UserID:      userID,
-			SubjectID:   toNullUUID(in.SubjectID),
-			Title:       in.Title,
-			Content:     in.Content,
-			ContentText: ExtractText(in.Content),
-			IsPinned:    in.IsPinned,
+			UserID:           userID,
+			SubjectID:        toNullUUID(in.SubjectID),
+			Title:            in.Title,
+			Content:          in.Content,
+			ContentText:      ExtractText(in.Content),
+			IsPinned:         in.IsPinned,
+			Kind:             kind,
+			Summary:          toText(in.Description),
+			Semester:         toInt2(in.Semester),
+			LibrarySubjectID: toNullUUID(in.LibrarySubjectID),
 		})
 		if err != nil {
 			return fmt.Errorf("create note: %w", err)
@@ -181,7 +218,20 @@ func (s *Service) Get(ctx context.Context, userID, id uuid.UUID) (Note, error) {
 	if err != nil {
 		return Note{}, fmt.Errorf("get note: %w", err)
 	}
-	return s.withTags(ctx, n)
+	note, err := s.withTags(ctx, n)
+	if err != nil {
+		return Note{}, err
+	}
+	if n.Status == StatusRejected {
+		reason, err := s.store.GetLastRejectionReason(ctx, n.ID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return Note{}, fmt.Errorf("get rejection reason: %w", err)
+		}
+		if err == nil && reason.Valid {
+			note.RejectionReason = &reason.String
+		}
+	}
+	return note, nil
 }
 
 func (s *Service) Update(ctx context.Context, userID, id uuid.UUID, p Patch) (Note, error) {
@@ -190,12 +240,26 @@ func (s *Service) Update(ctx context.Context, userID, id uuid.UUID, p Patch) (No
 			return Note{}, err
 		}
 	}
+	if p.SetLibrarySubject {
+		if err := s.checkLibrarySubject(ctx, p.LibrarySubjectID); err != nil {
+			return Note{}, err
+		}
+	}
 	arg := db.UpdateNoteParams{
-		ID:         id,
-		UserID:     userID,
-		SetSubject: p.SetSubject,
-		SubjectID:  toNullUUID(p.SubjectID),
-		Content:    p.Content,
+		ID:                id,
+		UserID:            userID,
+		SetSubject:        p.SetSubject,
+		SubjectID:         toNullUUID(p.SubjectID),
+		Content:           p.Content,
+		SetSummary:        p.SetDescription,
+		Summary:           toText(p.Description),
+		SetSemester:       p.SetSemester,
+		Semester:          toInt2(p.Semester),
+		SetLibrarySubject: p.SetLibrarySubject,
+		LibrarySubjectID:  toNullUUID(p.LibrarySubjectID),
+	}
+	if p.Kind != nil {
+		arg.Kind = pgtype.Text{String: *p.Kind, Valid: true}
 	}
 	if p.Title != nil {
 		arg.Title = pgtype.Text{String: *p.Title, Valid: true}
@@ -234,7 +298,9 @@ func (s *Service) Update(ctx context.Context, userID, id uuid.UUID, p Patch) (No
 	if err != nil {
 		return Note{}, err
 	}
-	if p.Title != nil || p.Content != nil {
+	// Индекс хранит и статус: правка опубликованного материала снимает его с публикации, и поиск по библиотеке
+	// должен перестать его находить. Поэтому документ обновляется при любой правке самого материала.
+	if p.Title != nil || p.Content != nil || p.Kind != nil || p.SetDescription || p.SetSemester || p.SetLibrarySubject {
 		s.index(ctx, searchDoc(userID, updated))
 	}
 	return s.withTags(ctx, updated)
@@ -353,8 +419,64 @@ func (s *Service) checkSubject(ctx context.Context, userID uuid.UUID, subjectID 
 	return nil
 }
 
+// checkLibrarySubject проверяет, что общий предмет библиотеки существует.
+func (s *Service) checkLibrarySubject(ctx context.Context, id *uuid.UUID) error {
+	if id == nil {
+		return nil
+	}
+	ok, err := s.store.LibrarySubjectExists(ctx, *id)
+	if err != nil {
+		return fmt.Errorf("check library subject: %w", err)
+	}
+	if !ok {
+		return ErrInvalidLibrarySubject
+	}
+	return nil
+}
+
+// Типы материала и статусы публикации. Строки совпадают со значениями CHECK-ограничений в БД.
+const (
+	KindNote       = "note"
+	KindCheatSheet = "cheat_sheet"
+
+	StatusDraft     = "draft"
+	StatusPending   = "pending"
+	StatusPublished = "published"
+	StatusRejected  = "rejected"
+)
+
+func toText(s *string) pgtype.Text {
+	if s == nil {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: *s, Valid: true}
+}
+
+func fromText(t pgtype.Text) *string {
+	if !t.Valid {
+		return nil
+	}
+	v := t.String
+	return &v
+}
+
+func toInt2(v *int16) pgtype.Int2 {
+	if v == nil {
+		return pgtype.Int2{}
+	}
+	return pgtype.Int2{Int16: *v, Valid: true}
+}
+
+func fromInt2(v pgtype.Int2) *int16 {
+	if !v.Valid {
+		return nil
+	}
+	x := v.Int16
+	return &x
+}
+
 func searchDoc(userID uuid.UUID, n db.Note) search.Doc {
-	return search.Doc{ID: n.ID, UserID: userID, Title: n.Title, ContentText: n.ContentText}
+	return search.Doc{ID: n.ID, UserID: userID, Title: n.Title, ContentText: n.ContentText, Status: n.Status}
 }
 
 const indexTimeout = 5 * time.Second
@@ -420,13 +542,16 @@ func (s *Service) summaries(ctx context.Context, rows []db.ListNotesRow) ([]Summ
 	out := make([]Summary, len(rows))
 	for i, r := range rows {
 		out[i] = Summary{
-			ID:        r.ID,
-			SubjectID: fromNullUUID(r.SubjectID),
-			Title:     r.Title,
-			IsPinned:  r.IsPinned,
-			CreatedAt: r.CreatedAt,
-			UpdatedAt: r.UpdatedAt,
-			Tags:      tags[r.ID],
+			ID:               r.ID,
+			SubjectID:        fromNullUUID(r.SubjectID),
+			Title:            r.Title,
+			IsPinned:         r.IsPinned,
+			Kind:             r.Kind,
+			Status:           r.Status,
+			LibrarySubjectID: fromNullUUID(r.LibrarySubjectID),
+			CreatedAt:        r.CreatedAt,
+			UpdatedAt:        r.UpdatedAt,
+			Tags:             tags[r.ID],
 		}
 		if out[i].Tags == nil {
 			out[i].Tags = []Tag{}
@@ -464,15 +589,22 @@ func toNote(n db.Note, tags []Tag) Note {
 	}
 	return Note{
 		Summary: Summary{
-			ID:        n.ID,
-			SubjectID: fromNullUUID(n.SubjectID),
-			Title:     n.Title,
-			IsPinned:  n.IsPinned,
-			CreatedAt: n.CreatedAt,
-			UpdatedAt: n.UpdatedAt,
-			Tags:      tags,
+			ID:               n.ID,
+			SubjectID:        fromNullUUID(n.SubjectID),
+			Title:            n.Title,
+			IsPinned:         n.IsPinned,
+			Kind:             n.Kind,
+			Status:           n.Status,
+			LibrarySubjectID: fromNullUUID(n.LibrarySubjectID),
+			CreatedAt:        n.CreatedAt,
+			UpdatedAt:        n.UpdatedAt,
+			Tags:             tags,
 		},
-		Content: n.Content,
+		Content:     n.Content,
+		Description: fromText(n.Summary),
+		Semester:    fromInt2(n.Semester),
+		PublishedAt: n.PublishedAt,
+		Views:       n.Views,
 	}
 }
 
