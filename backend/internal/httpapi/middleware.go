@@ -10,13 +10,14 @@ import (
 
 // Всё, чего нет в этом списке, требует access-токен: новый маршрут по умолчанию закрыт.
 var publicPaths = map[string]bool{
-	apiPrefix + "/health":                      true,
-	apiPrefix + "/auth/register":               true,
-	apiPrefix + "/auth/login":                  true,
-	apiPrefix + "/auth/refresh":                true,
-	apiPrefix + "/auth/logout":                 true,
-	apiPrefix + "/auth/password-reset":         true,
-	apiPrefix + "/auth/password-reset/confirm": true,
+	apiPrefix + "/health":                          true,
+	apiPrefix + "/auth/register":                   true,
+	apiPrefix + "/auth/login":                      true,
+	apiPrefix + "/auth/refresh":                    true,
+	apiPrefix + "/auth/logout":                     true,
+	apiPrefix + "/auth/password-reset":             true,
+	apiPrefix + "/auth/password-reset/confirm":     true,
+	apiPrefix + "/auth/email-verification/confirm": true,
 }
 
 // authMiddleware стоит на уровне роутера, до разбора параметров пути: запрос без токена получает 401, а не 400 за

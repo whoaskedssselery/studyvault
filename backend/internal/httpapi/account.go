@@ -20,6 +20,8 @@ type AccountService interface {
 	RequestPasswordReset(ctx context.Context, email string) error
 	ConfirmPasswordReset(ctx context.Context, rawToken, newPassword string) error
 	DeleteAccount(ctx context.Context, id uuid.UUID, password string) error
+	RequestEmailVerification(ctx context.Context, id uuid.UUID) error
+	ConfirmEmail(ctx context.Context, rawToken string) error
 }
 
 func (a *api) GetMe(w http.ResponseWriter, r *http.Request) {

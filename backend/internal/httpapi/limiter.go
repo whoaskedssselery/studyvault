@@ -67,12 +67,14 @@ func (l *rateLimiter) sweep(now time.Time) {
 // Попытки подбора пароля и массовой регистрации идут сюда, включая смену пароля: с украденным access-токеном
 // текущий пароль иначе можно было бы подбирать без ограничений. Выход (logout) не считается.
 var limitedPaths = map[string]bool{
-	apiPrefix + "/auth/login":                  true,
-	apiPrefix + "/auth/register":               true,
-	apiPrefix + "/auth/refresh":                true,
-	apiPrefix + "/me/password":                 true,
-	apiPrefix + "/auth/password-reset":         true,
-	apiPrefix + "/auth/password-reset/confirm": true,
+	apiPrefix + "/auth/login":                      true,
+	apiPrefix + "/auth/register":                   true,
+	apiPrefix + "/auth/refresh":                    true,
+	apiPrefix + "/me/password":                     true,
+	apiPrefix + "/auth/password-reset":             true,
+	apiPrefix + "/auth/password-reset/confirm":     true,
+	apiPrefix + "/auth/email-verification/confirm": true,
+	apiPrefix + "/me/email-verification":           true,
 }
 
 // limitAuthAttempts ограничивает число попыток подбора пароля с одного адреса в минуту; 0 выключает ограничение.

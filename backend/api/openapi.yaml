@@ -290,6 +290,26 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
+  /me/email-verification:
+    post:
+      tags: [account]
+      operationId: requestEmailVerification
+      summary: Отправить письмо подтверждения почты ещё раз
+      description: |
+        При регистрации письмо со ссылкой уходит само; этот метод нужен, если оно не пришло или ссылка просрочена
+        (она действует 24 часа). Новая ссылка гасит прежние. Если почта уже подтверждена, ничего не происходит.
+        Чаще раза в минуту на аккаунт не отправляется: ответ 429 `rate_limited` с `Retry-After`. Если на сервере не
+        настроена почта, ответ 503 `email_unavailable` (в таком режиме все аккаунты подтверждены сразу).
+      responses:
+        "204":
+          description: Письмо отправлено (или почта уже подтверждена)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /subjects:
     get:
       tags: [subjects]
@@ -793,6 +813,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -1072,6 +1094,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -1102,6 +1126,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
@@ -1306,6 +1332,33 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
+  /auth/email-verification/confirm:
+    post:
+      tags: [auth]
+      operationId: confirmEmail
+      summary: Подтвердить почту по ссылке из письма
+      description: |
+        Ссылка ведёт на страницу фронтенда (`EMAIL_VERIFY_URL` сервера) с параметром `token`; страница отправляет токен сюда.
+        Токен в заголовке не нужен: письмо часто открывают на другом устройстве, чем то, где сделана регистрация. Ссылка
+        срабатывает один раз; неверная, просроченная или уже использованная даёт 401 `invalid_token`. Если пользователь
+        уже вошёл, после успеха достаточно обновить `GET /me` (поле `email_verified`); входить заново не нужно.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailVerificationConfirm"
+      responses:
+        "204":
+          description: Почта подтверждена
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
   /notes/{id}/withdraw:
     parameters:
       - $ref: "#/components/parameters/Id"
@@ -1481,7 +1534,7 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
     Forbidden:
-      description: Недостаточно прав (`forbidden`), действие только для модератора или над чужим материалом
+      description: Недостаточно прав (`forbidden`, действие только для модератора или над чужим материалом) либо почта ещё не подтверждена (`email_not_verified`, публиковать, комментировать и оценивать можно только с подтверждённой почтой)
       content:
         application/problem+json:
           schema:
@@ -1499,7 +1552,7 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
     TooManyRequests:
-      description: Слишком много попыток входа, регистрации, обновления токена, сброса или смены пароля, удаления аккаунта с этого адреса
+      description: Слишком много попыток входа, регистрации, обновления токена, сброса или смены пароля, подтверждения почты, удаления аккаунта с этого адреса. Запрос нового письма подтверждения раньше чем через минуту тоже даёт 429
       headers:
         Retry-After:
           description: Через сколько секунд можно повторить запрос
@@ -1557,7 +1610,7 @@ components:
 
     User:
       type: object
-      required: [id, email, display_name, faculty, role, created_at]
+      required: [id, email, email_verified, display_name, faculty, role, created_at]
       properties:
         id:
           type: string
@@ -1565,6 +1618,9 @@ components:
         email:
           type: string
           format: email
+        email_verified:
+          type: boolean
+          description: Почта подтверждена ссылкой из письма. Пока `false`, публиковать материалы, комментировать и ставить оценки нельзя (403 `email_not_verified`). Если на сервере не настроена почта, новые аккаунты подтверждены сразу.
         display_name:
           type: string
         faculty:
@@ -2425,6 +2481,14 @@ components:
           maxLength: 72
           description: Не длиннее 72 байт (ограничение bcrypt)
           example: another-long-passphrase
+
+    EmailVerificationConfirm:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: Значение параметра `token` из ссылки в письме
 
     DeleteAccountRequest:
       type: object

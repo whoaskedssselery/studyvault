@@ -298,6 +298,12 @@ type DeleteAccountRequest struct {
 	Password string `json:"password"`
 }
 
+// EmailVerificationConfirm defines model for EmailVerificationConfirm.
+type EmailVerificationConfirm struct {
+	// Token Значение параметра `token` из ссылки в письме
+	Token string `json:"token"`
+}
+
 // Graph defines model for Graph.
 type Graph struct {
 	Edges []struct {
@@ -802,6 +808,9 @@ type User struct {
 	DisplayName string              `json:"display_name"`
 	Email       openapi_types.Email `json:"email"`
 
+	// EmailVerified Почта подтверждена ссылкой из письма. Пока `false`, публиковать материалы, комментировать и ставить оценки нельзя (403 `email_not_verified`). Если на сервере не настроена почта, новые аккаунты подтверждены сразу.
+	EmailVerified bool `json:"email_verified"`
+
 	// Faculty Факультет, необязательное поле профиля
 	//
 	// Example: Информационные технологии
@@ -938,6 +947,9 @@ type SearchNotesParams struct {
 // CreateAttachmentJSONRequestBody defines body for CreateAttachment for application/json ContentType.
 type CreateAttachmentJSONRequestBody = AttachmentInput
 
+// ConfirmEmailJSONRequestBody defines body for ConfirmEmail for application/json ContentType.
+type ConfirmEmailJSONRequestBody = EmailVerificationConfirm
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
@@ -1012,6 +1024,9 @@ type ServerInterface interface {
 	// GetAttachment Метаданные файла и временная ссылка для скачивания
 	// (GET /attachments/{id})
 	GetAttachment(w http.ResponseWriter, r *http.Request, id Id)
+	// ConfirmEmail Подтвердить почту по ссылке из письма
+	// (POST /auth/email-verification/confirm)
+	ConfirmEmail(w http.ResponseWriter, r *http.Request)
 	// Login Вход
 	// (POST /auth/login)
 	Login(w http.ResponseWriter, r *http.Request)
@@ -1093,6 +1108,9 @@ type ServerInterface interface {
 	// UpdateMe Изменить имя
 	// (PATCH /me)
 	UpdateMe(w http.ResponseWriter, r *http.Request)
+	// RequestEmailVerification Отправить письмо подтверждения почты ещё раз
+	// (POST /me/email-verification)
+	RequestEmailVerification(w http.ResponseWriter, r *http.Request)
 	// ChangePassword Сменить пароль
 	// (POST /me/password)
 	ChangePassword(w http.ResponseWriter, r *http.Request)
@@ -1186,6 +1204,12 @@ func (_ Unimplemented) DeleteAttachment(w http.ResponseWriter, r *http.Request, 
 // GetAttachment Метаданные файла и временная ссылка для скачивания
 // (GET /attachments/{id})
 func (_ Unimplemented) GetAttachment(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ConfirmEmail Подтвердить почту по ссылке из письма
+// (POST /auth/email-verification/confirm)
+func (_ Unimplemented) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1348,6 +1372,12 @@ func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
 // UpdateMe Изменить имя
 // (PATCH /me)
 func (_ Unimplemented) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RequestEmailVerification Отправить письмо подтверждения почты ещё раз
+// (POST /me/email-verification)
+func (_ Unimplemented) RequestEmailVerification(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1582,6 +1612,20 @@ func (siw *ServerInterfaceWrapper) GetAttachment(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAttachment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConfirmEmail operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmEmail(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2297,6 +2341,20 @@ func (siw *ServerInterfaceWrapper) UpdateMe(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RequestEmailVerification operation middleware
+func (siw *ServerInterfaceWrapper) RequestEmailVerification(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestEmailVerification(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3079,6 +3137,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/me/password", wrapper.ChangePassword)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/email-verification", wrapper.RequestEmailVerification)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/subjects", wrapper.ListSubjects)
 	})
 	r.Group(func(r chi.Router) {
@@ -3197,6 +3258,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/password-reset/confirm", wrapper.ConfirmPasswordReset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/email-verification/confirm", wrapper.ConfirmEmail)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/notes/{id}/withdraw", wrapper.WithdrawNote)

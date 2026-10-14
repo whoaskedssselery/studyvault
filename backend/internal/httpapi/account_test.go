@@ -34,6 +34,11 @@ type fakeAccount struct {
 	resetEmail, resetToken, resetPass string
 	deletePass                        string
 	deleteCalls                       int
+
+	verifyReqErr, verifyConfirmErr error
+	verifyReqFor                   uuid.UUID
+	verifyReqCalls                 int
+	verifyToken                    string
 }
 
 func (f *fakeAccount) GetUser(_ context.Context, id uuid.UUID) (db.User, error) {
@@ -66,6 +71,17 @@ func (f *fakeAccount) RequestPasswordReset(_ context.Context, email string) erro
 func (f *fakeAccount) ConfirmPasswordReset(_ context.Context, token, pass string) error {
 	f.resetToken, f.resetPass = token, pass
 	return f.confirmErr
+}
+
+func (f *fakeAccount) RequestEmailVerification(_ context.Context, id uuid.UUID) error {
+	f.verifyReqFor = id
+	f.verifyReqCalls++
+	return f.verifyReqErr
+}
+
+func (f *fakeAccount) ConfirmEmail(_ context.Context, token string) error {
+	f.verifyToken = token
+	return f.verifyConfirmErr
 }
 
 func (f *fakeAccount) DeleteAccount(_ context.Context, id uuid.UUID, password string) error {
