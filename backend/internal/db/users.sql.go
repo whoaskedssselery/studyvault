@@ -7,10 +7,46 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const claimPasswordResetToken = `-- name: ClaimPasswordResetToken :one
+UPDATE password_reset_tokens SET used_at = now()
+WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $2
+RETURNING user_id
+`
+
+type ClaimPasswordResetTokenParams struct {
+	TokenHash string    `json:"token_hash"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// Токен «забирается» одним запросом: из двух одновременных подтверждений выиграет одно.
+func (q *Queries) ClaimPasswordResetToken(ctx context.Context, arg ClaimPasswordResetTokenParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, claimPasswordResetToken, arg.TokenHash, arg.ExpiresAt)
+	var user_id uuid.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
+const createPasswordResetToken = `-- name: CreatePasswordResetToken :exec
+INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)
+`
+
+type CreatePasswordResetTokenParams struct {
+	UserID    uuid.UUID `json:"user_id"`
+	TokenHash string    `json:"token_hash"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// Сброс пароля по почте.
+func (q *Queries) CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) error {
+	_, err := q.db.Exec(ctx, createPasswordResetToken, arg.UserID, arg.TokenHash, arg.ExpiresAt)
+	return err
+}
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, display_name)
@@ -38,6 +74,42 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Faculty,
 	)
 	return i, err
+}
+
+const deleteExpiredPasswordResetTokens = `-- name: DeleteExpiredPasswordResetTokens :execrows
+DELETE FROM password_reset_tokens WHERE expires_at <= $1 OR used_at IS NOT NULL
+`
+
+func (q *Queries) DeleteExpiredPasswordResetTokens(ctx context.Context, expiresAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredPasswordResetTokens, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteUser = `-- name: DeleteUser :execrows
+DELETE FROM users WHERE id = $1
+`
+
+// Удаление аккаунта: каскадом уходят заметки, предметы, теги, файлы (записи), комментарии, оценки, избранное и сессии.
+// Решения модератора остаются, но без указания, кто их принял.
+func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUser, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteUserPasswordResetTokens = `-- name: DeleteUserPasswordResetTokens :exec
+DELETE FROM password_reset_tokens WHERE user_id = $1
+`
+
+// Прежние неиспользованные ссылки пользователя гасятся, когда он просит новую: действует только последняя.
+func (q *Queries) DeleteUserPasswordResetTokens(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserPasswordResetTokens, userID)
+	return err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one

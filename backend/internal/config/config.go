@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -16,17 +17,19 @@ const minJWTSecretLen = 32
 const defaultAuthRateLimit = 20
 
 type Config struct {
-	HTTPPort      string
-	DatabaseURL   string
-	JWTSecret     []byte
-	CookieSecure  bool
-	MeiliURL      string // пусто: поиск отключён
-	MeiliKey      string
-	S3            S3         // Endpoint пуст: файлы отключены
-	CORSOrigins   []string   // пусто: CORS выключен
-	AuthRateLimit int        // попыток входа в минуту с одного адреса; 0: без лимита
-	LogJSON       bool       // формат лога: JSON (по умолчанию) или текст для разработки
-	LogLevel      slog.Level // по умолчанию info
+	HTTPPort       string
+	DatabaseURL    string
+	JWTSecret      []byte
+	CookieSecure   bool
+	MeiliURL       string // пусто: поиск отключён
+	MeiliKey       string
+	S3             S3           // Endpoint пуст: файлы отключены
+	CORSOrigins    []string     // пусто: CORS выключен
+	AuthRateLimit  int          // попыток входа в минуту с одного адреса; 0: без лимита
+	TrustedProxies []*net.IPNet // доверенные прокси (TRUSTED_PROXIES): от них принимается X-Forwarded-For
+	SMTP           SMTP         // Host пуст: сброс пароля по почте выключен
+	LogJSON        bool         // формат лога: JSON (по умолчанию) или текст для разработки
+	LogLevel       slog.Level   // по умолчанию info
 }
 
 func Load() (Config, error) {
@@ -66,6 +69,12 @@ func Load() (Config, error) {
 	}
 	cfg.CORSOrigins = origins
 
+	proxies, err := parseProxies(os.Getenv("TRUSTED_PROXIES"))
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.TrustedProxies = proxies
+
 	cfg.AuthRateLimit = defaultAuthRateLimit
 	if v := os.Getenv("AUTH_RATE_LIMIT_PER_MIN"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -73,6 +82,21 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("AUTH_RATE_LIMIT_PER_MIN must be a non-negative integer, got %q", v)
 		}
 		cfg.AuthRateLimit = n
+	}
+	cfg.SMTP = SMTP{
+		Host: os.Getenv("SMTP_HOST"), Port: getenv("SMTP_PORT", "587"), Username: os.Getenv("SMTP_USERNAME"),
+		Password: os.Getenv("SMTP_PASSWORD"), From: os.Getenv("SMTP_FROM"), ResetURL: os.Getenv("PASSWORD_RESET_URL"),
+	}
+	if cfg.SMTP.Host != "" {
+		if cfg.SMTP.From == "" || cfg.SMTP.ResetURL == "" {
+			return Config{}, errors.New("SMTP_HOST needs SMTP_FROM and PASSWORD_RESET_URL")
+		}
+		if u, err := url.Parse(cfg.SMTP.ResetURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return Config{}, fmt.Errorf("PASSWORD_RESET_URL must be an http(s) address, got %q", cfg.SMTP.ResetURL)
+		}
+		if (cfg.SMTP.Username == "") != (cfg.SMTP.Password == "") {
+			return Config{}, errors.New("SMTP_USERNAME and SMTP_PASSWORD must be set together")
+		}
 	}
 	switch f := strings.ToLower(os.Getenv("LOG_FORMAT")); f {
 	case "", "json":
@@ -94,6 +118,16 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// SMTP описывает почтовый сервер для писем со ссылкой сброса пароля.
+type SMTP struct {
+	Host     string
+	Port     string
+	Username string
+	Password string
+	From     string
+	ResetURL string // адрес страницы фронтенда, куда ведёт ссылка из письма; токен добавляется параметром token
 }
 
 // S3 описывает S3-совместимое хранилище файлов.
@@ -123,4 +157,36 @@ func parseOrigins(raw string) ([]string, error) {
 		origins = append(origins, strings.TrimSuffix(o, "/"))
 	}
 	return origins, nil
+}
+
+// parseProxies разбирает список доверенных прокси: адреса или сети в записи CIDR через запятую. Широкую сеть вроде
+// 0.0.0.0/0 принимать нельзя: она сделала бы X-Forwarded-For доверенным для всех, то есть подделываемым.
+func parseProxies(raw string) ([]*net.IPNet, error) {
+	var out []*net.IPNet
+	for _, item := range strings.Split(raw, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if !strings.Contains(item, "/") {
+			ip := net.ParseIP(item)
+			if ip == nil {
+				return nil, fmt.Errorf("TRUSTED_PROXIES: %q is not an address or a CIDR network", item)
+			}
+			bits := 128
+			if ip.To4() != nil {
+				bits = 32
+			}
+			item = fmt.Sprintf("%s/%d", ip, bits)
+		}
+		_, n, err := net.ParseCIDR(item)
+		if err != nil {
+			return nil, fmt.Errorf("TRUSTED_PROXIES: %q is not an address or a CIDR network", item)
+		}
+		if ones, _ := n.Mask.Size(); ones == 0 {
+			return nil, fmt.Errorf("TRUSTED_PROXIES: %q would trust every address", item)
+		}
+		out = append(out, n)
+	}
+	return out, nil
 }

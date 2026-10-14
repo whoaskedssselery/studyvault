@@ -227,3 +227,67 @@ func TestLoad_Logging(t *testing.T) {
 		}
 	}
 }
+
+func smtpEnv(t *testing.T, host, from, resetURL, user, pass string) {
+	t.Helper()
+	setValidEnv(t)
+	t.Setenv("SMTP_HOST", host)
+	t.Setenv("SMTP_PORT", "")
+	t.Setenv("SMTP_FROM", from)
+	t.Setenv("PASSWORD_RESET_URL", resetURL)
+	t.Setenv("SMTP_USERNAME", user)
+	t.Setenv("SMTP_PASSWORD", pass)
+}
+
+func TestLoad_SMTP_IsOptional_AndAllOrNothing(t *testing.T) {
+	smtpEnv(t, "", "", "", "", "")
+	cfg, err := config.Load()
+	if err != nil || cfg.SMTP.Host != "" {
+		t.Fatalf("without SMTP_HOST the feature is off: %+v, %v", cfg.SMTP, err)
+	}
+
+	smtpEnv(t, "mailpit", "studyvault@example.com", "https://app.example.com/reset", "", "")
+	cfg, err = config.Load()
+	if err != nil || cfg.SMTP.Host != "mailpit" || cfg.SMTP.Port != "587" || cfg.SMTP.From != "studyvault@example.com" {
+		t.Errorf("a complete config: %+v, %v (the port defaults to 587)", cfg.SMTP, err)
+	}
+
+	for name, args := range map[string][5]string{
+		"no sender":               {"mailpit", "", "https://app.example.com/reset", "", ""},
+		"no reset page":           {"mailpit", "a@example.com", "", "", ""},
+		"reset page is not a url": {"mailpit", "a@example.com", "javascript:alert(1)", "", ""},
+		"relative reset page":     {"mailpit", "a@example.com", "/reset", "", ""},
+		"user without password":   {"mailpit", "a@example.com", "https://app.example.com/reset", "user", ""},
+		"password without user":   {"mailpit", "a@example.com", "https://app.example.com/reset", "", "secret"},
+	} {
+		smtpEnv(t, args[0], args[1], args[2], args[3], args[4])
+		if _, err := config.Load(); err == nil {
+			t.Errorf("%s must be rejected", name)
+		}
+	}
+}
+
+func TestLoad_TrustedProxies(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("TRUSTED_PROXIES", "")
+	cfg, err := config.Load()
+	if err != nil || len(cfg.TrustedProxies) != 0 {
+		t.Fatalf("no proxies by default: %v, %v", cfg.TrustedProxies, err)
+	}
+
+	t.Setenv("TRUSTED_PROXIES", "172.16.0.0/12, 10.1.2.3 ,fd00::/8")
+	cfg, err = config.Load()
+	if err != nil || len(cfg.TrustedProxies) != 3 {
+		t.Fatalf("proxies = %v, %v", cfg.TrustedProxies, err)
+	}
+	if got := cfg.TrustedProxies[1].String(); got != "10.1.2.3/32" {
+		t.Errorf("a bare address is a /32 network, got %s", got)
+	}
+
+	for _, bad := range []string{"nonsense", "10.0.0.0/33", "0.0.0.0/0", "::/0", "10.0.0.0/8,oops"} {
+		t.Setenv("TRUSTED_PROXIES", bad)
+		if _, err := config.Load(); err == nil {
+			t.Errorf("TRUSTED_PROXIES=%q must be rejected (a catch-all network would make X-Forwarded-For forgeable)", bad)
+		}
+	}
+}

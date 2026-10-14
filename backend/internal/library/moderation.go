@@ -117,7 +117,7 @@ func (s *Service) Decide(ctx context.Context, moderatorID, id uuid.UUID, decisio
 			return fmt.Errorf("change status: %w", err)
 		}
 		return st.InsertModerationDecision(ctx, db.InsertModerationDecisionParams{
-			NoteID: id, ModeratorID: moderatorID, Decision: decision, Reason: textOrNull(reason),
+			NoteID: id, ModeratorID: uuid.NullUUID{UUID: moderatorID, Valid: true}, Decision: decision, Reason: textOrNull(reason),
 		})
 	})
 	if err != nil {
@@ -305,4 +305,69 @@ func textOrNull(s string) pgtype.Text {
 		return pgtype.Text{}
 	}
 	return pgtype.Text{String: s, Valid: true}
+}
+
+// Withdraw забирает материал с проверки обратно в черновики. Только автор и только пока материал на проверке:
+// после решения модератора отзывать уже нечего, а опубликованный материал автор снимает правкой или удалением.
+func (s *Service) Withdraw(ctx context.Context, uid, id uuid.UUID) (db.Note, error) {
+	n, err := s.store.WithdrawNote(ctx, db.WithdrawNoteParams{ID: id, UserID: uid})
+	if errors.Is(err, pgx.ErrNoRows) {
+		cur, getErr := s.store.GetNote(ctx, db.GetNoteParams{ID: id, UserID: uid})
+		if errors.Is(getErr, pgx.ErrNoRows) {
+			return db.Note{}, ErrNotFound
+		}
+		if getErr != nil {
+			return db.Note{}, fmt.Errorf("get note: %w", getErr)
+		}
+		return db.Note{}, fmt.Errorf("%w: only a pending material can be withdrawn, this one is %s", ErrInvalidTransition, cur.Status)
+	}
+	if err != nil {
+		return db.Note{}, fmt.Errorf("withdraw note: %w", err)
+	}
+	s.index(ctx, n)
+	return n, nil
+}
+
+const DecisionUnpublished = "unpublished"
+
+// Unpublish снимает опубликованный материал с публикации. Он становится отклонённым с причиной: автор видит её,
+// исправляет материал и отправляет его на проверку заново. Оценки, комментарии и избранное сохраняются и снова
+// видны после повторной публикации. Статус и запись о решении меняются одной транзакцией.
+func (s *Service) Unpublish(ctx context.Context, moderatorID, id uuid.UUID, reason string) (db.Note, error) {
+	if err := s.requireModerator(ctx, moderatorID); err != nil {
+		return db.Note{}, err
+	}
+	reason = strings.TrimSpace(reason)
+	if n := utf8.RuneCountInString(reason); n < 1 || n > maxReasonLen {
+		return db.Note{}, fmt.Errorf("%w: taking a material down needs a reason of 1 to %d characters", ErrInvalid, maxReasonLen)
+	}
+
+	var down db.Note
+	err := s.inTx(ctx, func(st Store) error {
+		cur, err := st.GetNoteStatus(ctx, id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("get note status: %w", err)
+		}
+		if cur.Status != statusPublished {
+			return fmt.Errorf("%w: the material is %s, not published", ErrInvalidTransition, cur.Status)
+		}
+		down, err = st.UnpublishNote(ctx, id)
+		if errors.Is(err, pgx.ErrNoRows) { // автор успел отредактировать материал, и он уже на проверке
+			return ErrInvalidTransition
+		}
+		if err != nil {
+			return fmt.Errorf("unpublish note: %w", err)
+		}
+		return st.InsertModerationDecision(ctx, db.InsertModerationDecisionParams{
+			NoteID: id, ModeratorID: uuid.NullUUID{UUID: moderatorID, Valid: true}, Decision: DecisionUnpublished, Reason: textOrNull(reason),
+		})
+	})
+	if err != nil {
+		return db.Note{}, err
+	}
+	s.index(ctx, down)
+	return down, nil
 }

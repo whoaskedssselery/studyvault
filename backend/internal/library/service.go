@@ -96,6 +96,12 @@ type Store interface {
 	RejectNote(ctx context.Context, id uuid.UUID) (db.Note, error)
 	InsertModerationDecision(ctx context.Context, arg db.InsertModerationDecisionParams) error
 	ListPendingMaterials(ctx context.Context, arg db.ListPendingMaterialsParams) ([]db.ListPendingMaterialsRow, error)
+	WithdrawNote(ctx context.Context, arg db.WithdrawNoteParams) (db.Note, error)
+	UnpublishNote(ctx context.Context, id uuid.UUID) (db.Note, error)
+
+	ListAuthorRanking(ctx context.Context, pageSize int32) ([]db.ListAuthorRankingRow, error)
+	GetAuthorProfile(ctx context.Context, id uuid.UUID) (db.GetAuthorProfileRow, error)
+	UpdateComment(ctx context.Context, arg db.UpdateCommentParams) (db.Comment, error)
 }
 
 // TxFunc выполняет fn в одной транзакции над хранилищем (в продакшене это db.InTx).
@@ -168,7 +174,8 @@ type Item struct {
 	PublishedAt    *time.Time
 	MyRating       *int16 // оценка зрителя; nil у гостя
 	Bookmarked     bool
-	Snippet        string // только в результатах поиска: HTML с <mark>
+	Tags           []string // названия тегов автора, привязанных к материалу
+	Snippet        string   // только в результатах поиска: HTML с <mark>
 }
 
 type Page struct {
@@ -202,6 +209,8 @@ type ListFilter struct {
 	SubjectID *uuid.UUID
 	Kind      *string
 	Semester  *int16
+	AuthorID  *uuid.UUID
+	Tag       *string
 	Sort      Sort
 	Limit     int
 	Cursor    string
@@ -244,13 +253,14 @@ func (s *Service) List(ctx context.Context, uid *uuid.UUID, f ListFilter) (Page,
 
 func (s *Service) browse(ctx context.Context, f ListFilter, limit int) ([]db.LibraryItem, string, error) {
 	subject, kind, semester := toNullUUID(f.SubjectID), toText(f.Kind), toInt2(f.Semester)
+	author, tag := toNullUUID(f.AuthorID), toText(f.Tag)
 	pageSize := int32(limit + 1) // лишняя строка нужна, чтобы узнать, есть ли следующая страница
 
 	var rows []db.LibraryItem
 	var err error
 	switch f.Sort {
 	case SortRated:
-		arg := db.ListLibraryTopRatedParams{LibrarySubjectID: subject, Kind: kind, Semester: semester, PageSize: pageSize}
+		arg := db.ListLibraryTopRatedParams{LibrarySubjectID: subject, Kind: kind, Semester: semester, AuthorID: author, Tag: tag, PageSize: pageSize}
 		if f.Cursor != "" {
 			var c ratedCursor
 			if err := decodeCursor(f.Cursor, &c); err != nil {
@@ -262,7 +272,7 @@ func (s *Service) browse(ctx context.Context, f ListFilter, limit int) ([]db.Lib
 		}
 		rows, err = s.store.ListLibraryTopRated(ctx, arg)
 	case SortViews:
-		arg := db.ListLibraryMostViewedParams{LibrarySubjectID: subject, Kind: kind, Semester: semester, PageSize: pageSize}
+		arg := db.ListLibraryMostViewedParams{LibrarySubjectID: subject, Kind: kind, Semester: semester, AuthorID: author, Tag: tag, PageSize: pageSize}
 		if f.Cursor != "" {
 			var c viewsCursor
 			if err := decodeCursor(f.Cursor, &c); err != nil {
@@ -273,7 +283,7 @@ func (s *Service) browse(ctx context.Context, f ListFilter, limit int) ([]db.Lib
 		}
 		rows, err = s.store.ListLibraryMostViewed(ctx, arg)
 	default:
-		arg := db.ListLibraryNewestParams{LibrarySubjectID: subject, Kind: kind, Semester: semester, PageSize: pageSize}
+		arg := db.ListLibraryNewestParams{LibrarySubjectID: subject, Kind: kind, Semester: semester, AuthorID: author, Tag: tag, PageSize: pageSize}
 		if f.Cursor != "" {
 			var c timeCursor
 			if err := decodeCursor(f.Cursor, &c); err != nil {
@@ -323,6 +333,7 @@ func (s *Service) searchItems(ctx context.Context, f ListFilter, limit int) ([]d
 	}
 	rows, err := s.store.ListLibraryByIDs(ctx, db.ListLibraryByIDsParams{
 		Ids: ids, LibrarySubjectID: toNullUUID(f.SubjectID), Kind: toText(f.Kind), Semester: toInt2(f.Semester),
+		AuthorID: toNullUUID(f.AuthorID), Tag: toText(f.Tag),
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("check search results: %w", err)
@@ -514,6 +525,7 @@ func itemFromView(li db.LibraryItem) Item {
 		CommentsCount:  li.CommentsCount,
 		BookmarksCount: li.BookmarksCount,
 		PublishedAt:    li.PublishedAt,
+		Tags:           append([]string{}, li.Tags...), // [] вместо null
 	}
 	if li.RatingCount > 0 {
 		avg := li.RatingAvg
@@ -531,6 +543,7 @@ func itemFromBookmark(r db.ListBookmarkedLibraryRow) Item {
 		PublishedAt: r.PublishedAt, Views: r.Views, LibrarySubjectID: r.LibrarySubjectID,
 		SubjectTitle: r.SubjectTitle, SubjectColor: r.SubjectColor, AuthorName: r.AuthorName, AuthorFaculty: r.AuthorFaculty,
 		RatingCount: r.RatingCount, RatingAvg: r.RatingAvg, CommentsCount: r.CommentsCount, BookmarksCount: r.BookmarksCount,
+		Tags: r.Tags,
 	})
 }
 

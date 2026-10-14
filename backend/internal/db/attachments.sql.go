@@ -156,6 +156,31 @@ func (q *Queries) ListAttachmentsByNote(ctx context.Context, arg ListAttachments
 	return items, nil
 }
 
+const listUserObjectKeys = `-- name: ListUserObjectKeys :many
+SELECT object_key FROM attachments WHERE user_id = $1
+`
+
+// Ключи объектов пользователя: нужны, чтобы убрать файлы из хранилища при удалении аккаунта.
+func (q *Queries) ListUserObjectKeys(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listUserObjectKeys, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var object_key string
+		if err := rows.Scan(&object_key); err != nil {
+			return nil, err
+		}
+		items = append(items, object_key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const userAttachmentUsage = `-- name: UserAttachmentUsage :one
 SELECT count(*)::bigint AS files, COALESCE(sum(size_bytes), 0)::bigint AS bytes
 FROM attachments WHERE user_id = $1

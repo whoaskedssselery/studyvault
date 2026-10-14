@@ -24,3 +24,25 @@ UPDATE users SET role = sqlc.arg('role'), updated_at = now() WHERE lower(email) 
 
 -- name: UpdateUserPassword :execrows
 UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1;
+
+-- Удаление аккаунта: каскадом уходят заметки, предметы, теги, файлы (записи), комментарии, оценки, избранное и сессии.
+-- Решения модератора остаются, но без указания, кто их принял.
+-- name: DeleteUser :execrows
+DELETE FROM users WHERE id = $1;
+
+-- Сброс пароля по почте.
+-- name: CreatePasswordResetToken :exec
+INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3);
+
+-- Прежние неиспользованные ссылки пользователя гасятся, когда он просит новую: действует только последняя.
+-- name: DeleteUserPasswordResetTokens :exec
+DELETE FROM password_reset_tokens WHERE user_id = $1;
+
+-- Токен «забирается» одним запросом: из двух одновременных подтверждений выиграет одно.
+-- name: ClaimPasswordResetToken :one
+UPDATE password_reset_tokens SET used_at = now()
+WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $2
+RETURNING user_id;
+
+-- name: DeleteExpiredPasswordResetTokens :execrows
+DELETE FROM password_reset_tokens WHERE expires_at <= $1 OR used_at IS NOT NULL;

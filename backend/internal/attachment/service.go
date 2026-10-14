@@ -47,6 +47,7 @@ type Store interface {
 	CreateAttachment(ctx context.Context, arg db.CreateAttachmentParams) (db.Attachment, error)
 	GetAttachment(ctx context.Context, arg db.GetAttachmentParams) (db.Attachment, error)
 	DemotePublishedNote(ctx context.Context, arg db.DemotePublishedNoteParams) error
+	ListUserObjectKeys(ctx context.Context, userID uuid.UUID) ([]string, error)
 	ListAttachmentsByNote(ctx context.Context, arg db.ListAttachmentsByNoteParams) ([]db.Attachment, error)
 	DeleteAttachment(ctx context.Context, arg db.DeleteAttachmentParams) (db.Attachment, error)
 }
@@ -230,4 +231,24 @@ func toNullUUID(id *uuid.UUID) uuid.NullUUID {
 		return uuid.NullUUID{}
 	}
 	return uuid.NullUUID{UUID: *id, Valid: true}
+}
+
+// UserObjectKeys возвращает ключи всех файлов пользователя в хранилище. Вызывается перед удалением аккаунта: после него
+// записи о файлах уже не найти, а сами объекты надо убрать.
+func (s *Service) UserObjectKeys(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	keys, err := s.store.ListUserObjectKeys(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list object keys: %w", err)
+	}
+	return keys, nil
+}
+
+// RemoveObjects убирает объекты из хранилища после удаления аккаунта. Сбой одного объекта не останавливает остальные: пользователь
+// своё удаление уже получил, а лишний объект остаётся невидимым мусором, о котором сообщает лог.
+func (s *Service) RemoveObjects(ctx context.Context, keys []string) {
+	for _, key := range keys {
+		if err := s.storage.Remove(ctx, key); err != nil {
+			slog.ErrorContext(ctx, "attachment: stored file was not removed", "key", key, "err", err)
+		}
+	}
 }

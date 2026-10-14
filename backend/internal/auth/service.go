@@ -36,6 +36,11 @@ type Store interface {
 	RevokeRefreshToken(ctx context.Context, tokenHash string) (int64, error)
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time.Time) (int64, error)
+	DeleteUser(ctx context.Context, id uuid.UUID) (int64, error)
+	CreatePasswordResetToken(ctx context.Context, arg db.CreatePasswordResetTokenParams) error
+	DeleteUserPasswordResetTokens(ctx context.Context, userID uuid.UUID) error
+	ClaimPasswordResetToken(ctx context.Context, arg db.ClaimPasswordResetTokenParams) (uuid.UUID, error)
+	DeleteExpiredPasswordResetTokens(ctx context.Context, expiresAt time.Time) (int64, error)
 	DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	GetUserByID(ctx context.Context, id uuid.UUID) (db.User, error)
 	UpdateUserProfile(ctx context.Context, arg db.UpdateUserProfileParams) (db.User, error)
@@ -61,6 +66,8 @@ type Service struct {
 	cost      int
 	now       func() time.Time
 	dummyHash []byte // для выравнивания времени ответа, если пользователя нет
+	mailer    Mailer // nil: сброс пароля по почте выключен
+	resetURL  string
 }
 
 type Option func(*Service)
@@ -218,7 +225,7 @@ func sanitizeUserAgent(ua string) string {
 	return strings.TrimSpace(ua)
 }
 
-// PurgeExpiredTokens удаляет истёкшие refresh-токены и возвращает их число. Без этого таблица росла бы вечно:
+// PurgeExpiredTokens удаляет истёкшие refresh-токены и ссылки сброса пароля (истёкшие и уже использованные) и возвращает их число. Без этого таблица росла бы вечно:
 // каждый вход и каждое обновление добавляют строку. Отозванные, но ещё не истёкшие токены остаются,
 // потому что по ним распознаётся повторное предъявление уже использованного токена.
 func (s *Service) PurgeExpiredTokens(ctx context.Context) (int64, error) {
@@ -226,7 +233,11 @@ func (s *Service) PurgeExpiredTokens(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("purge expired refresh tokens: %w", err)
 	}
-	return n, nil
+	m, err := s.store.DeleteExpiredPasswordResetTokens(ctx, s.now())
+	if err != nil {
+		return n, fmt.Errorf("purge expired password reset tokens: %w", err)
+	}
+	return n + m, nil
 }
 
 // RunTokenPurge чистит истёкшие токены сразу и затем каждые every, пока не отменён ctx. Ошибка очистки не

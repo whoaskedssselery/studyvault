@@ -34,6 +34,8 @@ SELECT li.* FROM library_items li
 WHERE (sqlc.narg('library_subject_id')::uuid IS NULL OR li.library_subject_id = sqlc.narg('library_subject_id'))
   AND (sqlc.narg('kind')::text IS NULL OR li.kind = sqlc.narg('kind'))
   AND (sqlc.narg('semester')::smallint IS NULL OR li.semester = sqlc.narg('semester'))
+  AND (sqlc.narg('author_id')::uuid IS NULL OR li.user_id = sqlc.narg('author_id'))
+  AND (sqlc.narg('tag')::text IS NULL OR sqlc.narg('tag')::text = ANY (li.tags))
   AND (sqlc.narg('cursor_published_at')::timestamptz IS NULL
        OR (li.published_at, li.id) < (sqlc.narg('cursor_published_at')::timestamptz, sqlc.narg('cursor_id')::uuid))
 ORDER BY li.published_at DESC, li.id DESC
@@ -45,6 +47,8 @@ SELECT li.* FROM library_items li
 WHERE (sqlc.narg('library_subject_id')::uuid IS NULL OR li.library_subject_id = sqlc.narg('library_subject_id'))
   AND (sqlc.narg('kind')::text IS NULL OR li.kind = sqlc.narg('kind'))
   AND (sqlc.narg('semester')::smallint IS NULL OR li.semester = sqlc.narg('semester'))
+  AND (sqlc.narg('author_id')::uuid IS NULL OR li.user_id = sqlc.narg('author_id'))
+  AND (sqlc.narg('tag')::text IS NULL OR sqlc.narg('tag')::text = ANY (li.tags))
   AND (sqlc.narg('cursor_rating')::float8 IS NULL
        OR (li.rating_avg, li.rating_count, li.id)
           < (sqlc.narg('cursor_rating')::float8, sqlc.narg('cursor_count')::bigint, sqlc.narg('cursor_id')::uuid))
@@ -57,6 +61,8 @@ SELECT li.* FROM library_items li
 WHERE (sqlc.narg('library_subject_id')::uuid IS NULL OR li.library_subject_id = sqlc.narg('library_subject_id'))
   AND (sqlc.narg('kind')::text IS NULL OR li.kind = sqlc.narg('kind'))
   AND (sqlc.narg('semester')::smallint IS NULL OR li.semester = sqlc.narg('semester'))
+  AND (sqlc.narg('author_id')::uuid IS NULL OR li.user_id = sqlc.narg('author_id'))
+  AND (sqlc.narg('tag')::text IS NULL OR sqlc.narg('tag')::text = ANY (li.tags))
   AND (sqlc.narg('cursor_views')::bigint IS NULL
        OR (li.views, li.id) < (sqlc.narg('cursor_views')::bigint, sqlc.narg('cursor_id')::uuid))
 ORDER BY li.views DESC, li.id DESC
@@ -69,7 +75,9 @@ SELECT li.* FROM library_items li
 WHERE li.id = ANY(sqlc.arg('ids')::uuid[])
   AND (sqlc.narg('library_subject_id')::uuid IS NULL OR li.library_subject_id = sqlc.narg('library_subject_id'))
   AND (sqlc.narg('kind')::text IS NULL OR li.kind = sqlc.narg('kind'))
-  AND (sqlc.narg('semester')::smallint IS NULL OR li.semester = sqlc.narg('semester'));
+  AND (sqlc.narg('semester')::smallint IS NULL OR li.semester = sqlc.narg('semester'))
+  AND (sqlc.narg('author_id')::uuid IS NULL OR li.user_id = sqlc.narg('author_id'))
+  AND (sqlc.narg('tag')::text IS NULL OR sqlc.narg('tag')::text = ANY (li.tags));
 
 -- Личное состояние зрителя для набора материалов: его оценка и отметка «в избранном».
 -- name: ListViewerState :many
@@ -132,7 +140,7 @@ RETURNING *;
 
 -- Старые сверху. Курсор: (created_at, id) последней строки предыдущей страницы.
 -- name: ListComments :many
-SELECT c.id, c.note_id, c.user_id, c.body, c.created_at,
+SELECT c.id, c.note_id, c.user_id, c.body, c.created_at, c.edited_at,
        u.display_name AS author_name, u.faculty AS author_faculty
 FROM comments c
 JOIN users u ON u.id = c.user_id
@@ -176,7 +184,7 @@ DELETE FROM note_bookmarks WHERE note_id = $1 AND user_id = $2;
 -- name: ListBookmarkedLibrary :many
 SELECT li.id, li.user_id, li.title, li.summary, li.kind, li.semester, li.published_at, li.views,
        li.library_subject_id, li.subject_title, li.subject_color, li.author_name, li.author_faculty,
-       li.rating_count, li.rating_avg, li.comments_count, li.bookmarks_count,
+       li.rating_count, li.rating_avg, li.comments_count, li.bookmarks_count, li.tags,
        b.created_at AS bookmarked_at
 FROM note_bookmarks b
 JOIN library_items li ON li.id = b.note_id
@@ -217,7 +225,7 @@ INSERT INTO moderation_decisions (note_id, moderator_id, decision, reason) VALUE
 -- Причина последнего отказа: автор видит её рядом со своим материалом.
 -- name: GetLastRejectionReason :one
 SELECT reason FROM moderation_decisions
-WHERE note_id = $1 AND decision = 'rejected'
+WHERE note_id = $1 AND decision IN ('rejected', 'unpublished')
 ORDER BY created_at DESC, id DESC
 LIMIT 1;
 
@@ -241,3 +249,63 @@ LIMIT sqlc.arg('page_size');
 -- name: DemotePublishedNote :exec
 UPDATE notes SET status = 'pending', published_at = NULL, updated_at = now()
 WHERE id = $1 AND user_id = $2 AND status = 'published' AND deleted_at IS NULL;
+
+-- ---------------------------------------------------------------------------
+-- Отзыв с проверки и снятие с публикации
+-- ---------------------------------------------------------------------------
+
+-- Автор забирает материал с проверки обратно в черновики. 0 строк: заметки нет или она не на проверке.
+-- name: WithdrawNote :one
+UPDATE notes SET status = 'draft', updated_at = now()
+WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL AND status = 'pending'
+RETURNING *;
+
+-- Модератор снимает опубликованный материал с публикации. Он становится отклонённым: автор видит причину,
+-- исправляет и отправляет заново. Условие по статусу защищает от гонки с правкой автора.
+-- name: UnpublishNote :one
+UPDATE notes SET status = 'rejected', published_at = NULL
+WHERE id = $1 AND status = 'published' AND deleted_at IS NULL
+RETURNING *;
+
+-- ---------------------------------------------------------------------------
+-- Рейтинг и профили авторов
+-- ---------------------------------------------------------------------------
+
+-- Рейтинг автора: среднее арифметическое всех оценок всех его опубликованных материалов. Выше средняя оценка,
+-- при равенстве больше оценок, затем больше материалов. У автора без оценок rating_avg равен 0, и он идёт в конце списка
+-- (есть ли оценки, решает ratings_count: средняя без оценок не показывается).
+-- name: ListAuthorRanking :many
+SELECT u.id, u.display_name, u.faculty,
+       count(*)::bigint                                  AS materials_count,
+       COALESCE(sum(li.rating_count), 0)::bigint         AS ratings_count,
+       COALESCE(sum(li.rating_avg * li.rating_count) / NULLIF(sum(li.rating_count), 0), 0)::float8 AS rating_avg,
+       COALESCE(sum(li.views), 0)::bigint                AS views
+FROM library_items li
+JOIN users u ON u.id = li.user_id
+GROUP BY u.id
+ORDER BY rating_avg DESC NULLS LAST, ratings_count DESC, materials_count DESC, u.id
+LIMIT sqlc.arg('page_size');
+
+-- Профиль автора. Строка есть, только если у пользователя есть хотя бы один опубликованный материал: по остальным
+-- аккаунтам профиль не отдаётся, чтобы нельзя было перебирать id и узнавать, кто зарегистрирован.
+-- name: GetAuthorProfile :one
+SELECT u.id, u.display_name, u.faculty,
+       count(*)::bigint                                  AS materials_count,
+       COALESCE(sum(li.rating_count), 0)::bigint         AS ratings_count,
+       COALESCE(sum(li.rating_avg * li.rating_count) / NULLIF(sum(li.rating_count), 0), 0)::float8 AS rating_avg,
+       COALESCE(sum(li.views), 0)::bigint                AS views
+FROM library_items li
+JOIN users u ON u.id = li.user_id
+WHERE u.id = $1
+GROUP BY u.id;
+
+-- ---------------------------------------------------------------------------
+-- Правка комментария
+-- ---------------------------------------------------------------------------
+
+-- Править комментарий может только его автор и только пока материал опубликован.
+-- name: UpdateComment :one
+UPDATE comments c SET body = sqlc.arg('body'), edited_at = now()
+WHERE c.id = sqlc.arg('id') AND c.user_id = sqlc.arg('user_id') AND c.deleted_at IS NULL
+  AND EXISTS (SELECT 1 FROM notes n WHERE n.id = c.note_id AND n.status = 'published' AND n.deleted_at IS NULL)
+RETURNING c.*;

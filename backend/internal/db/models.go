@@ -29,6 +29,7 @@ type Comment struct {
 	Body      string     `json:"body"`
 	CreatedAt time.Time  `json:"created_at"`
 	DeletedAt *time.Time `json:"deleted_at"`
+	EditedAt  *time.Time `json:"edited_at"`
 }
 
 type LibraryItem struct {
@@ -49,6 +50,7 @@ type LibraryItem struct {
 	RatingAvg        float64       `json:"rating_avg"`
 	CommentsCount    int64         `json:"comments_count"`
 	BookmarksCount   int64         `json:"bookmarks_count"`
+	Tags             []string      `json:"tags"`
 }
 
 type LibrarySubject struct {
@@ -59,12 +61,12 @@ type LibrarySubject struct {
 }
 
 type ModerationDecision struct {
-	ID          uuid.UUID   `json:"id"`
-	NoteID      uuid.UUID   `json:"note_id"`
-	ModeratorID uuid.UUID   `json:"moderator_id"`
-	Decision    string      `json:"decision"`
-	Reason      pgtype.Text `json:"reason"`
-	CreatedAt   time.Time   `json:"created_at"`
+	ID          uuid.UUID     `json:"id"`
+	NoteID      uuid.UUID     `json:"note_id"`
+	ModeratorID uuid.NullUUID `json:"moderator_id"`
+	Decision    string        `json:"decision"`
+	Reason      pgtype.Text   `json:"reason"`
+	CreatedAt   time.Time     `json:"created_at"`
 }
 
 type Note struct {
@@ -114,6 +116,15 @@ type NoteRating struct {
 type NoteTag struct {
 	NoteID uuid.UUID `json:"note_id"`
 	TagID  uuid.UUID `json:"tag_id"`
+}
+
+type PasswordResetToken struct {
+	ID        uuid.UUID  `json:"id"`
+	UserID    uuid.UUID  `json:"user_id"`
+	TokenHash string     `json:"token_hash"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	UsedAt    *time.Time `json:"used_at"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type RefreshToken struct {

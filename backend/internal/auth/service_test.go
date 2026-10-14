@@ -3,6 +3,7 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -21,10 +22,17 @@ type fakeStore struct {
 	users   map[string]db.User // ключ: email в нижнем регистре
 	refresh []db.CreateRefreshTokenParams
 	tokens  map[string]*db.RefreshToken // ключ: token_hash
+	resets  map[string]*resetRow        // ключ: token_hash
+}
+
+type resetRow struct {
+	userID  uuid.UUID
+	expires time.Time
+	used    bool
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{users: map[string]db.User{}, tokens: map[string]*db.RefreshToken{}}
+	return &fakeStore{users: map[string]db.User{}, tokens: map[string]*db.RefreshToken{}, resets: map[string]*resetRow{}}
 }
 
 func (f *fakeStore) GetRefreshTokenByHash(_ context.Context, hash string) (db.RefreshToken, error) {
@@ -73,6 +81,50 @@ func (f *fakeStore) DeleteUserRefreshTokens(_ context.Context, userID uuid.UUID)
 		}
 	}
 	return nil
+}
+
+func (f *fakeStore) DeleteUser(_ context.Context, id uuid.UUID) (int64, error) {
+	for k, u := range f.users {
+		if u.ID == id {
+			delete(f.users, k)
+			return 1, nil
+		}
+	}
+	return 0, nil
+}
+
+func (f *fakeStore) CreatePasswordResetToken(_ context.Context, a db.CreatePasswordResetTokenParams) error {
+	f.resets[a.TokenHash] = &resetRow{userID: a.UserID, expires: a.ExpiresAt}
+	return nil
+}
+
+func (f *fakeStore) DeleteUserPasswordResetTokens(_ context.Context, userID uuid.UUID) error {
+	for h, r := range f.resets {
+		if r.userID == userID {
+			delete(f.resets, h)
+		}
+	}
+	return nil
+}
+
+func (f *fakeStore) ClaimPasswordResetToken(_ context.Context, a db.ClaimPasswordResetTokenParams) (uuid.UUID, error) {
+	r, ok := f.resets[a.TokenHash]
+	if !ok || r.used || !r.expires.After(a.ExpiresAt) {
+		return uuid.Nil, pgx.ErrNoRows
+	}
+	r.used = true
+	return r.userID, nil
+}
+
+func (f *fakeStore) DeleteExpiredPasswordResetTokens(_ context.Context, now time.Time) (int64, error) {
+	var n int64
+	for h, r := range f.resets {
+		if !r.expires.After(now) || r.used {
+			delete(f.resets, h)
+			n++
+		}
+	}
+	return n, nil
 }
 
 func (f *fakeStore) GetUserByID(_ context.Context, id uuid.UUID) (db.User, error) {
@@ -559,5 +611,244 @@ func TestChangePassword_UnknownUser(t *testing.T) {
 	svc := newService(newFakeStore())
 	if _, err := svc.ChangePassword(context.Background(), uuid.New(), "a", "b", ""); !errors.Is(err, auth.ErrUserNotFound) {
 		t.Errorf("err = %v, want ErrUserNotFound", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Сброс пароля по почте и удаление аккаунта
+// ---------------------------------------------------------------------------
+
+type sentMail struct{ to, subject, body string }
+
+// fakeMailer складывает письма в канал: сервис отправляет их в фоне, и тест ждёт письмо, а не гадает по времени.
+type fakeMailer struct {
+	sent chan sentMail
+	err  error
+}
+
+func newMailer() *fakeMailer { return &fakeMailer{sent: make(chan sentMail, 10)} }
+
+func (m *fakeMailer) Send(_ context.Context, to, subject, body string) error {
+	m.sent <- sentMail{to, subject, body}
+	return m.err
+}
+
+func (m *fakeMailer) next(t *testing.T) sentMail {
+	t.Helper()
+	select {
+	case mail := <-m.sent:
+		return mail
+	case <-time.After(2 * time.Second):
+		t.Fatal("no mail was sent")
+		return sentMail{}
+	}
+}
+
+func (m *fakeMailer) none(t *testing.T) {
+	t.Helper()
+	select {
+	case mail := <-m.sent:
+		t.Fatalf("an unexpected mail to %s", mail.to)
+	case <-time.After(150 * time.Millisecond):
+	}
+}
+
+var tokenInLink = regexp.MustCompile(`token=([A-Za-z0-9_-]+)`)
+
+func tokenFrom(t *testing.T, mail sentMail) string {
+	t.Helper()
+	m := tokenInLink.FindStringSubmatch(mail.body)
+	if m == nil {
+		t.Fatalf("no reset link in the mail: %q", mail.body)
+	}
+	return m[1]
+}
+
+func newRecoveryService(store *fakeStore, mailer auth.Mailer, now func() time.Time) *auth.Service {
+	opts := []auth.Option{auth.WithBcryptCost(bcrypt.MinCost), auth.WithClock(now)}
+	if mailer != nil {
+		opts = append(opts, auth.WithMailer(mailer, "https://app.example.com/reset-password?lang=ru"))
+	}
+	return auth.NewService(store, secret, opts...)
+}
+
+func TestRequestPasswordReset_KnownEmail_SendsALinkToTheRightPage(t *testing.T) {
+	ctx := context.Background()
+	store, mailer := newFakeStore(), newMailer()
+	svc := newRecoveryService(store, mailer, time.Now)
+	loggedIn(t, svc)
+
+	if err := svc.RequestPasswordReset(ctx, " A@X.io "); err != nil { // регистр и пробелы не важны
+		t.Fatal(err)
+	}
+
+	mail := mailer.next(t)
+	if mail.to != "a@x.io" || mail.subject == "" {
+		t.Errorf("mail = %+v", mail)
+	}
+	if !strings.Contains(mail.body, "https://app.example.com/reset-password?") || !strings.Contains(mail.body, "lang=ru") {
+		t.Errorf("the link must lead to the configured page and keep its own parameters: %q", mail.body)
+	}
+	token := tokenFrom(t, mail)
+	if _, stored := store.resets[token]; stored {
+		t.Error("the raw token must never be stored")
+	}
+	if _, stored := store.resets[auth.HashRefreshToken(token)]; !stored {
+		t.Error("only the token's hash must be stored")
+	}
+}
+
+func TestRequestPasswordReset_UnknownEmail_LooksTheSame_AndSendsNothing(t *testing.T) {
+	store, mailer := newFakeStore(), newMailer()
+	svc := newRecoveryService(store, mailer, time.Now)
+	loggedIn(t, svc)
+
+	if err := svc.RequestPasswordReset(context.Background(), "nobody@x.io"); err != nil {
+		t.Fatalf("an unknown email must not be reported: %v", err)
+	}
+	mailer.none(t)
+	if len(store.resets) != 0 {
+		t.Error("no token may be created for an unknown email")
+	}
+}
+
+func TestRequestPasswordReset_WithoutAMailServer_IsUnavailable(t *testing.T) {
+	svc := newRecoveryService(newFakeStore(), nil, time.Now)
+	loggedIn(t, svc)
+	for _, email := range []string{"a@x.io", "nobody@x.io"} { // для известной и неизвестной почты ответ один и тот же
+		if err := svc.RequestPasswordReset(context.Background(), email); !errors.Is(err, auth.ErrResetUnavailable) {
+			t.Errorf("%s: err = %v, want ErrResetUnavailable", email, err)
+		}
+	}
+}
+
+func TestRequestPasswordReset_AMailFailureIsNotReported(t *testing.T) {
+	mailer := newMailer()
+	mailer.err = errors.New("smtp is down")
+	svc := newRecoveryService(newFakeStore(), mailer, time.Now)
+	loggedIn(t, svc)
+
+	// Иначе по ошибке можно было бы отличить существующий аккаунт от несуществующего.
+	if err := svc.RequestPasswordReset(context.Background(), "a@x.io"); err != nil {
+		t.Errorf("err = %v, a delivery failure must only be logged", err)
+	}
+	mailer.next(t)
+}
+
+func TestConfirmPasswordReset_ChangesThePassword_EndsEverySession_WorksOnce(t *testing.T) {
+	ctx := context.Background()
+	store, mailer := newFakeStore(), newMailer()
+	svc := newRecoveryService(store, mailer, time.Now)
+	phone := loggedIn(t, svc)
+	laptop, _ := svc.Login(ctx, "a@x.io", "password123", "laptop")
+	if err := svc.RequestPasswordReset(ctx, "a@x.io"); err != nil {
+		t.Fatal(err)
+	}
+	token := tokenFrom(t, mailer.next(t))
+
+	if err := svc.ConfirmPasswordReset(ctx, token, "brand-new-pass"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Login(ctx, "a@x.io", "password123", ""); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Errorf("the old password still works: %v", err)
+	}
+	if _, err := svc.Login(ctx, "a@x.io", "brand-new-pass", ""); err != nil {
+		t.Errorf("the new password: %v", err)
+	}
+	for name, old := range map[string]string{"phone": phone.RefreshToken, "laptop": laptop.RefreshToken} {
+		if _, err := svc.Refresh(ctx, old, ""); !errors.Is(err, auth.ErrInvalidToken) {
+			t.Errorf("the %s session survived the reset: %v", name, err)
+		}
+	}
+	if err := svc.ConfirmPasswordReset(ctx, token, "another-pass-1"); !errors.Is(err, auth.ErrInvalidToken) {
+		t.Errorf("a link must work once, err = %v", err)
+	}
+}
+
+func TestConfirmPasswordReset_ExpiredUnknownAndEmptyTokens_AreRejected(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now()
+	store, mailer := newFakeStore(), newMailer()
+	svc := newRecoveryService(store, mailer, func() time.Time { return now })
+	loggedIn(t, svc)
+	if err := svc.RequestPasswordReset(ctx, "a@x.io"); err != nil {
+		t.Fatal(err)
+	}
+	token := tokenFrom(t, mailer.next(t))
+
+	now = now.Add(auth.PasswordResetTTL + time.Second)
+
+	for name, tok := range map[string]string{"expired": token, "unknown": "AAAA", "empty": ""} {
+		if err := svc.ConfirmPasswordReset(ctx, tok, "brand-new-pass"); !errors.Is(err, auth.ErrInvalidToken) {
+			t.Errorf("%s: err = %v, want ErrInvalidToken", name, err)
+		}
+	}
+	if _, err := svc.Login(ctx, "a@x.io", "password123", ""); err != nil {
+		t.Errorf("a rejected reset must not change the password: %v", err)
+	}
+}
+
+func TestRequestPasswordReset_ANewLinkCancelsTheOldOne(t *testing.T) {
+	ctx := context.Background()
+	mailer := newMailer()
+	svc := newRecoveryService(newFakeStore(), mailer, time.Now)
+	loggedIn(t, svc)
+	_ = svc.RequestPasswordReset(ctx, "a@x.io")
+	first := tokenFrom(t, mailer.next(t))
+	_ = svc.RequestPasswordReset(ctx, "a@x.io")
+	second := tokenFrom(t, mailer.next(t))
+
+	if err := svc.ConfirmPasswordReset(ctx, first, "brand-new-pass"); !errors.Is(err, auth.ErrInvalidToken) {
+		t.Errorf("the superseded link must be dead, err = %v", err)
+	}
+	if err := svc.ConfirmPasswordReset(ctx, second, "brand-new-pass"); err != nil {
+		t.Errorf("the latest link must work: %v", err)
+	}
+}
+
+func TestPurge_AlsoRemovesExpiredAndUsedResetTokens(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now()
+	store, mailer := newFakeStore(), newMailer()
+	svc := newRecoveryService(store, mailer, func() time.Time { return now })
+	loggedIn(t, svc)
+	_ = svc.RequestPasswordReset(ctx, "a@x.io")
+	_ = tokenFrom(t, mailer.next(t))
+	if len(store.resets) != 1 {
+		t.Fatalf("setup: %d reset tokens", len(store.resets))
+	}
+	if _, err := svc.PurgeExpiredTokens(ctx); err != nil || len(store.resets) != 1 {
+		t.Fatalf("a live link must survive the purge: %d, %v", len(store.resets), err)
+	}
+	now = now.Add(auth.PasswordResetTTL + time.Minute)
+	if _, err := svc.PurgeExpiredTokens(ctx); err != nil || len(store.resets) != 0 {
+		t.Errorf("an expired link must be purged: %d, %v", len(store.resets), err)
+	}
+}
+
+func TestDeleteAccount_NeedsTheRightPassword(t *testing.T) {
+	ctx := context.Background()
+	store := newFakeStore()
+	svc := newService(store)
+	res := loggedIn(t, svc)
+
+	if err := svc.DeleteAccount(ctx, res.User.ID, "not-my-password"); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Fatalf("err = %v, want ErrInvalidCredentials", err)
+	}
+	if _, err := svc.GetUser(ctx, res.User.ID); err != nil {
+		t.Errorf("a wrong password must delete nothing: %v", err)
+	}
+	if err := svc.DeleteAccount(ctx, res.User.ID, "password123"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.GetUser(ctx, res.User.ID); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("the account must be gone: %v", err)
+	}
+	if _, err := svc.Login(ctx, "a@x.io", "password123", ""); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Errorf("a deleted account must not log in: %v", err)
+	}
+	if err := svc.DeleteAccount(ctx, res.User.ID, "password123"); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("deleting twice: err = %v", err)
 	}
 }

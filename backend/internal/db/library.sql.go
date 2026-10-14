@@ -67,7 +67,7 @@ func (q *Queries) ApproveNote(ctx context.Context, id uuid.UUID) (Note, error) {
 const createComment = `-- name: CreateComment :one
 
 INSERT INTO comments (note_id, user_id, body) VALUES ($1, $2, $3)
-RETURNING id, note_id, user_id, body, created_at, deleted_at
+RETURNING id, note_id, user_id, body, created_at, deleted_at, edited_at
 `
 
 type CreateCommentParams struct {
@@ -89,6 +89,7 @@ func (q *Queries) CreateComment(ctx context.Context, arg CreateCommentParams) (C
 		&i.Body,
 		&i.CreatedAt,
 		&i.DeletedAt,
+		&i.EditedAt,
 	)
 	return i, err
 }
@@ -145,9 +146,48 @@ func (q *Queries) DemotePublishedNote(ctx context.Context, arg DemotePublishedNo
 	return err
 }
 
+const getAuthorProfile = `-- name: GetAuthorProfile :one
+SELECT u.id, u.display_name, u.faculty,
+       count(*)::bigint                                  AS materials_count,
+       COALESCE(sum(li.rating_count), 0)::bigint         AS ratings_count,
+       COALESCE(sum(li.rating_avg * li.rating_count) / NULLIF(sum(li.rating_count), 0), 0)::float8 AS rating_avg,
+       COALESCE(sum(li.views), 0)::bigint                AS views
+FROM library_items li
+JOIN users u ON u.id = li.user_id
+WHERE u.id = $1
+GROUP BY u.id
+`
+
+type GetAuthorProfileRow struct {
+	ID             uuid.UUID   `json:"id"`
+	DisplayName    string      `json:"display_name"`
+	Faculty        pgtype.Text `json:"faculty"`
+	MaterialsCount int64       `json:"materials_count"`
+	RatingsCount   int64       `json:"ratings_count"`
+	RatingAvg      float64     `json:"rating_avg"`
+	Views          int64       `json:"views"`
+}
+
+// Профиль автора. Строка есть, только если у пользователя есть хотя бы один опубликованный материал: по остальным
+// аккаунтам профиль не отдаётся, чтобы нельзя было перебирать id и узнавать, кто зарегистрирован.
+func (q *Queries) GetAuthorProfile(ctx context.Context, id uuid.UUID) (GetAuthorProfileRow, error) {
+	row := q.db.QueryRow(ctx, getAuthorProfile, id)
+	var i GetAuthorProfileRow
+	err := row.Scan(
+		&i.ID,
+		&i.DisplayName,
+		&i.Faculty,
+		&i.MaterialsCount,
+		&i.RatingsCount,
+		&i.RatingAvg,
+		&i.Views,
+	)
+	return i, err
+}
+
 const getLastRejectionReason = `-- name: GetLastRejectionReason :one
 SELECT reason FROM moderation_decisions
-WHERE note_id = $1 AND decision = 'rejected'
+WHERE note_id = $1 AND decision IN ('rejected', 'unpublished')
 ORDER BY created_at DESC, id DESC
 LIMIT 1
 `
@@ -334,10 +374,10 @@ INSERT INTO moderation_decisions (note_id, moderator_id, decision, reason) VALUE
 `
 
 type InsertModerationDecisionParams struct {
-	NoteID      uuid.UUID   `json:"note_id"`
-	ModeratorID uuid.UUID   `json:"moderator_id"`
-	Decision    string      `json:"decision"`
-	Reason      pgtype.Text `json:"reason"`
+	NoteID      uuid.UUID     `json:"note_id"`
+	ModeratorID uuid.NullUUID `json:"moderator_id"`
+	Decision    string        `json:"decision"`
+	Reason      pgtype.Text   `json:"reason"`
 }
 
 func (q *Queries) InsertModerationDecision(ctx context.Context, arg InsertModerationDecisionParams) error {
@@ -350,10 +390,68 @@ func (q *Queries) InsertModerationDecision(ctx context.Context, arg InsertModera
 	return err
 }
 
+const listAuthorRanking = `-- name: ListAuthorRanking :many
+
+SELECT u.id, u.display_name, u.faculty,
+       count(*)::bigint                                  AS materials_count,
+       COALESCE(sum(li.rating_count), 0)::bigint         AS ratings_count,
+       COALESCE(sum(li.rating_avg * li.rating_count) / NULLIF(sum(li.rating_count), 0), 0)::float8 AS rating_avg,
+       COALESCE(sum(li.views), 0)::bigint                AS views
+FROM library_items li
+JOIN users u ON u.id = li.user_id
+GROUP BY u.id
+ORDER BY rating_avg DESC NULLS LAST, ratings_count DESC, materials_count DESC, u.id
+LIMIT $1
+`
+
+type ListAuthorRankingRow struct {
+	ID             uuid.UUID   `json:"id"`
+	DisplayName    string      `json:"display_name"`
+	Faculty        pgtype.Text `json:"faculty"`
+	MaterialsCount int64       `json:"materials_count"`
+	RatingsCount   int64       `json:"ratings_count"`
+	RatingAvg      float64     `json:"rating_avg"`
+	Views          int64       `json:"views"`
+}
+
+// ---------------------------------------------------------------------------
+// Рейтинг и профили авторов
+// ---------------------------------------------------------------------------
+// Рейтинг автора: среднее арифметическое всех оценок всех его опубликованных материалов. Выше средняя оценка,
+// при равенстве больше оценок, затем больше материалов. У автора без оценок rating_avg равен 0, и он идёт в конце списка
+// (есть ли оценки, решает ratings_count: средняя без оценок не показывается).
+func (q *Queries) ListAuthorRanking(ctx context.Context, pageSize int32) ([]ListAuthorRankingRow, error) {
+	rows, err := q.db.Query(ctx, listAuthorRanking, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthorRankingRow
+	for rows.Next() {
+		var i ListAuthorRankingRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.Faculty,
+			&i.MaterialsCount,
+			&i.RatingsCount,
+			&i.RatingAvg,
+			&i.Views,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBookmarkedLibrary = `-- name: ListBookmarkedLibrary :many
 SELECT li.id, li.user_id, li.title, li.summary, li.kind, li.semester, li.published_at, li.views,
        li.library_subject_id, li.subject_title, li.subject_color, li.author_name, li.author_faculty,
-       li.rating_count, li.rating_avg, li.comments_count, li.bookmarks_count,
+       li.rating_count, li.rating_avg, li.comments_count, li.bookmarks_count, li.tags,
        b.created_at AS bookmarked_at
 FROM note_bookmarks b
 JOIN library_items li ON li.id = b.note_id
@@ -389,6 +487,7 @@ type ListBookmarkedLibraryRow struct {
 	RatingAvg        float64       `json:"rating_avg"`
 	CommentsCount    int64         `json:"comments_count"`
 	BookmarksCount   int64         `json:"bookmarks_count"`
+	Tags             []string      `json:"tags"`
 	BookmarkedAt     time.Time     `json:"bookmarked_at"`
 }
 
@@ -425,6 +524,7 @@ func (q *Queries) ListBookmarkedLibrary(ctx context.Context, arg ListBookmarkedL
 			&i.RatingAvg,
 			&i.CommentsCount,
 			&i.BookmarksCount,
+			&i.Tags,
 			&i.BookmarkedAt,
 		); err != nil {
 			return nil, err
@@ -438,7 +538,7 @@ func (q *Queries) ListBookmarkedLibrary(ctx context.Context, arg ListBookmarkedL
 }
 
 const listComments = `-- name: ListComments :many
-SELECT c.id, c.note_id, c.user_id, c.body, c.created_at,
+SELECT c.id, c.note_id, c.user_id, c.body, c.created_at, c.edited_at,
        u.display_name AS author_name, u.faculty AS author_faculty
 FROM comments c
 JOIN users u ON u.id = c.user_id
@@ -463,6 +563,7 @@ type ListCommentsRow struct {
 	UserID        uuid.UUID   `json:"user_id"`
 	Body          string      `json:"body"`
 	CreatedAt     time.Time   `json:"created_at"`
+	EditedAt      *time.Time  `json:"edited_at"`
 	AuthorName    string      `json:"author_name"`
 	AuthorFaculty pgtype.Text `json:"author_faculty"`
 }
@@ -488,6 +589,7 @@ func (q *Queries) ListComments(ctx context.Context, arg ListCommentsParams) ([]L
 			&i.UserID,
 			&i.Body,
 			&i.CreatedAt,
+			&i.EditedAt,
 			&i.AuthorName,
 			&i.AuthorFaculty,
 		); err != nil {
@@ -502,11 +604,13 @@ func (q *Queries) ListComments(ctx context.Context, arg ListCommentsParams) ([]L
 }
 
 const listLibraryByIDs = `-- name: ListLibraryByIDs :many
-SELECT li.id, li.user_id, li.title, li.summary, li.kind, li.semester, li.published_at, li.views, li.library_subject_id, li.subject_title, li.subject_color, li.author_name, li.author_faculty, li.rating_count, li.rating_avg, li.comments_count, li.bookmarks_count FROM library_items li
+SELECT li.id, li.user_id, li.title, li.summary, li.kind, li.semester, li.published_at, li.views, li.library_subject_id, li.subject_title, li.subject_color, li.author_name, li.author_faculty, li.rating_count, li.rating_avg, li.comments_count, li.bookmarks_count, li.tags FROM library_items li
 WHERE li.id = ANY($1::uuid[])
   AND ($2::uuid IS NULL OR li.library_subject_id = $2)
   AND ($3::text IS NULL OR li.kind = $3)
   AND ($4::smallint IS NULL OR li.semester = $4)
+  AND ($5::uuid IS NULL OR li.user_id = $5)
+  AND ($6::text IS NULL OR $6::text = ANY (li.tags))
 `
 
 type ListLibraryByIDsParams struct {
@@ -514,6 +618,8 @@ type ListLibraryByIDsParams struct {
 	LibrarySubjectID uuid.NullUUID `json:"library_subject_id"`
 	Kind             pgtype.Text   `json:"kind"`
 	Semester         pgtype.Int2   `json:"semester"`
+	AuthorID         uuid.NullUUID `json:"author_id"`
+	Tag              pgtype.Text   `json:"tag"`
 }
 
 // Перепроверка результатов поиска: движок предлагает кандидатов, а решает база. Снятый с публикации
@@ -524,6 +630,8 @@ func (q *Queries) ListLibraryByIDs(ctx context.Context, arg ListLibraryByIDsPara
 		arg.LibrarySubjectID,
 		arg.Kind,
 		arg.Semester,
+		arg.AuthorID,
+		arg.Tag,
 	)
 	if err != nil {
 		return nil, err
@@ -550,6 +658,7 @@ func (q *Queries) ListLibraryByIDs(ctx context.Context, arg ListLibraryByIDsPara
 			&i.RatingAvg,
 			&i.CommentsCount,
 			&i.BookmarksCount,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}
@@ -562,20 +671,24 @@ func (q *Queries) ListLibraryByIDs(ctx context.Context, arg ListLibraryByIDsPara
 }
 
 const listLibraryMostViewed = `-- name: ListLibraryMostViewed :many
-SELECT li.id, li.user_id, li.title, li.summary, li.kind, li.semester, li.published_at, li.views, li.library_subject_id, li.subject_title, li.subject_color, li.author_name, li.author_faculty, li.rating_count, li.rating_avg, li.comments_count, li.bookmarks_count FROM library_items li
+SELECT li.id, li.user_id, li.title, li.summary, li.kind, li.semester, li.published_at, li.views, li.library_subject_id, li.subject_title, li.subject_color, li.author_name, li.author_faculty, li.rating_count, li.rating_avg, li.comments_count, li.bookmarks_count, li.tags FROM library_items li
 WHERE ($1::uuid IS NULL OR li.library_subject_id = $1)
   AND ($2::text IS NULL OR li.kind = $2)
   AND ($3::smallint IS NULL OR li.semester = $3)
-  AND ($4::bigint IS NULL
-       OR (li.views, li.id) < ($4::bigint, $5::uuid))
+  AND ($4::uuid IS NULL OR li.user_id = $4)
+  AND ($5::text IS NULL OR $5::text = ANY (li.tags))
+  AND ($6::bigint IS NULL
+       OR (li.views, li.id) < ($6::bigint, $7::uuid))
 ORDER BY li.views DESC, li.id DESC
-LIMIT $6
+LIMIT $8
 `
 
 type ListLibraryMostViewedParams struct {
 	LibrarySubjectID uuid.NullUUID `json:"library_subject_id"`
 	Kind             pgtype.Text   `json:"kind"`
 	Semester         pgtype.Int2   `json:"semester"`
+	AuthorID         uuid.NullUUID `json:"author_id"`
+	Tag              pgtype.Text   `json:"tag"`
 	CursorViews      pgtype.Int8   `json:"cursor_views"`
 	CursorID         uuid.NullUUID `json:"cursor_id"`
 	PageSize         int32         `json:"page_size"`
@@ -587,6 +700,8 @@ func (q *Queries) ListLibraryMostViewed(ctx context.Context, arg ListLibraryMost
 		arg.LibrarySubjectID,
 		arg.Kind,
 		arg.Semester,
+		arg.AuthorID,
+		arg.Tag,
 		arg.CursorViews,
 		arg.CursorID,
 		arg.PageSize,
@@ -616,6 +731,7 @@ func (q *Queries) ListLibraryMostViewed(ctx context.Context, arg ListLibraryMost
 			&i.RatingAvg,
 			&i.CommentsCount,
 			&i.BookmarksCount,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}
@@ -629,20 +745,24 @@ func (q *Queries) ListLibraryMostViewed(ctx context.Context, arg ListLibraryMost
 
 const listLibraryNewest = `-- name: ListLibraryNewest :many
 
-SELECT li.id, li.user_id, li.title, li.summary, li.kind, li.semester, li.published_at, li.views, li.library_subject_id, li.subject_title, li.subject_color, li.author_name, li.author_faculty, li.rating_count, li.rating_avg, li.comments_count, li.bookmarks_count FROM library_items li
+SELECT li.id, li.user_id, li.title, li.summary, li.kind, li.semester, li.published_at, li.views, li.library_subject_id, li.subject_title, li.subject_color, li.author_name, li.author_faculty, li.rating_count, li.rating_avg, li.comments_count, li.bookmarks_count, li.tags FROM library_items li
 WHERE ($1::uuid IS NULL OR li.library_subject_id = $1)
   AND ($2::text IS NULL OR li.kind = $2)
   AND ($3::smallint IS NULL OR li.semester = $3)
-  AND ($4::timestamptz IS NULL
-       OR (li.published_at, li.id) < ($4::timestamptz, $5::uuid))
+  AND ($4::uuid IS NULL OR li.user_id = $4)
+  AND ($5::text IS NULL OR $5::text = ANY (li.tags))
+  AND ($6::timestamptz IS NULL
+       OR (li.published_at, li.id) < ($6::timestamptz, $7::uuid))
 ORDER BY li.published_at DESC, li.id DESC
-LIMIT $6
+LIMIT $8
 `
 
 type ListLibraryNewestParams struct {
 	LibrarySubjectID  uuid.NullUUID `json:"library_subject_id"`
 	Kind              pgtype.Text   `json:"kind"`
 	Semester          pgtype.Int2   `json:"semester"`
+	AuthorID          uuid.NullUUID `json:"author_id"`
+	Tag               pgtype.Text   `json:"tag"`
 	CursorPublishedAt *time.Time    `json:"cursor_published_at"`
 	CursorID          uuid.NullUUID `json:"cursor_id"`
 	PageSize          int32         `json:"page_size"`
@@ -657,6 +777,8 @@ func (q *Queries) ListLibraryNewest(ctx context.Context, arg ListLibraryNewestPa
 		arg.LibrarySubjectID,
 		arg.Kind,
 		arg.Semester,
+		arg.AuthorID,
+		arg.Tag,
 		arg.CursorPublishedAt,
 		arg.CursorID,
 		arg.PageSize,
@@ -686,6 +808,7 @@ func (q *Queries) ListLibraryNewest(ctx context.Context, arg ListLibraryNewestPa
 			&i.RatingAvg,
 			&i.CommentsCount,
 			&i.BookmarksCount,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}
@@ -744,21 +867,25 @@ func (q *Queries) ListLibrarySubjects(ctx context.Context) ([]ListLibrarySubject
 }
 
 const listLibraryTopRated = `-- name: ListLibraryTopRated :many
-SELECT li.id, li.user_id, li.title, li.summary, li.kind, li.semester, li.published_at, li.views, li.library_subject_id, li.subject_title, li.subject_color, li.author_name, li.author_faculty, li.rating_count, li.rating_avg, li.comments_count, li.bookmarks_count FROM library_items li
+SELECT li.id, li.user_id, li.title, li.summary, li.kind, li.semester, li.published_at, li.views, li.library_subject_id, li.subject_title, li.subject_color, li.author_name, li.author_faculty, li.rating_count, li.rating_avg, li.comments_count, li.bookmarks_count, li.tags FROM library_items li
 WHERE ($1::uuid IS NULL OR li.library_subject_id = $1)
   AND ($2::text IS NULL OR li.kind = $2)
   AND ($3::smallint IS NULL OR li.semester = $3)
-  AND ($4::float8 IS NULL
+  AND ($4::uuid IS NULL OR li.user_id = $4)
+  AND ($5::text IS NULL OR $5::text = ANY (li.tags))
+  AND ($6::float8 IS NULL
        OR (li.rating_avg, li.rating_count, li.id)
-          < ($4::float8, $5::bigint, $6::uuid))
+          < ($6::float8, $7::bigint, $8::uuid))
 ORDER BY li.rating_avg DESC, li.rating_count DESC, li.id DESC
-LIMIT $7
+LIMIT $9
 `
 
 type ListLibraryTopRatedParams struct {
 	LibrarySubjectID uuid.NullUUID `json:"library_subject_id"`
 	Kind             pgtype.Text   `json:"kind"`
 	Semester         pgtype.Int2   `json:"semester"`
+	AuthorID         uuid.NullUUID `json:"author_id"`
+	Tag              pgtype.Text   `json:"tag"`
 	CursorRating     pgtype.Float8 `json:"cursor_rating"`
 	CursorCount      pgtype.Int8   `json:"cursor_count"`
 	CursorID         uuid.NullUUID `json:"cursor_id"`
@@ -771,6 +898,8 @@ func (q *Queries) ListLibraryTopRated(ctx context.Context, arg ListLibraryTopRat
 		arg.LibrarySubjectID,
 		arg.Kind,
 		arg.Semester,
+		arg.AuthorID,
+		arg.Tag,
 		arg.CursorRating,
 		arg.CursorCount,
 		arg.CursorID,
@@ -801,6 +930,7 @@ func (q *Queries) ListLibraryTopRated(ctx context.Context, arg ListLibraryTopRat
 			&i.RatingAvg,
 			&i.CommentsCount,
 			&i.BookmarksCount,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}
@@ -1065,6 +1195,72 @@ func (q *Queries) SubmitNote(ctx context.Context, arg SubmitNoteParams) (Note, e
 	return i, err
 }
 
+const unpublishNote = `-- name: UnpublishNote :one
+UPDATE notes SET status = 'rejected', published_at = NULL
+WHERE id = $1 AND status = 'published' AND deleted_at IS NULL
+RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id
+`
+
+// Модератор снимает опубликованный материал с публикации. Он становится отклонённым: автор видит причину,
+// исправляет и отправляет заново. Условие по статусу защищает от гонки с правкой автора.
+func (q *Queries) UnpublishNote(ctx context.Context, id uuid.UUID) (Note, error) {
+	row := q.db.QueryRow(ctx, unpublishNote, id)
+	var i Note
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SubjectID,
+		&i.Title,
+		&i.Content,
+		&i.ContentText,
+		&i.IsPinned,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Kind,
+		&i.Summary,
+		&i.Semester,
+		&i.Status,
+		&i.PublishedAt,
+		&i.Views,
+		&i.LibrarySubjectID,
+	)
+	return i, err
+}
+
+const updateComment = `-- name: UpdateComment :one
+
+UPDATE comments c SET body = $1, edited_at = now()
+WHERE c.id = $2 AND c.user_id = $3 AND c.deleted_at IS NULL
+  AND EXISTS (SELECT 1 FROM notes n WHERE n.id = c.note_id AND n.status = 'published' AND n.deleted_at IS NULL)
+RETURNING c.id, c.note_id, c.user_id, c.body, c.created_at, c.deleted_at, c.edited_at
+`
+
+type UpdateCommentParams struct {
+	Body   string    `json:"body"`
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+// ---------------------------------------------------------------------------
+// Правка комментария
+// ---------------------------------------------------------------------------
+// Править комментарий может только его автор и только пока материал опубликован.
+func (q *Queries) UpdateComment(ctx context.Context, arg UpdateCommentParams) (Comment, error) {
+	row := q.db.QueryRow(ctx, updateComment, arg.Body, arg.ID, arg.UserID)
+	var i Comment
+	err := row.Scan(
+		&i.ID,
+		&i.NoteID,
+		&i.UserID,
+		&i.Body,
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.EditedAt,
+	)
+	return i, err
+}
+
 const updateLibrarySubject = `-- name: UpdateLibrarySubject :one
 UPDATE library_subjects SET
     title = COALESCE($1::text, title),
@@ -1115,4 +1311,45 @@ type UpsertRatingParams struct {
 func (q *Queries) UpsertRating(ctx context.Context, arg UpsertRatingParams) error {
 	_, err := q.db.Exec(ctx, upsertRating, arg.NoteID, arg.UserID, arg.Value)
 	return err
+}
+
+const withdrawNote = `-- name: WithdrawNote :one
+
+UPDATE notes SET status = 'draft', updated_at = now()
+WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL AND status = 'pending'
+RETURNING id, user_id, subject_id, title, content, content_text, is_pinned, created_at, updated_at, deleted_at, kind, summary, semester, status, published_at, views, library_subject_id
+`
+
+type WithdrawNoteParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+// ---------------------------------------------------------------------------
+// Отзыв с проверки и снятие с публикации
+// ---------------------------------------------------------------------------
+// Автор забирает материал с проверки обратно в черновики. 0 строк: заметки нет или она не на проверке.
+func (q *Queries) WithdrawNote(ctx context.Context, arg WithdrawNoteParams) (Note, error) {
+	row := q.db.QueryRow(ctx, withdrawNote, arg.ID, arg.UserID)
+	var i Note
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SubjectID,
+		&i.Title,
+		&i.Content,
+		&i.ContentText,
+		&i.IsPinned,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Kind,
+		&i.Summary,
+		&i.Semester,
+		&i.Status,
+		&i.PublishedAt,
+		&i.Views,
+		&i.LibrarySubjectID,
+	)
+	return i, err
 }

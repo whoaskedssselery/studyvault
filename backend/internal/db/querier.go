@@ -19,6 +19,8 @@ type Querier interface {
 	AddBookmark(ctx context.Context, arg AddBookmarkParams) error
 	// Решение принимается только по материалу, который сейчас на проверке (защита от гонки двух модераторов).
 	ApproveNote(ctx context.Context, id uuid.UUID) (Note, error)
+	// Токен «забирается» одним запросом: из двух одновременных подтверждений выиграет одно.
+	ClaimPasswordResetToken(ctx context.Context, arg ClaimPasswordResetTokenParams) (uuid.UUID, error)
 	CountNoteAttachments(ctx context.Context, arg CountNoteAttachmentsParams) (int64, error)
 	CountSubjects(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountTagsByUser(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -30,12 +32,15 @@ type Querier interface {
 	CreateComment(ctx context.Context, arg CreateCommentParams) (Comment, error)
 	CreateLibrarySubject(ctx context.Context, arg CreateLibrarySubjectParams) (LibrarySubject, error)
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
+	// Сброс пароля по почте.
+	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) error
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSubject(ctx context.Context, arg CreateSubjectParams) (Subject, error)
 	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	// Возвращает удалённую строку: из неё берётся ключ объекта, который надо убрать из хранилища.
 	DeleteAttachment(ctx context.Context, arg DeleteAttachmentParams) (Attachment, error)
+	DeleteExpiredPasswordResetTokens(ctx context.Context, expiresAt time.Time) (int64, error)
 	// Удаляются только истёкшие токены. Отозванные, но ещё не истёкшие должны остаться:
 	// по ним распознаётся повторное предъявление использованного токена.
 	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time.Time) (int64, error)
@@ -43,6 +48,11 @@ type Querier interface {
 	DeleteLibrarySubject(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSubject(ctx context.Context, arg DeleteSubjectParams) (int64, error)
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
+	// Удаление аккаунта: каскадом уходят заметки, предметы, теги, файлы (записи), комментарии, оценки, избранное и сессии.
+	// Решения модератора остаются, но без указания, кто их принял.
+	DeleteUser(ctx context.Context, id uuid.UUID) (int64, error)
+	// Прежние неиспользованные ссылки пользователя гасятся, когда он просит новую: действует только последняя.
+	DeleteUserPasswordResetTokens(ctx context.Context, userID uuid.UUID) error
 	// Смена пароля стирает сессии, а не отзывает их: устаревшее устройство, предъявив старый токен, получит
 	// обычный отказ, а не срабатывание защиты от кражи, которое закрыло бы и новую сессию.
 	DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
@@ -53,6 +63,9 @@ type Querier interface {
 	// Чужие и удалённые заметки отсекаются здесь, даже если индекс устарел.
 	FilterLiveNotes(ctx context.Context, arg FilterLiveNotesParams) ([]FilterLiveNotesRow, error)
 	GetAttachment(ctx context.Context, arg GetAttachmentParams) (Attachment, error)
+	// Профиль автора. Строка есть, только если у пользователя есть хотя бы один опубликованный материал: по остальным
+	// аккаунтам профиль не отдаётся, чтобы нельзя было перебирать id и узнавать, кто зарегистрирован.
+	GetAuthorProfile(ctx context.Context, id uuid.UUID) (GetAuthorProfileRow, error)
 	// Причина последнего отказа: автор видит её рядом со своим материалом.
 	GetLastRejectionReason(ctx context.Context, noteID uuid.UUID) (pgtype.Text, error)
 	// ---------------------------------------------------------------------------
@@ -76,6 +89,13 @@ type Querier interface {
 	// Общий предмет библиотеки должен существовать.
 	LibrarySubjectExists(ctx context.Context, id uuid.UUID) (bool, error)
 	ListAttachmentsByNote(ctx context.Context, arg ListAttachmentsByNoteParams) ([]Attachment, error)
+	// ---------------------------------------------------------------------------
+	// Рейтинг и профили авторов
+	// ---------------------------------------------------------------------------
+	// Рейтинг автора: среднее арифметическое всех оценок всех его опубликованных материалов. Выше средняя оценка,
+	// при равенстве больше оценок, затем больше материалов. У автора без оценок rating_avg равен 0, и он идёт в конце списка
+	// (есть ли оценки, решает ratings_count: средняя без оценок не показывается).
+	ListAuthorRanking(ctx context.Context, pageSize int32) ([]ListAuthorRankingRow, error)
 	ListBacklinks(ctx context.Context, arg ListBacklinksParams) ([]ListBacklinksRow, error)
 	// Избранное пользователя: новые сверху; снятые с публикации материалы пропадают (их нет в library_items).
 	ListBookmarkedLibrary(ctx context.Context, arg ListBookmarkedLibraryParams) ([]ListBookmarkedLibraryRow, error)
@@ -110,6 +130,8 @@ type Querier interface {
 	ListPendingMaterials(ctx context.Context, arg ListPendingMaterialsParams) ([]ListPendingMaterialsRow, error)
 	ListSubjects(ctx context.Context, userID uuid.UUID) ([]Subject, error)
 	ListTags(ctx context.Context, userID uuid.UUID) ([]Tag, error)
+	// Ключи объектов пользователя: нужны, чтобы убрать файлы из хранилища при удалении аккаунта.
+	ListUserObjectKeys(ctx context.Context, userID uuid.UUID) ([]string, error)
 	// Личное состояние зрителя для набора материалов: его оценка и отметка «в избранном».
 	ListViewerState(ctx context.Context, arg ListViewerStateParams) ([]ListViewerStateRow, error)
 	NoteOwnedByUser(ctx context.Context, arg NoteOwnedByUserParams) (bool, error)
@@ -145,6 +167,14 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Отправка автором на проверку: из черновика или после отказа. 0 строк: заметки нет или статус не тот.
 	SubmitNote(ctx context.Context, arg SubmitNoteParams) (Note, error)
+	// Модератор снимает опубликованный материал с публикации. Он становится отклонённым: автор видит причину,
+	// исправляет и отправляет заново. Условие по статусу защищает от гонки с правкой автора.
+	UnpublishNote(ctx context.Context, id uuid.UUID) (Note, error)
+	// ---------------------------------------------------------------------------
+	// Правка комментария
+	// ---------------------------------------------------------------------------
+	// Править комментарий может только его автор и только пока материал опубликован.
+	UpdateComment(ctx context.Context, arg UpdateCommentParams) (Comment, error)
 	UpdateLibrarySubject(ctx context.Context, arg UpdateLibrarySubjectParams) (LibrarySubject, error)
 	// Частичное обновление. NULL в title, content, content_text, is_pinned и kind значит «не менять».
 	// subject_id, summary, semester и library_subject_id можно очистить, поэтому «менять или нет» для них
@@ -164,6 +194,11 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	UpsertRating(ctx context.Context, arg UpsertRatingParams) error
 	UserAttachmentUsage(ctx context.Context, userID uuid.UUID) (UserAttachmentUsageRow, error)
+	// ---------------------------------------------------------------------------
+	// Отзыв с проверки и снятие с публикации
+	// ---------------------------------------------------------------------------
+	// Автор забирает материал с проверки обратно в черновики. 0 строк: заметки нет или она не на проверке.
+	WithdrawNote(ctx context.Context, arg WithdrawNoteParams) (Note, error)
 }
 
 var _ Querier = (*Queries)(nil)

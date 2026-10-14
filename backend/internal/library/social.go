@@ -21,6 +21,7 @@ type Comment struct {
 	Body      string
 	Author    Author
 	CreatedAt time.Time
+	EditedAt  *time.Time // nil, если комментарий не правили
 }
 
 type CommentPage struct {
@@ -60,6 +61,7 @@ func (s *Service) ListComments(ctx context.Context, noteID uuid.UUID, limit int,
 			Body:      r.Body,
 			Author:    Author{ID: r.UserID, DisplayName: r.AuthorName, Faculty: fromText(r.AuthorFaculty)},
 			CreatedAt: r.CreatedAt,
+			EditedAt:  r.EditedAt,
 		}
 	}
 	return page, nil
@@ -86,12 +88,17 @@ func (s *Service) AddComment(ctx context.Context, uid, noteID uuid.UUID, body st
 	if err != nil {
 		return Comment{}, fmt.Errorf("create comment: %w", err)
 	}
+	return commentFromRow(c, author), nil
+}
+
+func commentFromRow(c db.Comment, author db.User) Comment {
 	return Comment{
 		ID:        c.ID,
 		Body:      c.Body,
 		Author:    Author{ID: author.ID, DisplayName: author.DisplayName, Faculty: fromText(author.Faculty)},
 		CreatedAt: c.CreatedAt,
-	}, nil
+		EditedAt:  c.EditedAt,
+	}
 }
 
 // DeleteComment удаляет комментарий (мягко). Удалить может автор или модератор; для остальных комментарий
@@ -206,4 +213,25 @@ func (s *Service) publishedAuthor(ctx context.Context, noteID uuid.UUID) (uuid.U
 		return uuid.Nil, fmt.Errorf("get material: %w", err)
 	}
 	return author, nil
+}
+
+// EditComment меняет текст своего комментария. Чужой комментарий и комментарий к материалу, который уже не опубликован,
+// неотличимы от несуществующих. Время правки видно читателям.
+func (s *Service) EditComment(ctx context.Context, uid, id uuid.UUID, body string) (Comment, error) {
+	body = strings.TrimSpace(body)
+	if n := utf8.RuneCountInString(body); n < 1 || n > maxCommentLen {
+		return Comment{}, fmt.Errorf("%w: comment must be 1 to %d characters", ErrInvalid, maxCommentLen)
+	}
+	c, err := s.store.UpdateComment(ctx, db.UpdateCommentParams{ID: id, UserID: uid, Body: body})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Comment{}, ErrNotFound
+	}
+	if err != nil {
+		return Comment{}, fmt.Errorf("update comment: %w", err)
+	}
+	author, err := s.store.GetUserByID(ctx, uid)
+	if err != nil {
+		return Comment{}, fmt.Errorf("get user: %w", err)
+	}
+	return commentFromRow(c, author), nil
 }

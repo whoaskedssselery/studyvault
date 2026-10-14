@@ -104,6 +104,16 @@ func (f *fakeStore) DemotePublishedNote(_ context.Context, a db.DemotePublishedN
 	return f.demoteErr
 }
 
+func (f *fakeStore) ListUserObjectKeys(_ context.Context, userID uuid.UUID) ([]string, error) {
+	var keys []string
+	for _, r := range f.rows {
+		if r.UserID == userID {
+			keys = append(keys, r.ObjectKey)
+		}
+	}
+	return keys, f.err
+}
+
 func (f *fakeStore) GetAttachment(_ context.Context, a db.GetAttachmentParams) (db.Attachment, error) {
 	row, ok := f.rows[a.ID]
 	if !ok || row.UserID != a.UserID {
@@ -521,5 +531,37 @@ func TestCreate_TooManyFilesInTotal_IsRefused(t *testing.T) {
 	_, err := attachment.NewService(f, st).Create(context.Background(), uuid.New(), valid())
 	if !errors.Is(err, limits.ErrReached) || len(st.putCalls) != 0 {
 		t.Fatalf("err = %v, presign calls = %d", err, len(st.putCalls))
+	}
+}
+
+// Удаление аккаунта: ключи берутся до удаления записей, а объекты убираются после; сбой одного не мешает остальным.
+func TestUserObjectKeys_AndRemoveObjects_CleanTheStorageEvenWhenOneRemovalFails(t *testing.T) {
+	ctx := context.Background()
+	f, st := newFakeStore(), newMemStorage()
+	svc := attachment.NewService(f, st)
+	owner, other := uuid.New(), uuid.New()
+	_, _ = svc.Create(ctx, owner, valid())
+	_, _ = svc.Create(ctx, owner, valid())
+	c, _ := svc.Create(ctx, other, valid())
+
+	keys, err := svc.UserObjectKeys(ctx, owner)
+	if err != nil || len(keys) != 2 {
+		t.Fatalf("keys = %v, %v, want the owner's two files only", keys, err)
+	}
+	for _, k := range keys {
+		if k == c.Attachment.ObjectKey {
+			t.Error("another user's file must not be listed")
+		}
+	}
+
+	st.removeErr = errors.New("storage hiccup")
+	svc.RemoveObjects(ctx, keys)
+	if len(st.removed) != 2 {
+		t.Errorf("removed %v, a failure of the first must not stop the second", st.removed)
+	}
+
+	f.err = errors.New("db down")
+	if _, err := svc.UserObjectKeys(ctx, owner); err == nil {
+		t.Error("a database error must surface")
 	}
 }
