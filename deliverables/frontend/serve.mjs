@@ -26,7 +26,7 @@ const server = createServer(async (req, res) => {
   if (pathname.startsWith("/backend-api/")) {
     const endpoint = pathname.slice("/backend-api".length);
     if (
-      !/^\/(health|auth\/(login|register|refresh|logout)|notes(?:\/[0-9a-f-]+(?:\/(tags|backlinks))?)?|subjects(?:\/[0-9a-f-]+)?|tags(?:\/[0-9a-f-]+)?|attachments(?:\/[0-9a-f-]+)?|search|graph)$/.test(
+      !/^\/(health|auth\/(login|register|refresh|logout|password-reset(?:\/confirm)?|email-verification\/confirm)|me(?:\/(password|email-verification))?|notes(?:\/[0-9a-f-]+(?:\/(tags|backlinks|submit|withdraw))?)?|subjects(?:\/[0-9a-f-]+)?|tags(?:\/[0-9a-f-]+)?|attachments(?:\/[0-9a-f-]+)?|search|graph|library-subjects(?:\/[0-9a-f-]+)?|library(?:\/[0-9a-f-]+(?:\/(comments|rating|bookmark|attachments\/[0-9a-f-]+))?)?|comments\/[0-9a-f-]+|bookmarks|moderation\/(queue|[0-9a-f-]+\/(decision|unpublish))|ranking\/authors|authors\/[0-9a-f-]+)$/.test(
         endpoint,
       )
     )
@@ -73,6 +73,8 @@ const server = createServer(async (req, res) => {
         );
       if (response.headers.has("retry-after"))
         output["Retry-After"] = response.headers.get("retry-after");
+      if (response.headers.has("x-request-id"))
+        output["X-Request-ID"] = response.headers.get("x-request-id");
       res.writeHead(response.status, output);
       res.end(req.method === "HEAD" ? "" : body);
     } catch {

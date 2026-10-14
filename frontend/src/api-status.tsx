@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Code2, Download, RefreshCw, Server, XCircle } from 'lucide-react';
 import { downloadText } from './downloads';
+import { apiBaseUrl } from './runtime';
 type Result = { path: string; status: number | null; contentType: string; milliseconds: number; ok: boolean; message: string; body: unknown };
 const endpoints = ['/health', '/notes', '/subjects'];
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 async function inspect(path: string, signal: AbortSignal): Promise<Result> {
   const start = performance.now(); let status: number | null = null, contentType = '', body: unknown = null;
   try {
-    const response = await fetch(`/backend-api${path}`, { signal, credentials: 'omit', headers: { Accept: 'application/json' }, cache: 'no-store' });
+    const response = await fetch(`${apiBaseUrl}${path}`, { signal, credentials: 'omit', headers: { Accept: 'application/json' }, cache: 'no-store' });
     status = response.status; contentType = response.headers.get('content-type') || '';
     const raw = await response.text();
     try { body = JSON.parse(raw); } catch { body = raw.slice(0, 5000); }

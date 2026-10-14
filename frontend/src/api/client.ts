@@ -1,5 +1,6 @@
 import createClient from "openapi-fetch";
 import type { components, paths } from "./schema";
+import { apiBaseUrl } from "../runtime";
 export type ApiUser = components["schemas"]["User"];
 export type ApiNote = components["schemas"]["Note"];
 export type ApiSubject = components["schemas"]["Subject"];
@@ -58,7 +59,7 @@ async function refresh(): Promise<void> {
   const before = generation;
   refreshing = (async () => {
     const response = await send(
-      new Request(new URL("/backend-api/auth/refresh", location.origin), {
+      new Request(new URL(`${apiBaseUrl}/auth/refresh`, location.origin), {
         method: "POST",
         credentials: "include",
       }),
@@ -94,7 +95,7 @@ async function refresh(): Promise<void> {
   return refreshing;
 }
 const client = createClient<paths>({
-  baseUrl: "/backend-api",
+  baseUrl: apiBaseUrl,
   credentials: "include",
   fetch: async (request) => {
     const before = generation,
@@ -107,13 +108,30 @@ const client = createClient<paths>({
       sessionUser() &&
       before === generation
     ) {
-      await refresh();
-      original.headers.set("Authorization", `Bearer ${token}`);
+      try {
+        await refresh();
+        original.headers.set("Authorization", `Bearer ${token}`);
+      } catch (error) {
+        const path = new URL(request.url).pathname.slice(apiBaseUrl.length);
+        const publicRead =
+          request.method === "GET" &&
+          /^\/(library(?:\/.*)?|library-subjects|ranking\/authors|authors\/[^/]+)$/.test(
+            path,
+          );
+        if (!publicRead || !(error instanceof ApiError) || error.status !== 401)
+          throw error;
+        original.headers.delete("Authorization");
+      }
       response = await send(original);
       if (response.status === 401) forget();
     }
     return response;
   },
+});
+const publicClient = createClient<paths>({
+  baseUrl: apiBaseUrl,
+  credentials: "omit",
+  fetch: send,
 });
 async function result<T>(
   operation: Promise<{ data?: T; error?: unknown; response: Response }>,
@@ -131,15 +149,29 @@ async function result<T>(
   }
   if (!value.response.ok) {
     const error = value.error as
-      { code?: string; detail?: string; error?: { code?: string; message?: string } } | undefined;
+      | {
+          code?: string;
+          detail?: string;
+          error?: { code?: string; message?: string };
+        }
+      | undefined;
     const code = error?.code || error?.error?.code || "http_error";
     const messages: Record<string, string> = {
-      invalid_credentials: "Неверная почта или пароль.",
+      invalid_credentials:
+        value.response.status === 403
+          ? "Неверный текущий пароль."
+          : "Неверная почта или пароль.",
       email_taken: "Эта почта уже зарегистрирована.",
       rate_limited: "Слишком много попыток. Повторите позже.",
-      limit_reached: "Достигнут лимит заметок, предметов, тегов или файлов. Удалите ненужные объекты и повторите попытку.",
-      email_not_verified: "Подтвердите почту, чтобы публиковать материалы, комментировать и ставить оценки.",
+      limit_reached:
+        "Достигнут лимит заметок, предметов, тегов или файлов. Удалите ненужные объекты и повторите попытку.",
+      email_not_verified:
+        "Подтвердите почту, чтобы публиковать материалы, комментировать и ставить оценки.",
       email_unavailable: "Отправка писем сейчас недоступна. Попробуйте позже.",
+      forbidden: "Недостаточно прав для этого действия.",
+      invalid_transition:
+        "Статус материала уже изменился. Обновите список и повторите действие.",
+      invalid_token: "Ссылка недействительна, просрочена или уже использована.",
       not_found: "Объект не найден или принадлежит другому пользователю.",
       search_unavailable:
         "Поиск временно недоступен. Заметки доступны в списке.",
@@ -173,7 +205,15 @@ function remember(auth: components["schemas"]["AuthResponse"]) {
   } catch {}
   return auth.user;
 }
+function rememberUser(user: ApiUser) {
+  try {
+    sessionStorage.setItem(userKey, JSON.stringify(user));
+  } catch {}
+  return user;
+}
 export const api = {
+  clearSession: forget,
+  me: async () => rememberUser(await result(client.GET("/me"))),
   login: async (email: string, password: string) =>
     remember(
       await result(client.POST("/auth/login", { body: { email, password } })),
@@ -188,8 +228,11 @@ export const api = {
     ),
   restore: async () => {
     const user = sessionUser();
+    const before = generation;
     if (user && !token) await refresh();
-    return user;
+    if (!user || before !== generation) return null;
+    const current = await result(client.GET("/me"));
+    return before === generation ? rememberUser(current) : null;
   },
   logout: async () => {
     if (refreshing) await refreshing.catch(() => {});
@@ -236,4 +279,130 @@ export const api = {
     result(client.GET("/attachments/{id}", { params: { path: { id } } })),
   deleteAttachment: (id: string) =>
     result(client.DELETE("/attachments/{id}", { params: { path: { id } } })),
+  library: (
+    query: NonNullable<paths["/library"]["get"]["parameters"]["query"]> = {},
+  ) => result(client.GET("/library", { params: { query } })),
+  librarySubjects: () => result(client.GET("/library-subjects")),
+  createLibrarySubject: (body: components["schemas"]["LibrarySubjectInput"]) =>
+    result(client.POST("/library-subjects", { body })),
+  updateLibrarySubject: (
+    id: string,
+    body: components["schemas"]["LibrarySubjectPatch"],
+  ) =>
+    result(
+      client.PATCH("/library-subjects/{id}", {
+        params: { path: { id } },
+        body,
+      }),
+    ),
+  deleteLibrarySubject: (id: string) =>
+    result(
+      client.DELETE("/library-subjects/{id}", { params: { path: { id } } }),
+    ),
+  material: (id: string) =>
+    result(client.GET("/library/{id}", { params: { path: { id } } })),
+  publicAttachment: (id: string, attachment_id: string) =>
+    result(
+      client.GET("/library/{id}/attachments/{attachment_id}", {
+        params: { path: { id, attachment_id } },
+      }),
+    ),
+  comments: (id: string, cursor?: string) =>
+    result(
+      client.GET("/library/{id}/comments", {
+        params: { path: { id }, query: { cursor, limit: 30 } },
+      }),
+    ),
+  addComment: (id: string, body: string) =>
+    result(
+      client.POST("/library/{id}/comments", {
+        params: { path: { id } },
+        body: { body },
+      }),
+    ),
+  editComment: (id: string, body: string) =>
+    result(
+      client.PATCH("/comments/{id}", {
+        params: { path: { id } },
+        body: { body },
+      }),
+    ),
+  deleteComment: (id: string) =>
+    result(client.DELETE("/comments/{id}", { params: { path: { id } } })),
+  rate: (id: string, value: number) =>
+    result(
+      client.PUT("/library/{id}/rating", {
+        params: { path: { id } },
+        body: { value },
+      }),
+    ),
+  bookmark: (id: string, saved: boolean) =>
+    saved
+      ? result(
+          client.DELETE("/library/{id}/bookmark", { params: { path: { id } } }),
+        )
+      : result(
+          client.PUT("/library/{id}/bookmark", { params: { path: { id } } }),
+        ),
+  bookmarks: (cursor?: string) =>
+    result(
+      client.GET("/bookmarks", { params: { query: { cursor, limit: 30 } } }),
+    ),
+  submit: (id: string) =>
+    result(client.POST("/notes/{id}/submit", { params: { path: { id } } })),
+  withdraw: (id: string) =>
+    result(client.POST("/notes/{id}/withdraw", { params: { path: { id } } })),
+  queue: (cursor?: string) =>
+    result(
+      client.GET("/moderation/queue", {
+        params: { query: { cursor, limit: 30 } },
+      }),
+    ),
+  decision: (id: string, decision: "approved" | "rejected", reason?: string) =>
+    result(
+      client.POST("/moderation/{id}/decision", {
+        params: { path: { id } },
+        body: { decision, reason },
+      }),
+    ),
+  unpublish: (id: string, reason: string) =>
+    result(
+      client.POST("/moderation/{id}/unpublish", {
+        params: { path: { id } },
+        body: { reason },
+      }),
+    ),
+  ranking: () =>
+    result(
+      client.GET("/ranking/authors", { params: { query: { limit: 100 } } }),
+    ),
+  author: (id: string) =>
+    result(client.GET("/authors/{id}", { params: { path: { id } } })),
+  profile: async (body: components["schemas"]["ProfilePatch"]) =>
+    rememberUser(await result(client.PATCH("/me", { body }))),
+  changePassword: (current_password: string, new_password: string) =>
+    result(
+      client.POST("/me/password", { body: { current_password, new_password } }),
+    ),
+  deleteAccount: async (password: string) => {
+    await result(client.DELETE("/me", { body: { password } }));
+    forget();
+  },
+  resendVerification: () => result(client.POST("/me/email-verification")),
+  verifyEmail: (token: string) =>
+    result(
+      publicClient.POST("/auth/email-verification/confirm", {
+        body: { token },
+      }),
+    ),
+  resetPassword: (email: string) =>
+    result(publicClient.POST("/auth/password-reset", { body: { email } })),
+  confirmPasswordReset: async (token: string, new_password: string) => {
+    await result(
+      publicClient.POST("/auth/password-reset/confirm", {
+        body: { token, new_password },
+      }),
+    );
+    forget();
+  },
 };

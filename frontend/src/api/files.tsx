@@ -19,9 +19,11 @@ function url(value: string) {
 export function ApiFiles({
   userId,
   noteId,
+  userFacing = false,
 }: {
   userId: string;
   noteId: string;
+  userFacing?: boolean;
 }) {
   const cache = useQueryClient(),
     [busy, setBusy] = useState(false),
@@ -51,6 +53,7 @@ export function ApiFiles({
       void cache.invalidateQueries({
         queryKey: ["api", userId, "attachments", noteId],
       });
+      void cache.invalidateQueries({ queryKey: ["live"] });
     }
   };
   const put = async (file: File, uploadUrl: string) => {
@@ -77,10 +80,10 @@ export function ApiFiles({
   };
   return (
     <section className="aside-panel api-files">
-      <h3>Файлы на сервере</h3>
+      <h3>{userFacing ? "Вложения" : "Файлы на сервере"}</h3>
       <p className="muted">
-        PDF, PNG, JPEG или WebP · до 3 файлов по 2 МБ. Загрузка идёт напрямую
-        в S3 по подписанной ссылке.
+        PDF, PNG, JPEG или WebP · до 3 файлов по 2 МБ.
+        {!userFacing && " Загрузка идёт напрямую в S3 по подписанной ссылке."}
       </p>
       <label className="upload-zone">
         <Upload size={22} />
@@ -89,16 +92,18 @@ export function ApiFiles({
         </strong>
         <input
           type="file"
-          disabled={busy || files.isPending || (files.data?.items.length || 0) >= 3}
+          disabled={
+            busy || files.isPending || (files.data?.items.length || 0) >= 3
+          }
           accept=".pdf,.png,.jpg,.jpeg,.webp"
-          aria-label="Файл API"
+          aria-label={userFacing ? "Прикрепить файл" : "Файл API"}
           onChange={(e) => {
             const file = e.target.files?.[0];
             e.target.value = "";
             if (!file) return;
             const mime = file.type || guess(file.name);
             if (
-              !types.some(type => type === mime) ||
+              !types.some((type) => type === mime) ||
               file.size < 1 ||
               file.size > 2 * 1024 * 1024
             ) {

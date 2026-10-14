@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
   };
   return {
     plugins: [react()],
-    server: { proxy: { "/backend-api": proxy } },
-    preview: { proxy: { "/backend-api": proxy } },
+    server: { proxy: { "/backend-api": proxy, "/v1": { target, changeOrigin: true } } },
+    preview: { proxy: { "/backend-api": proxy, "/v1": { target, changeOrigin: true } } },
   };
 });

@@ -94,6 +94,7 @@ async function setup(page: Page, expire = false) {
         { error: { code: "unauthorized", message: "missing bearer token" } },
         401,
       );
+    if (path === "/me") return respond(user);
     if (path === "/subjects")
       return respond(
         method === "GET"
