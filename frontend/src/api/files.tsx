@@ -69,12 +69,16 @@ export function ApiFiles({
       });
     } catch {
       throw new Error(
-        "Файл зарегистрирован, но загрузка в S3 не завершилась. Проверьте адрес хранилища и CORS, затем повторите загрузку.",
+        userFacing
+          ? "Не удалось загрузить файл. Проверьте соединение и повторите загрузку. Если ошибка остаётся, обратитесь к администратору."
+          : "Файл зарегистрирован, но загрузка в S3 не завершилась. Проверьте адрес хранилища и CORS, затем повторите загрузку.",
       );
     }
     if (!response.ok)
       throw new Error(
-        `S3 отклонил загрузку: HTTP ${response.status}. При истёкшей ссылке удалите незавершённую запись и выберите файл заново.`,
+        userFacing
+          ? "Не удалось загрузить файл. Попробуйте ещё раз. Если ссылка истекла, удалите запись файла и выберите его заново."
+          : `S3 отклонил загрузку: HTTP ${response.status}. При истёкшей ссылке удалите незавершённую запись и выберите файл заново.`,
       );
     setRetry(null);
   };
@@ -170,7 +174,7 @@ export function ApiFiles({
             aria-label={`Удалить файл ${file.file_name}`}
             disabled={busy}
             onClick={() => {
-              if (window.confirm(`Удалить файл «${file.file_name}» из S3?`))
+              if (window.confirm(`Удалить файл «${file.file_name}»${userFacing ? "" : " из S3"}?`))
                 void run(async () => {
                   await api.deleteAttachment(file.id);
                   setRetry(null);
