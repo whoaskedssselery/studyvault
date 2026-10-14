@@ -289,6 +289,10 @@ API проверено через Swagger UI (`/docs`) на запущенном
 
 ![CI](docs/screenshots/13-ci-green.jpg)
 
+**27. Письмо с подтверждением почты.** После регистрации приходит письмо со ссылкой на 24 часа (локально его ловит Mailpit). До подтверждения нельзя публиковать материалы, комментировать и ставить оценки: сервер отвечает 403 `email_not_verified`.
+
+![verification mail](docs/screenshots/27-verification-mail.png)
+
 ## Схема базы данных
 
 ![Схема БД](backend/db/schema.svg)
