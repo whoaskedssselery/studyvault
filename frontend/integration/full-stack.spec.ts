@@ -83,6 +83,15 @@ test("real stack: guest, registration, verification mail, PDF upload, publicatio
   await page.getByRole("button", { name: "Сохранить", exact: true }).click();
   await expect(page).toHaveURL(/\/edit\/[0-9a-f-]+$/);
   const id = new URL(page.url()).pathname.split("/").at(-1)!;
+  const cors = await page.request.fetch("http://localhost:9000/", {
+    method: "OPTIONS",
+    headers: {
+      Origin: base,
+      "Access-Control-Request-Method": "PUT",
+      "Access-Control-Request-Headers": "content-type",
+    },
+  });
+  expect(cors.headers()["access-control-allow-origin"]).toBe(base);
   let uploaded = false,
     uploadHasBearer = false;
   page.on("response", (response) => {
