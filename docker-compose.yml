@@ -90,6 +90,7 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-studyvault@example.com}
       PASSWORD_RESET_URL: ${PASSWORD_RESET_URL:-http://localhost:5173/reset-password}
+      EMAIL_VERIFY_URL: ${EMAIL_VERIFY_URL:-}
       # Для служебных команд (seed, promote), запускаемых в этом же контейнере.
       SEED_PASSWORD: ${SEED_PASSWORD:-}
       AUTH_RATE_LIMIT_PER_MIN: ${AUTH_RATE_LIMIT_PER_MIN:-20}

@@ -74,8 +74,9 @@ docker compose --profile app run --rm --entrypoint /seed api
 это `demo-password-123`). Любого другого пользователя в модераторы переводит команда
 `docker compose --profile app run --rm --entrypoint /promote api почта@пример.ру`.
 
-**Почта.** Письма со ссылкой сброса пароля локально ловит Mailpit: окно со всеми письмами http://localhost:8025.
-Куда ведёт ссылка из письма, задаёт `PASSWORD_RESET_URL` (в `.env.example` это страница клиента на порту 5173).
+**Почта.** Письма со ссылками сброса пароля и подтверждения почты локально ловит Mailpit: окно со всеми письмами http://localhost:8025.
+Куда ведут ссылки, задают `PASSWORD_RESET_URL` и `EMAIL_VERIFY_URL` (в `.env.example` это страницы клиента на порту 5173). Новый аккаунт
+до подтверждения почты не может публиковать, комментировать и оценивать; демо-аккаунты из seed подтверждены.
 
 Остановить: `docker compose --profile app down` (данные сохраняются в томах).
 
@@ -124,7 +125,7 @@ go run ./cmd/reindex                                                   # пер�
 | `LOG_FORMAT`, `LOG_LEVEL` | лог: `json` (по умолчанию) или `text`; уровень `debug`, `info` (по умолчанию), `warn`, `error` |
 | `MEILI_URL`, `MEILI_MASTER_KEY` | поиск; без них `/search` отвечает 503, остальное работает |
 | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` | файлы; без них `/attachments` отвечает 503 |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `PASSWORD_RESET_URL` | почта для сброса пароля; без `SMTP_HOST` он отвечает 503. Локально это Mailpit, настроен в compose |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `PASSWORD_RESET_URL`, `EMAIL_VERIFY_URL` | почта для сброса пароля и подтверждения адреса; без `SMTP_HOST` сброс отвечает 503, а подтверждения нет (аккаунты подтверждены сразу). Локально это Mailpit, настроен в compose |
 | `TRUSTED_PROXIES` | адреса или сети прокси через запятую, которым доверяется `X-Forwarded-For` при определении клиента для лимита попыток; пусто: заголовок игнорируется. `0.0.0.0/0` не принимается |
 | `SEED_PASSWORD` | пароль демо-аккаунтов для команды `seed` (только для локальной работы; без неё пароль генерируется и печатается) |
 | `S3_PUBLIC_ENDPOINT`, `S3_USE_SSL`, `S3_REGION` | адрес в ссылках для клиента, если он отличается; TLS; регион |
