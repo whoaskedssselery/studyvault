@@ -79,19 +79,28 @@ export function MaterialCard({ item }: { item: Models["LibraryItem"] }) {
           onClick={() => go(`/authors/${item.author.id}`)}
         >
           <Avatar author={item.author} />
-          {item.author.display_name}
+          <span className="live-author-label">
+            <strong>{item.author.display_name}</strong>
+            {item.author.faculty && <small>{item.author.faculty}</small>}
+          </span>
           <time>{formatDate(item.published_at)}</time>
         </button>
         <div className="card-footer">
           <span className="rating">
             <Star size={13} />
-            {ratingLabel(item.rating)}
+            <span>{ratingLabel(item.rating)}</span>
+            <small>({item.rating.count})</small>
           </span>
           <span>
             <MessageCircle size={13} />
             {item.comments_count}
           </span>
           <span>{item.views} просмотров</span>
+          {item.my_rating !== null && (
+            <span className="live-my-rating">
+              Ваша оценка: {item.my_rating}
+            </span>
+          )}
         </div>
       </div>
     </article>

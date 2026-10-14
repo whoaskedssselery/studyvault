@@ -383,7 +383,9 @@ export function MaterialPage({ id }: { id: string }) {
         </article>
         <aside className="reader-aside">
           <section className="aside-panel">
-            <div className="big-rating">
+            <div
+              className={`big-rating ${item.rating.average === null ? "live-empty-rating" : ""}`}
+            >
               <Star />
               <strong>{ratingLabel(item.rating)}</strong>
               <span>{item.rating.count} оценок сообщества</span>

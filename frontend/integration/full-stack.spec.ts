@@ -103,13 +103,11 @@ test("real stack: guest, registration, verification mail, PDF upload, publicatio
       uploadHasBearer = !!response.request().headers().authorization;
     }
   });
-  await page
-    .getByLabel("Прикрепить файл", { exact: true })
-    .setInputFiles({
-      name: "frontend-smoke.pdf",
-      mimeType: "application/pdf",
-      buffer: Buffer.from("%PDF-1.4\n%%EOF\n"),
-    });
+  await page.getByLabel("Прикрепить файл", { exact: true }).setInputFiles({
+    name: "frontend-smoke.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4\n%%EOF\n"),
+  });
   await expect.poll(() => uploaded).toBe(true);
   expect(uploadHasBearer).toBe(false);
   await expect(page.locator(".api-files .attachment")).toContainText(
@@ -163,6 +161,10 @@ test("real stack: guest, registration, verification mail, PDF upload, publicatio
     });
     expect(file.status()).toBe(200);
     expect((await file.body()).length).toBe(15);
+    await guest.screenshot({
+      path: "test-results/real-stack-material.png",
+      fullPage: true,
+    });
     await page.goto("/profile");
     await page
       .getByRole("button", { name: "Удалить аккаунт", exact: true })

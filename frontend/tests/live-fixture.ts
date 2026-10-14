@@ -20,6 +20,7 @@ export async function liveFixture(
     mailUnavailable?: boolean;
     resend429?: boolean;
     signedIn?: boolean;
+    failTagOnce?: boolean;
   } = {},
 ) {
   let user: M["User"] = {
@@ -299,7 +300,10 @@ export async function liveFixture(
           : [shown];
       return json({
         items: url.searchParams.has("cursor") ? [] : items,
-        next_cursor: url.searchParams.has("cursor") ? null : "library-next",
+        next_cursor:
+          url.searchParams.has("cursor") || url.searchParams.get("q")
+            ? null
+            : "library-next",
       } satisfies M["LibraryPage"]);
     }
     if (path === `/library/${ids.material}`) return json(material);
@@ -426,6 +430,10 @@ export async function liveFixture(
         : json({ items: [] });
     if (path === "/tags") {
       if (method === "POST") {
+        if (options.failTagOnce) {
+          options.failTagOnce = false;
+          return problem(409, "limit_reached", "Достигнут лимит тегов");
+        }
         const tag: M["Tag"] = { id: ids.subject, name: body.name };
         tags.push(tag);
         return json(tag, 201);

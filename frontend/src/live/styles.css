@@ -55,6 +55,36 @@
 .live-material-card .card-author time {
   margin-left: auto;
 }
+.live-author-label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.live-author-label strong {
+  color: var(--text);
+  font-size: 10px;
+}
+.live-author-label small {
+  color: var(--menu-text);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.live-material-card .card-footer {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.live-material-card .card-footer .live-my-rating {
+  width: 100%;
+  color: var(--purple);
+}
+.live-empty-rating strong {
+  font-size: 21px;
+}
+.reader .reader-author {
+  width: 100%;
+  text-align: left;
+}
 .live-material-card mark {
   color: var(--purple);
   background: var(--soft);

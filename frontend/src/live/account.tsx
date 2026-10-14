@@ -18,7 +18,10 @@ import {
 import { clearMailToken, mailToken } from "./mail-token";
 
 const validatePassword = (password: string) => {
-  if (password.length < 8 || new TextEncoder().encode(password).length > 72)
+  if (
+    Array.from(password).length < 8 ||
+    new TextEncoder().encode(password).length > 72
+  )
     throw new Error(
       "Пароль должен содержать не менее 8 символов и занимать не более 72 байт.",
     );

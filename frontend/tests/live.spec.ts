@@ -43,6 +43,10 @@ test("guests use the real library, filters, safe search, cursor, rating and auth
   expect(query.get("kind")).toBe("cheat_sheet");
   expect(query.get("semester")).toBe("2");
   expect(query.get("sort")).toBe("views");
+  await expect(
+    page.getByRole("button", { name: "Показать ещё", exact: true }),
+  ).toHaveCount(0);
+  await page.getByLabel("Поиск материалов").fill("");
   await page.getByRole("button", { name: "Показать ещё", exact: true }).click();
   await expect
     .poll(() =>
@@ -342,7 +346,7 @@ test("verification consumes one token without auth, cleans URL/referrer and upda
   await expect(page).toHaveURL(/\/verify-email$/);
 });
 
-test("mail unavailability hides resend and password-reset mail never enumerates an account", async ({
+test("mail unavailability hides the unavailable resend action", async ({
   page,
 }) => {
   await liveFixture(page, { verified: false, mailUnavailable: true });
@@ -486,7 +490,7 @@ test("account deletion requires a correct password then clears data and session"
   ).toEqual({ password: "server-password" });
 });
 
-test("editor uploads directly without Bearer, preserves a partial save and published edits return to moderation", async ({
+test("editor uploads directly without Bearer and published edits return to moderation", async ({
   page,
 }) => {
   const data = await liveFixture(page);
@@ -497,13 +501,11 @@ test("editor uploads directly without Bearer, preserves a partial save and publi
   });
   await liveLogin(page);
   await page.goto(`/edit/${ids.own}`);
-  await page
-    .getByLabel("Прикрепить файл", { exact: true })
-    .setInputFiles({
-      name: "lecture.pdf",
-      mimeType: "application/pdf",
-      buffer: Buffer.from("%PDF-1.4"),
-    });
+  await page.getByLabel("Прикрепить файл", { exact: true }).setInputFiles({
+    name: "lecture.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4"),
+  });
   await expect(page.locator(".api-files .attachment")).toContainText(
     "lecture.pdf",
   );
@@ -514,6 +516,48 @@ test("editor uploads directly without Bearer, preserves a partial save and publi
   await page.getByLabel("Название материала").fill("Исправленный конспект");
   await page.getByRole("button", { name: "Сохранить", exact: true }).click();
   await expect(page.getByText("На проверке", { exact: true })).toBeVisible();
+});
+
+test("a tag failure keeps the saved note and retry updates it without creating a duplicate", async ({
+  page,
+}) => {
+  const data = await liveFixture(page, { failTagOnce: true });
+  await liveLogin(page);
+  await page.goto("/new");
+  await page
+    .getByLabel("Название материала")
+    .fill("Сохранённый частично конспект");
+  await page
+    .getByLabel("Текст материала", { exact: true })
+    .fill("Текст уже на сервере");
+  await page.getByLabel("Теги", { exact: true }).fill("SQL");
+  await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/edit/${ids.own}$`));
+  await expect(page.getByRole("alert")).toContainText(
+    "Материал сохранён, но не удалось применить теги",
+  );
+  await expect(page.getByLabel("Название материала")).toHaveValue(
+    "Сохранённый частично конспект",
+  );
+  await page.getByLabel("Теги", { exact: true }).fill("SQL");
+  await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await expect
+    .poll(
+      () =>
+        data.calls.filter((call) => call.path === `/notes/${ids.own}/tags`)
+          .length,
+    )
+    .toBe(1);
+  expect(
+    data.calls.filter(
+      (call) => call.path === "/notes" && call.method === "POST",
+    ),
+  ).toHaveLength(1);
+  expect(
+    data.calls.filter(
+      (call) => call.path === `/notes/${ids.own}` && call.method === "PATCH",
+    ),
+  ).toHaveLength(1);
 });
 
 test("moderator approves and takes down with a reason; rating own material is blocked", async ({
