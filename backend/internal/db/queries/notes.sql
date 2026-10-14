@@ -1,6 +1,10 @@
 -- name: SubjectOwnedByUser :one
 SELECT EXISTS (SELECT 1 FROM subjects WHERE id = $1 AND user_id = $2);
 
+-- Сколько у пользователя заметок, не считая удалённых: по этому числу работает квота.
+-- name: CountUserNotes :one
+SELECT count(*) FROM notes WHERE user_id = $1 AND deleted_at IS NULL;
+
 -- name: CreateNote :one
 INSERT INTO notes (user_id, subject_id, title, content, content_text, is_pinned, kind, summary, semester, library_subject_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)

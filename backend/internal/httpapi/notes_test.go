@@ -14,6 +14,7 @@ import (
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/auth"
 	"github.com/whoaskedssselery/studyvault/backend/internal/httpapi"
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 	"github.com/whoaskedssselery/studyvault/backend/internal/note"
 )
 
@@ -142,6 +143,15 @@ func TestCreateNote_OK_Returns201(t *testing.T) {
 	}
 	if _, leaked := body["user_id"]; leaked {
 		t.Error("user_id must not be exposed")
+	}
+}
+
+func TestCreateNote_QuotaReached_Returns409(t *testing.T) {
+	e := newNotesEnv(&fakeNotes{err: limits.Reached("notes", 5000)})
+	rec := e.do(http.MethodPost, "/v1/notes", `{"title":"One too many","content":`+validDoc+`}`)
+
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "limit_reached" || !strings.Contains(rec.Body.String(), "at most 5000 notes") {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
 	}
 }
 

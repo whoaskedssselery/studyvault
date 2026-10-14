@@ -23,6 +23,7 @@ type fakeStore struct {
 	refresh []db.CreateRefreshTokenParams
 	tokens  map[string]*db.RefreshToken // ключ: token_hash
 	resets  map[string]*resetRow        // ключ: token_hash
+	verifs  map[string]*verifyRow       // ссылки подтверждения почты, ключ: token_hash
 }
 
 type resetRow struct {
@@ -32,7 +33,7 @@ type resetRow struct {
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{users: map[string]db.User{}, tokens: map[string]*db.RefreshToken{}, resets: map[string]*resetRow{}}
+	return &fakeStore{users: map[string]db.User{}, tokens: map[string]*db.RefreshToken{}, resets: map[string]*resetRow{}, verifs: map[string]*verifyRow{}}
 }
 
 func (f *fakeStore) GetRefreshTokenByHash(_ context.Context, hash string) (db.RefreshToken, error) {

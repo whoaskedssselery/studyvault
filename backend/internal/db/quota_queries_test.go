@@ -59,6 +59,15 @@ func TestQuotaQueries_CountOnlyTheOwnersRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Удалённая заметка в квоту не входит, чужие тоже.
+	gone, err := q.CreateNote(ctx, db.CreateNoteParams{UserID: alice, Title: "gone", Content: []byte(`{}`), Kind: "note"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.SoftDeleteNote(ctx, db.SoftDeleteNoteParams{ID: gone.ID, UserID: alice}); err != nil {
+		t.Fatal(err)
+	}
+
 	check := func(name string, got int64, err error, want int64) {
 		t.Helper()
 		if err != nil || got != want {
@@ -69,6 +78,10 @@ func TestQuotaQueries_CountOnlyTheOwnersRows(t *testing.T) {
 	check("alice's subjects", n, err, 3)
 	n, err = q.CountSubjects(ctx, bob)
 	check("bob's subjects", n, err, 1)
+	n, err = q.CountUserNotes(ctx, alice)
+	check("alice's notes (a deleted one does not count)", n, err, 1)
+	n, err = q.CountUserNotes(ctx, bob)
+	check("bob's notes", n, err, 0)
 	n, err = q.CountTagsByUser(ctx, alice)
 	check("alice's tags", n, err, 2)
 	n, err = q.CountTagsByUser(ctx, bob)

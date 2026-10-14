@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 	"github.com/whoaskedssselery/studyvault/backend/internal/pgconv"
 	"github.com/whoaskedssselery/studyvault/backend/internal/search"
 )
@@ -35,6 +36,7 @@ type Store interface {
 	LibrarySubjectExists(ctx context.Context, id uuid.UUID) (bool, error)
 	GetLastRejectionReason(ctx context.Context, noteID uuid.UUID) (pgtype.Text, error)
 	NoteOwnedByUser(ctx context.Context, arg db.NoteOwnedByUserParams) (bool, error)
+	CountUserNotes(ctx context.Context, userID uuid.UUID) (int64, error)
 	CreateNote(ctx context.Context, arg db.CreateNoteParams) (db.Note, error)
 	GetNote(ctx context.Context, arg db.GetNoteParams) (db.Note, error)
 	UpdateNote(ctx context.Context, arg db.UpdateNoteParams) (db.Note, error)
@@ -172,6 +174,12 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (Note,
 	}
 	if err := s.checkLibrarySubject(ctx, in.LibrarySubjectID); err != nil {
 		return Note{}, err
+	}
+	// Квота мягкая, как и остальные (см. пакет limits): при одновременных запросах предел можно превысить на их число.
+	if n, err := s.store.CountUserNotes(ctx, userID); err != nil {
+		return Note{}, fmt.Errorf("count notes: %w", err)
+	} else if n >= limits.MaxNotesPerUser {
+		return Note{}, limits.Reached("notes", limits.MaxNotesPerUser)
 	}
 	kind := in.Kind
 	if kind == "" {

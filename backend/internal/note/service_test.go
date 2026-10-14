@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/whoaskedssselery/studyvault/backend/internal/db"
+	"github.com/whoaskedssselery/studyvault/backend/internal/limits"
 	"github.com/whoaskedssselery/studyvault/backend/internal/note"
 	"github.com/whoaskedssselery/studyvault/backend/internal/search"
 )
@@ -39,6 +40,8 @@ type fakeStore struct {
 	listParams []db.ListNotesParams
 	tags       []db.ListNoteTagsRow
 
+	noteCount int64 // чем ответит CountUserNotes
+
 	created db.CreateNoteParams
 	updated db.UpdateNoteParams
 	err     error
@@ -55,6 +58,10 @@ func (f *fakeStore) GetLastRejectionReason(context.Context, uuid.UUID) (pgtype.T
 func (f *fakeStore) SubjectOwnedByUser(context.Context, db.SubjectOwnedByUserParams) (bool, error) {
 	f.subjectQs++
 	return f.owned, f.err
+}
+
+func (f *fakeStore) CountUserNotes(context.Context, uuid.UUID) (int64, error) {
+	return f.noteCount, nil
 }
 
 func (f *fakeStore) CreateNote(_ context.Context, a db.CreateNoteParams) (db.Note, error) {
@@ -100,6 +107,22 @@ func TestCreate_StoresExtractedText(t *testing.T) {
 	}
 	if f.subjectQs != 0 {
 		t.Error("no subject given, so no ownership check is expected")
+	}
+}
+
+func TestCreate_StopsAtTheQuota_AndAllowsTheLastNote(t *testing.T) {
+	f := &fakeStore{noteCount: limits.MaxNotesPerUser}
+	_, err := note.NewService(f).Create(context.Background(), uuid.New(), note.Input{Title: "T", Content: doc("x")})
+	if !errors.Is(err, limits.ErrReached) {
+		t.Fatalf("err = %v, want limits.ErrReached", err)
+	}
+	if f.created.Title != "" {
+		t.Error("nothing may be inserted once the quota is reached")
+	}
+
+	f = &fakeStore{noteCount: limits.MaxNotesPerUser - 1}
+	if _, err := note.NewService(f).Create(context.Background(), uuid.New(), note.Input{Title: "Last", Content: doc("x")}); err != nil {
+		t.Fatalf("the last allowed note: %v", err)
 	}
 }
 

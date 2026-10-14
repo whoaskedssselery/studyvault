@@ -16,23 +16,13 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Подтверждение почты. Методы хранилища-подставки для ссылок подтверждения лежат в этом же файле.
+// Подтверждение почты. Методы хранилища-подставки для ссылок подтверждения лежат в этом же файле, данные в fakeStore.verifs.
 // ---------------------------------------------------------------------------
 
 type verifyRow struct {
 	userID  uuid.UUID
 	expires time.Time
 	used    bool
-}
-
-// Таблица ссылок подтверждения лежит в соседней карте: fakeStore из service_test.go знает только про сброс пароля.
-var verifyRows = map[*fakeStore]map[string]*verifyRow{}
-
-func (f *fakeStore) verifications() map[string]*verifyRow {
-	if verifyRows[f] == nil {
-		verifyRows[f] = map[string]*verifyRow{}
-	}
-	return verifyRows[f]
 }
 
 func (f *fakeStore) VerifyUserEmail(_ context.Context, id uuid.UUID) (int64, error) {
@@ -50,21 +40,21 @@ func (f *fakeStore) VerifyUserEmail(_ context.Context, id uuid.UUID) (int64, err
 }
 
 func (f *fakeStore) CreateEmailVerificationToken(_ context.Context, a db.CreateEmailVerificationTokenParams) error {
-	f.verifications()[a.TokenHash] = &verifyRow{userID: a.UserID, expires: a.ExpiresAt}
+	f.verifs[a.TokenHash] = &verifyRow{userID: a.UserID, expires: a.ExpiresAt}
 	return nil
 }
 
 func (f *fakeStore) DeleteUserEmailVerificationTokens(_ context.Context, userID uuid.UUID) error {
-	for h, r := range f.verifications() {
+	for h, r := range f.verifs {
 		if r.userID == userID {
-			delete(f.verifications(), h)
+			delete(f.verifs, h)
 		}
 	}
 	return nil
 }
 
 func (f *fakeStore) ClaimEmailVerificationToken(_ context.Context, a db.ClaimEmailVerificationTokenParams) (uuid.UUID, error) {
-	r, ok := f.verifications()[a.TokenHash]
+	r, ok := f.verifs[a.TokenHash]
 	if !ok || r.used || !r.expires.After(a.ExpiresAt) {
 		return uuid.Nil, pgx.ErrNoRows
 	}
@@ -74,7 +64,7 @@ func (f *fakeStore) ClaimEmailVerificationToken(_ context.Context, a db.ClaimEma
 
 func (f *fakeStore) LatestEmailVerificationExpiry(_ context.Context, userID uuid.UUID) (time.Time, error) {
 	latest := time.Unix(0, 0)
-	for _, r := range f.verifications() {
+	for _, r := range f.verifs {
 		if r.userID == userID && !r.used && r.expires.After(latest) {
 			latest = r.expires
 		}
@@ -84,9 +74,9 @@ func (f *fakeStore) LatestEmailVerificationExpiry(_ context.Context, userID uuid
 
 func (f *fakeStore) DeleteExpiredEmailVerificationTokens(_ context.Context, now time.Time) (int64, error) {
 	var n int64
-	for h, r := range f.verifications() {
+	for h, r := range f.verifs {
 		if !r.expires.After(now) || r.used {
-			delete(f.verifications(), h)
+			delete(f.verifs, h)
 			n++
 		}
 	}
@@ -387,7 +377,7 @@ func TestRequestEmailVerification_UnknownAccount_FailureOnAnyStepIsReported(t *t
 		if err != nil {
 			t.Fatal(err)
 		}
-		clear(base.verifications()) // следов первого письма нет: упираемся именно в сбой, а не в паузу
+		clear(base.verifs) // следов первого письма нет: упираемся именно в сбой, а не в паузу
 		failing := newVerifyingService(fail(base), newMailer(), time.Now)
 		if err := failing.RequestEmailVerification(ctx, res.User.ID); err == nil {
 			t.Errorf("%s: the failure must be reported", name)
@@ -474,7 +464,7 @@ func TestPurgeExpiredTokens_AlsoRemovesVerificationLinks(t *testing.T) {
 	if _, err := svc.PurgeExpiredTokens(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if n := len(store.verifications()); n != 0 {
+	if n := len(store.verifs); n != 0 {
 		t.Errorf("%d expired links left", n)
 	}
 
