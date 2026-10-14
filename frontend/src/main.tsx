@@ -75,9 +75,11 @@ import { readSession } from './repository';
 import { ApiStatus } from './api-status';
 import { ApiWorkspace } from './api/workspace';
 import { exportNote } from './downloads';
-import { isSubmission, mockUrl } from './runtime';
+import { isSubmission, mockUrl, demoMode } from './runtime';
+import { LiveApp } from "./live/app";
 import "./styles.css";
 import "./theme.css";
+import "./live/styles.css";
 import { AccountMenu } from "./account-menu";
 import { useTheme } from "./theme";
 
@@ -2223,7 +2225,7 @@ function Auth({
     </div>
   );
 }
-const rootRoute = createRootRoute({ component: App });
+const rootRoute = createRootRoute({ component: () => demoMode ? <App/> : <LiveApp/> });
 const routeTree = rootRoute.addChildren(
   [
     "/",
@@ -2239,6 +2241,10 @@ const routeTree = rootRoute.addChildren(
     "/edit/$noteId",
     "/api-status",
     "/workspace",
+    "/authors/$authorId",
+    "/forgot-password",
+    "/reset-password",
+    "/verify-email",
   ].map((path) => createRoute({ getParentRoute: () => rootRoute, path })),
 );
 const router = createRouter({
