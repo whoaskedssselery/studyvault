@@ -1,4 +1,16 @@
 services:
+  frontend:
+    profiles: ["web"]
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      api:
+        condition: service_started
+
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped

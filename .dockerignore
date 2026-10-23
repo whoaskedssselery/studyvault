@@ -1,0 +1,11 @@
+.git
+**/node_modules
+**/dist
+**/dist-submission
+**/test-results
+.env
+.env.*
+!.env.example
+backups
+docs
+deliverables

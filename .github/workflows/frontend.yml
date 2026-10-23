@@ -2,9 +2,9 @@ name: frontend
 on:
   push:
     branches: [main]
-    paths: ['frontend/**', 'deliverables/frontend/**', 'backend/**', 'docker-compose.yml', '.env.example', '.github/workflows/frontend.yml']
+    paths: ['frontend/**', 'deliverables/frontend/**', 'backend/**', 'docker-compose.yml', '.dockerignore', 'start.*', '.env.example', '.github/workflows/frontend.yml']
   pull_request:
-    paths: ['frontend/**', 'deliverables/frontend/**', 'backend/**', 'docker-compose.yml', '.env.example', '.github/workflows/frontend.yml']
+    paths: ['frontend/**', 'deliverables/frontend/**', 'backend/**', 'docker-compose.yml', '.dockerignore', 'start.*', '.env.example', '.github/workflows/frontend.yml']
 permissions:
   contents: read
 jobs:
@@ -41,8 +41,9 @@ jobs:
       run:
         working-directory: frontend
     env:
-      PASSWORD_RESET_URL: http://127.0.0.1:5175/reset-password
-      EMAIL_VERIFY_URL: http://127.0.0.1:5175/verify-email
+      STUDYVAULT_BASE_URL: http://127.0.0.1:5173
+      PASSWORD_RESET_URL: http://127.0.0.1:5173/reset-password
+      EMAIL_VERIFY_URL: http://127.0.0.1:5173/verify-email
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -57,14 +58,15 @@ jobs:
         working-directory: .
         run: |
           cp .env.example .env
-          docker compose --profile app up -d --build
+          docker compose --profile app --profile web up -d --build
           curl --retry 30 --retry-all-errors --retry-delay 2 --fail --silent http://127.0.0.1:8080/v1/health
+          curl --retry 30 --retry-all-errors --retry-delay 2 --fail --silent http://127.0.0.1:5173/v1/health
           docker compose --profile app run --rm --entrypoint /seed api
       - run: npm run test:integration
       - name: API logs on failure
         if: failure()
         working-directory: .
-        run: docker compose --profile app logs --tail 100 api migrate
+        run: docker compose --profile app --profile web logs --tail 100 api migrate frontend
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -73,4 +75,4 @@ jobs:
       - name: Stop the test stack
         if: always()
         working-directory: .
-        run: docker compose --profile app down -v
+        run: docker compose --profile app --profile web down -v

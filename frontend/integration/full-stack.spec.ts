@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-const base = "http://127.0.0.1:5175";
+const base = process.env.STUDYVAULT_BASE_URL || "http://127.0.0.1:5175";
 
 test("real stack: guest, registration, verification mail, PDF upload, publication, moderation and account cleanup", async ({
   page,
@@ -33,11 +33,22 @@ test("real stack: guest, registration, verification mail, PDF upload, publicatio
             `http://localhost:8025/api/v1/message/${entry.ID}`,
           );
           const message = await response.json();
-          const link = String(message.Text || "").match(
-            /http:\/\/127\.0\.0\.1:5175\/verify-email\?token=[A-Za-z0-9_-]+/,
-          );
+          const link = (
+            String(message.Text || "").match(/https?:\/\/[^\s<>"']+/g) || []
+          ).find((value) => {
+            try {
+              const url = new URL(value);
+              return (
+                url.origin === new URL(base).origin &&
+                url.pathname === "/verify-email" &&
+                !!url.searchParams.get("token")
+              );
+            } catch {
+              return false;
+            }
+          });
           if (link) {
-            confirmation = link[0];
+            confirmation = link;
             return true;
           }
         }
