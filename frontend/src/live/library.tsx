@@ -29,7 +29,13 @@ import type { Models } from "./common";
 export function MaterialCard({ item }: { item: Models["LibraryItem"] }) {
   const { go, run, busy, requireUser } = useLive();
   return (
-    <article className="material-card live-material-card">
+    <article
+      className="material-card live-material-card"
+      onClick={(event) => {
+        if (!(event.target as Element).closest("button, a"))
+          go(`/notes/${item.id}`);
+      }}
+    >
       <div
         className={`material-art ${item.kind === "note" ? "purple" : "blue"}`}
       >

@@ -930,6 +930,7 @@ h1 {
 }
 .material-card {
   position: relative;
+  cursor: pointer;
   background: var(--surface);
   border: 1px solid #e8e6ef;
   border-radius: 10px;

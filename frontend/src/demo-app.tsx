@@ -1007,7 +1007,13 @@ function NoteCard({ note }: { note: Note }) {
     }));
   };
   return (
-    <article className="material-card">
+    <article
+      className="material-card"
+      onClick={(event) => {
+        if (!(event.target as Element).closest("button, a"))
+          go(`/notes/${note.id}`);
+      }}
+    >
       <button
         className="art-button"
         tabIndex={-1}
