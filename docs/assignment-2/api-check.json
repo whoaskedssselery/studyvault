@@ -1,48 +1,49 @@
 {
-  "checkedAt": "2026-10-14T12:55:04.653Z",
+  "checkedAt": "2026-10-23T13:58:23.146Z",
   "authenticated": false,
   "results": [
     {
       "path": "/health",
-      "status": 502,
-      "contentType": "application/json; charset=utf-8",
-      "milliseconds": 12,
+      "status": 200,
+      "contentType": "application/json",
+      "milliseconds": 26,
       "body": {
-        "error": {
-          "code": "api_unavailable",
-          "message": "Start the API server or set STUDYVAULT_API_TARGET."
-        }
+        "status": "ok"
       },
-      "ok": false,
-      "message": "API не запущен. Библиотека продолжает работать на mock.json."
+      "ok": true,
+      "message": "Сервер и база данных доступны"
     },
     {
       "path": "/notes",
-      "status": 502,
-      "contentType": "application/json; charset=utf-8",
-      "milliseconds": 11,
+      "status": 401,
+      "contentType": "application/problem+json",
+      "milliseconds": 30,
       "body": {
-        "error": {
-          "code": "api_unavailable",
-          "message": "Start the API server or set STUDYVAULT_API_TARGET."
-        }
+        "code": "unauthorized",
+        "detail": "missing bearer token",
+        "request_id": "e27ebc820821cd49",
+        "status": 401,
+        "title": "Unauthorized",
+        "type": "https://github.com/whoaskedssselery/studyvault/blob/main/docs/errors.md#unauthorized"
       },
-      "ok": false,
-      "message": "API не запущен. Библиотека продолжает работать на mock.json."
+      "ok": true,
+      "message": "Без access-токена доступ запрещён, ошибка в формате JSON"
     },
     {
       "path": "/subjects",
-      "status": 502,
-      "contentType": "application/json; charset=utf-8",
-      "milliseconds": 11,
+      "status": 401,
+      "contentType": "application/problem+json",
+      "milliseconds": 29,
       "body": {
-        "error": {
-          "code": "api_unavailable",
-          "message": "Start the API server or set STUDYVAULT_API_TARGET."
-        }
+        "code": "unauthorized",
+        "detail": "missing bearer token",
+        "request_id": "ed44e5253e42ab15",
+        "status": 401,
+        "title": "Unauthorized",
+        "type": "https://github.com/whoaskedssselery/studyvault/blob/main/docs/errors.md#unauthorized"
       },
-      "ok": false,
-      "message": "API не запущен. Библиотека продолжает работать на mock.json."
+      "ok": true,
+      "message": "Без access-токена доступ запрещён, ошибка в формате JSON"
     }
   ]
 }

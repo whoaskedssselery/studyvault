@@ -1,0 +1,54 @@
+{
+  "capturedAt": "2026-10-23T14:17:34.949Z",
+  "sourceCommit": "62ce96f869291bfb50bd334fd31102549b9ed5d3",
+  "initialJsBytes": 423117,
+  "baseURL": "http://localhost:5173",
+  "source": "real local API, PostgreSQL, Meilisearch and RustFS; no intercepted responses",
+  "screenshots": [
+    {
+      "file": "01-library.png",
+      "description": "Гостевая библиотека с материалами из PostgreSQL"
+    },
+    {
+      "file": "02-material.png",
+      "description": "Опубликованный материал, оценки, вложения и обсуждение"
+    },
+    {
+      "file": "03-search.png",
+      "description": "Быстрый поиск по настоящей библиотеке"
+    },
+    {
+      "file": "04-ranking.png",
+      "description": "Рейтинг авторов по серверным оценкам"
+    },
+    {
+      "file": "05-dark-library.png",
+      "description": "Тёмная тема библиотеки"
+    },
+    {
+      "file": "06-mobile-dark.png",
+      "description": "Мобильная версия в тёмной теме"
+    },
+    {
+      "file": "07-login.png",
+      "description": "Вход в аккаунт"
+    },
+    {
+      "file": "08-editor.png",
+      "description": "Редактор с заполненным, ещё не сохранённым конспектом"
+    },
+    {
+      "file": "09-unsaved.png",
+      "description": "Защита текста при уходе из редактора"
+    },
+    {
+      "file": "10-profile.png",
+      "description": "Настройки профиля и аккаунта"
+    },
+    {
+      "file": "11-moderation.png",
+      "description": "Очередь модерации и управление общими предметами"
+    }
+  ],
+  "browserErrors": 0
+}

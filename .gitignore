@@ -8,3 +8,4 @@ dist-submission/
 *.log
 .idea/
 backups/
+deliverables/*.zip
