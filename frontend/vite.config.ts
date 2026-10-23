@@ -11,6 +11,13 @@ export default defineConfig(({ mode }) => {
   };
   return {
     plugins: [react()],
+    build:
+      mode === "submission"
+        ? {
+            outDir: "dist-submission",
+            rollupOptions: { output: { inlineDynamicImports: true } },
+          }
+        : undefined,
     server: {
       proxy: { "/backend-api": proxy, "/v1": { target, changeOrigin: true } },
     },

@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-submission/
 .env
 .env.*
 !.env.example

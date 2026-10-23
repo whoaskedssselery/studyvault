@@ -13,7 +13,7 @@
     "test": "playwright test",
     "test:integration": "playwright test --config playwright.integration.config.ts",
     "test:proxy": "node --test checks/proxy.test.mjs",
-    "package:submission": "npm run build && node scripts/package-submission.mjs",
+    "package:submission": "npm run build && vite build --mode submission && node scripts/package-submission.mjs",
     "test:submission": "npm run package:submission && playwright test tests/submission.spec.ts"
   },
   "dependencies": {

@@ -3,7 +3,8 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const destination = resolve(frontend, "../deliverables/frontend");
-let html = await readFile(resolve(frontend, "dist/index.html"), "utf8");
+const buildDirectory = resolve(frontend, "dist-submission");
+let html = await readFile(resolve(buildDirectory, "index.html"), "utf8");
 const js = /<script\b[^>]*src="([^"]+)"[^>]*><\/script>/.exec(html);
 const css = /<link\b[^>]*href="([^"]+\.css)"[^>]*>/.exec(html);
 if (!js || !css)
@@ -11,10 +12,10 @@ if (!js || !css)
     "Expected one Vite entry script and stylesheet. Run npm run build first.",
   );
 function builtPath(asset) {
-  const result = resolve(frontend, "dist", asset.replace(/^\//, ""));
+  const result = resolve(buildDirectory, asset.replace(/^\//, ""));
   if (
     !result.startsWith(
-      resolve(frontend, "dist") +
+      buildDirectory +
         "/".replace("/", process.platform === "win32" ? "\\" : "/"),
     )
   )

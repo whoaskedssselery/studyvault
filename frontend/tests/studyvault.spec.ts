@@ -155,6 +155,7 @@ test("keyboard search keeps focus and uploaded files persist", async ({
   page,
 }) => {
   await page.goto("/");
+  await expect(page.locator(".sidebar-search")).toBeVisible();
   await page.keyboard.press("Control+k");
   const search = page.getByRole("textbox", { name: "Быстрый поиск" });
   await expect(search).toBeFocused();
