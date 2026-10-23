@@ -63,6 +63,13 @@ jobs:
           curl --retry 30 --retry-all-errors --retry-delay 2 --fail --silent http://127.0.0.1:5173/v1/health
           docker compose --profile app run --rm --entrypoint /seed api
       - run: npm run test:integration
+      - name: Verify that web logs do not contain mail tokens
+        working-directory: .
+        run: |
+          if docker compose --profile app --profile web logs --no-color frontend | grep -Eq '(verify-email|reset-password)\?[^ ]*token='; then
+            echo "::error::Web access logs contain mail token query parameters"
+            exit 1
+          fi
       - name: API logs on failure
         if: failure()
         working-directory: .
