@@ -15,6 +15,7 @@ import "./styles.css";
 import "./theme.css";
 import "./live/styles.css";
 import "./live/finish.css";
+import "./product.css";
 
 const DemoApp = lazy(() =>
   import("./demo-app").then((module) => ({ default: module.DemoApp })),

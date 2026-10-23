@@ -338,7 +338,6 @@ export function DemoApp() {
             study<span>vault</span>
             <span className="brand-dot">.</span>
           </button>
-          <span className="brand-caption">ЗНАНИЯ, КОТОРЫМИ ДЕЛЯТСЯ</span>
           <button
             className="sidebar-search"
             onClick={() => setDialog("search")}
@@ -390,18 +389,6 @@ export function DemoApp() {
             ))}
           </nav>
           <div className="sidebar-bottom">
-            <div className="community-mini">
-              <Sparkles size={20} />
-              <strong>Знания лучше вместе</strong>
-              <p>
-                Ваш конспект может помочь
-                <br />
-                кому-то сдать экзамен.
-              </p>
-              <button onClick={() => requireUser() && go("/new")}>
-                Поделиться материалом <ArrowRight size={14} />
-              </button>
-            </div>
             <button className="help-button" onClick={() => setDialog("help")}>
               <HelpCircle size={17} />О проекте <span>↗</span>
             </button>
@@ -611,72 +598,11 @@ export function DemoApp() {
     </AppContext.Provider>
   );
 }
-function MaterialArt({ subject, type }: { subject: string; type: string }) {
+function MaterialArt({ type }: { type: string }) {
   return (
-    <div
-      className={`material-art ${subjectColors[subject] || "purple"}`}
-      aria-hidden="true"
-    >
-      <span className="art-grid" />
-      <span className="art-type">
-        {type === "Шпаргалка" ? "КРАТКО И ПО ДЕЛУ" : "РАЗБИРАЕМ ПО ПОЛОЧКАМ"}
-      </span>
-      {subject === "Математика" ? (
-        <>
-          <span className="math-symbol">ƒ′(x)</span>
-          <svg className="curve" viewBox="0 0 150 90">
-            <path d="M10 76H140M38 90V5" />
-            <path d="M14 68Q58 90 78 41T140 12" />
-            <path className="dashed" d="M33 80L133 7" />
-          </svg>
-          <span className="art-caption">МАТЕМАТИКА / 02</span>
-        </>
-      ) : subject === "Базы данных" ? (
-        <>
-          <span className="code-art">
-            SELECT knowledge
-            <br />
-            <span>FROM studyvault</span>
-            <br />
-            WHERE curiosity = true;
-          </span>
-          <span className="art-caption">ЗАПРОСЫ, КОТОРЫЕ ПОНЯТНЫ</span>
-          <span className="art-orbit">↗</span>
-        </>
-      ) : subject === "Программирование" ? (
-        <>
-          <span className="algorithm-bars">
-            {[25, 45, 35, 65, 53, 83].map((v, i) => (
-              <i key={i} style={{ height: v }} />
-            ))}
-          </span>
-          <span className="art-code">{"{ }"}</span>
-          <span className="art-caption">ОТ ИДЕИ К РЕШЕНИЮ</span>
-        </>
-      ) : subject === "Физика" ? (
-        <>
-          <span className="physics-art">
-            E = mc<sup>2</sup>
-          </span>
-          <span className="atom">
-            <i />
-            <i />
-            <i />
-            <b />
-          </span>
-          <span className="art-caption">ВСЁ ПОДЧИНЯЕТСЯ ЗАКОНАМ</span>
-        </>
-      ) : (
-        <>
-          <span className="language-art">
-            Past.
-            <br />
-            Present. <span>Future.</span>
-          </span>
-          <span className="art-caption">A LITTLE PRACTICE, EVERY DAY</span>
-          <span className="art-orbit">Aa</span>
-        </>
-      )}
+    <div className="material-art" aria-hidden="true">
+      <FileText size={18} />
+      <span>{type}</span>
     </div>
   );
 }
@@ -704,8 +630,7 @@ function Library({
   const setLayout = (layout: string) => setView((view) => ({ ...view, layout }));
   const setSemester = (semester: string) =>
     setView((view) => ({ ...view, semester }));
-  const published = db.notes.filter((n) => n.status === "published"),
-    isLibrary = mode === "/";
+  const isLibrary = mode === "/";
   const notes = db.notes
     .filter(
       (n) =>
@@ -731,10 +656,6 @@ function Library({
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">
-            <span />
-            ВАША СТУДЕНЧЕСКАЯ СУПЕРСИЛА
-          </div>
           <h1>
             {isLibrary
               ? "Библиотека знаний"
@@ -745,7 +666,7 @@ function Library({
           </h1>
           <p>
             {isLibrary
-              ? "Хорошие конспекты заслуживают большего, чем лежать в папке."
+              ? "Конспекты и шпаргалки по учебным предметам."
               : mode === "/saved"
                 ? "Конспекты и шпаргалки, которые вы сохранили для себя."
                 : "Ваш вклад в общую базу знаний. Делитесь тем, что знаете."}
@@ -759,116 +680,6 @@ function Library({
           Добавить материал
         </button>
       </div>
-      {isLibrary && (
-        <>
-          <section className="hero-banner">
-            <div>
-              <span className="hero-label">
-                <Sparkles size={15} />
-                УЧИТЬСЯ ПРОЩЕ ВМЕСТЕ
-              </span>
-              <h2>
-                Твой следующий «зачёт»
-                <br />
-                начинается здесь.
-              </h2>
-              <p>
-                Находи понятные конспекты, делись своими
-                <br />и помогай другим разобраться в сложном.
-              </p>
-              <button
-                onClick={() => {
-                  setSort("rating");
-                  document
-                    .getElementById("materials")
-                    ?.scrollIntoView({ behavior: "smooth" });
-                }}
-              >
-                Найти что-то полезное <ArrowRight size={17} />
-              </button>
-            </div>
-            <div className="hero-illustration" aria-hidden="true">
-              <span className="spark spark-one">✦</span>
-              <span className="spark spark-two">✧</span>
-              <span className="hero-loop" />
-              <div className="floating-note back">
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
-              <div className="floating-note front">
-                <div className="note-top">
-                  <span className="note-mini-icon">
-                    <BookOpen size={19} />
-                  </span>
-                  <span>
-                    Конспект, который
-                    <br />
-                    <strong>всё объясняет</strong>
-                  </span>
-                  <span className="check-sticker">
-                    <Check size={17} />
-                  </span>
-                </div>
-                <div className="note-lines">
-                  <i />
-                  <i />
-                  <i />
-                </div>
-                <div className="note-formula">
-                  знания + обмен = <span>рост ↗</span>
-                </div>
-                <div className="note-bottom">
-                  <span className="stacked-avatars">
-                    <i>А</i>
-                    <i>М</i>
-                    <i>Д</i>
-                  </span>
-                  <span>Сохранили одногруппники</span>
-                </div>
-              </div>
-              <span className="floating-label">
-                <Star size={15} fill="currentColor" />
-                5.0 · Очень полезно
-              </span>
-            </div>
-          </section>
-          <div className="stats-strip">
-            <div>
-              <span className="stat-icon purple">
-                <FileText size={19} />
-              </span>
-              <strong>
-                {published.length}
-                <small>материалов в библиотеке</small>
-              </strong>
-            </div>
-            <div>
-              <span className="stat-icon blue">
-                <Users size={19} />
-              </span>
-              <strong>
-                {db.users.length}
-                <small>студентов делятся знаниями</small>
-              </strong>
-            </div>
-            <div>
-              <span className="stat-icon orange">
-                <BookOpen size={19} />
-              </span>
-              <strong>
-                {new Set(published.map((n) => n.subject)).size}
-                <small>учебных предметов</small>
-              </strong>
-            </div>
-            <span className="stats-note">
-              <span />
-              Каждый конспект — чей-то «спасибо»
-            </span>
-          </div>
-        </>
-      )}
       <section id="materials">
         <div className="section-heading">
           <h2>
@@ -1043,7 +854,7 @@ function NoteCard({ note }: { note: Note }) {
         aria-label={`Открыть ${note.title}`}
         onClick={() => go(`/notes/${note.id}`)}
       >
-        <MaterialArt subject={note.subject} type={note.type} />
+        <MaterialArt type={note.type} />
       </button>
       <button
         className={`card-save ${saved ? "saved" : ""}`}
@@ -1584,7 +1395,6 @@ function NoteEditor({ id }: { id?: string }) {
       </button>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">ДЕЛИТЕСЬ ТЕМ, ЧТО ЗНАЕТЕ</div>
           <h1>
             {original ? "Редактировать материал" : "Новый материал"}
             <span className="heading-dot">.</span>
@@ -1827,7 +1637,6 @@ function Ranking() {
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">ЛЮДИ, КОТОРЫЕ ПОМОГАЮТ</div>
           <h1>
             Знания создают люди<span className="heading-dot">.</span>
           </h1>
@@ -1957,7 +1766,6 @@ function Moderation() {
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">КАЧЕСТВО НАЧИНАЕТСЯ С ВНИМАНИЯ</div>
           <h1>
             Модерация материалов<span className="heading-dot">.</span>
           </h1>
@@ -2090,7 +1898,6 @@ function Profile({ logout }: { logout: () => void }) {
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">ВАШЕ МЕСТО В СООБЩЕСТВЕ</div>
           <h1>
             Мой профиль<span className="heading-dot">.</span>
           </h1>
@@ -2212,10 +2019,6 @@ function Auth({
           study<span>vault</span>.
         </button>
         <div>
-          <span className="hero-label">
-            <Sparkles size={16} />
-            ОТ СТУДЕНТОВ — СТУДЕНТАМ
-          </span>
           <h1>
             Хорошие знания
             <br />

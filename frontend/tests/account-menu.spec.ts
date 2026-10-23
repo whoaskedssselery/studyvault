@@ -43,7 +43,7 @@ for (const [mode, base] of [["dev", "http://127.0.0.1:5173/"], ["submission", "h
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect(page.locator(".material-card")).toHaveCount(8);
-    await expect(page.locator(".sidebar")).toHaveCSS("background-color", "rgb(29, 29, 43)");
+    await expect(page.locator(".sidebar")).toHaveCSS("background-color", "rgb(33, 31, 42)");
     if (mode === "submission") {
       await trigger.click();
       await expect(page.locator(".account-panel")).toHaveCSS("opacity", "1");

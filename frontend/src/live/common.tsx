@@ -120,7 +120,6 @@ export function Heading({
   return (
     <div className="page-heading">
       <div>
-        <div className="eyebrow">ЗНАНИЯ, КОТОРЫМИ ДЕЛЯТСЯ</div>
         <h1>
           {title}
           <span className="heading-dot">.</span>

@@ -54,9 +54,9 @@ export function MaterialCard({ item }: { item: Models["LibraryItem"] }) {
       }}
     >
       <div
-        className={`material-art ${item.kind === "note" ? "purple" : "blue"}`}
+        className="material-art"
       >
-        <FileText size={38} />
+        <FileText size={18} />
         <span>{kindLabel(item.kind)}</span>
         <button
           className={`card-save ${item.bookmarked ? "saved" : ""}`}
@@ -203,7 +203,7 @@ export function LibraryFeed({
         description={
           saved
             ? "Сохранённые материалы — всегда под рукой."
-            : "Хорошие конспекты заслуживают большего, чем лежать в папке."
+            : "Конспекты и шпаргалки по учебным предметам."
         }
       >
         {!authorId && (
@@ -216,23 +216,6 @@ export function LibraryFeed({
           </button>
         )}
       </Heading>
-      {!saved && !authorId && (
-        <section className="hero-banner live-hero">
-          <div>
-            <span className="hero-label">УЧИТЬСЯ ПРОЩЕ ВМЕСТЕ</span>
-            <h2>
-              Твой следующий «зачёт»
-              <br />
-              начинается здесь.
-            </h2>
-            <p>
-              Находи понятные конспекты, делись своими знаниями
-              <br />и помогай другим разобраться в сложном.
-            </p>
-          </div>
-          <FileText size={110} strokeWidth={1} />
-        </section>
-      )}
       {!saved && (
         <>
           <div className="filters-row live-filters">

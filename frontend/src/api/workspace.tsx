@@ -146,7 +146,6 @@ export function ApiWorkspace() {
       <>
         <div className="page-heading">
           <div>
-            <div className="eyebrow">РЕАЛЬНЫЙ СЕРВЕР STUDYVAULT</div>
             <h1>
               Личный кабинет API<span className="heading-dot">.</span>
             </h1>
@@ -243,7 +242,6 @@ export function ApiWorkspace() {
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">СОБСТВЕННЫЕ ЗАМЕТКИ НА СЕРВЕРЕ</div>
           <h1>
             Мои знания<span className="heading-dot">.</span>
           </h1>

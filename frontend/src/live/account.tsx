@@ -4,7 +4,6 @@ import {
   BookOpen,
   CheckCircle2,
   GraduationCap,
-  Sparkles,
 } from "lucide-react";
 import { api, ApiError } from "../api/client";
 import {
@@ -49,10 +48,6 @@ export function AuthPage({
           study<span>vault</span>.
         </button>
         <div>
-          <span className="hero-label">
-            <Sparkles size={16} />
-            ОТ СТУДЕНТОВ — СТУДЕНТАМ
-          </span>
           <h1>
             Хорошие знания
             <br />

@@ -14,7 +14,6 @@ import {
   Plus,
   Search,
   ShieldCheck,
-  Sparkles,
   Sun,
   Trophy,
 } from "lucide-react";
@@ -284,7 +283,6 @@ export function LiveApp() {
               study<span>vault</span>
               <span className="brand-dot">.</span>
             </button>
-            <span className="brand-caption">ЗНАНИЯ, КОТОРЫМИ ДЕЛЯТСЯ</span>
             <button
               className="sidebar-search"
               onClick={() => {
@@ -345,18 +343,6 @@ export function LiveApp() {
               ))}
             </nav>
             <div className="sidebar-bottom">
-              <div className="community-mini">
-                <Sparkles size={20} />
-                <strong>Знания лучше вместе</strong>
-                <p>
-                  Ваш конспект может помочь
-                  <br />
-                  кому-то сдать экзамен.
-                </p>
-                <button onClick={() => requireUser() && go("/new")}>
-                  Поделиться материалом →
-                </button>
-              </div>
               <button
                 className="help-button"
                 onClick={() => {
@@ -439,7 +425,7 @@ export function LiveApp() {
             </main>
             <footer className="page-footer">
               <span>StudyVault © 2026</span>
-              <span>От студентов — студентам ♡</span>
+              <span>Студенческая база знаний</span>
             </footer>
           </div>
         </div>
