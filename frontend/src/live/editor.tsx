@@ -1,12 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useBlocker } from "@tanstack/react-router";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { Bold, Code2, Italic, List } from "lucide-react";
+import {
+  Bold,
+  Code2,
+  Italic,
+  List,
+  ListOrdered,
+  Quote,
+  Undo2,
+  Redo2,
+} from "lucide-react";
 import { api } from "../api/client";
 import { ApiFiles } from "../api/files";
 import {
   ErrorBox,
+  Dialog,
   Heading,
   Loading,
   LoginRequired,
@@ -27,9 +38,14 @@ export function MaterialEditor({ id }: { id?: string }) {
     [pinned, setPinned] = useState(false),
     [subjectTitle, setSubjectTitle] = useState("");
   const loaded = useRef(false);
+  const baseline = useRef<string | null>(null);
+  const dirty = useRef(false);
+  const [, refreshEditor] = useState(0);
   const editor = useEditor({
     extensions: [StarterKit],
     content: { type: "doc", content: [{ type: "paragraph" }] },
+    onUpdate: () => refreshEditor((value) => value + 1),
+    onSelectionUpdate: () => refreshEditor((value) => value + 1),
     editorProps: {
       attributes: {
         class: "prose editor-prose",
@@ -38,6 +54,33 @@ export function MaterialEditor({ id }: { id?: string }) {
       },
     },
   });
+  const snapshot = JSON.stringify({
+    title,
+    summary,
+    kind,
+    semester,
+    subject,
+    personal,
+    tags,
+    pinned,
+    content: editor?.getJSON(),
+  });
+  dirty.current = baseline.current !== null && baseline.current !== snapshot;
+  const blocker = useBlocker({
+    shouldBlockFn: ({ current, next }) =>
+      current.pathname !== next.pathname && dirty.current,
+    enableBeforeUnload: () => dirty.current,
+    withResolver: true,
+  });
+  useEffect(() => {
+    editor?.setEditable(!busy);
+  }, [editor, busy]);
+  useEffect(() => {
+    if (!id && editor && baseline.current === null) {
+      baseline.current = snapshot;
+      refreshEditor((value) => value + 1);
+    }
+  }, [id, editor, snapshot]);
   const note = useQuery({
     queryKey: ["live", "edit", id, user?.id],
     queryFn: () => api.note(id!),
@@ -69,6 +112,17 @@ export function MaterialEditor({ id }: { id?: string }) {
     setPinned(data.is_pinned);
     setTags(data.tags.map((tag) => tag.name).join(", "));
     editor.commands.setContent(data.content);
+    baseline.current = JSON.stringify({
+      title: data.title,
+      summary: data.summary || "",
+      kind: data.kind,
+      semester: data.semester?.toString() || "",
+      subject: data.library_subject_id || "",
+      personal: data.subject_id || "",
+      tags: data.tags.map((tag) => tag.name).join(", "),
+      pinned: data.is_pinned,
+      content: editor.getJSON(),
+    });
   }, [note.data, editor]);
   if (!user) return <LoginRequired />;
   if (id && note.isPending) return <Loading />;
@@ -135,8 +189,15 @@ export function MaterialEditor({ id }: { id?: string }) {
           ? "Изменения сохранены. Материал снова проходит проверку."
           : "Материал сохранён",
     );
-    if (result.ok) go(submit ? "/my" : `/edit/${result.data.id}`);
-    else if (!id && createdId) go(`/edit/${createdId}`);
+    if (result.ok) {
+      baseline.current = snapshot;
+      dirty.current = false;
+      go(submit ? "/my" : `/edit/${result.data.id}`);
+    } else if (!id && createdId) {
+      baseline.current = snapshot;
+      dirty.current = false;
+      go(`/edit/${createdId}`);
+    }
   };
   return (
     <>
@@ -144,7 +205,11 @@ export function MaterialEditor({ id }: { id?: string }) {
         title={id ? "Редактировать материал" : "Новый материал"}
         description="Сохраните конспект для себя или поделитесь им с сообществом."
       />
-      <div className="editor-layout">
+      <fieldset
+        className="editor-layout live-editor-fields"
+        disabled={busy}
+        aria-label="Редактор материала"
+      >
         <section className="editor-card">
           <span className={`pill live-status ${status}`}>
             {statuses[status]}
@@ -188,6 +253,8 @@ export function MaterialEditor({ id }: { id?: string }) {
               <button
                 type="button"
                 aria-label="Полужирный"
+                aria-pressed={editor?.isActive("bold") || false}
+                title="Полужирный (Ctrl+B)"
                 onClick={() => editor?.chain().focus().toggleBold().run()}
               >
                 <Bold size={17} />
@@ -195,6 +262,8 @@ export function MaterialEditor({ id }: { id?: string }) {
               <button
                 type="button"
                 aria-label="Курсив"
+                aria-pressed={editor?.isActive("italic") || false}
+                title="Курсив (Ctrl+I)"
                 onClick={() => editor?.chain().focus().toggleItalic().run()}
               >
                 <Italic size={17} />
@@ -202,6 +271,7 @@ export function MaterialEditor({ id }: { id?: string }) {
               <button
                 type="button"
                 aria-label="Список"
+                aria-pressed={editor?.isActive("bulletList") || false}
                 onClick={() => editor?.chain().focus().toggleBulletList().run()}
               >
                 <List size={17} />
@@ -209,20 +279,76 @@ export function MaterialEditor({ id }: { id?: string }) {
               <button
                 type="button"
                 aria-label="Блок кода"
+                aria-pressed={editor?.isActive("codeBlock") || false}
                 onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
               >
                 <Code2 size={17} />
               </button>
               <button
                 type="button"
+                aria-label="Заголовок раздела"
+                aria-pressed={
+                  editor?.isActive("heading", { level: 2 }) || false
+                }
                 onClick={() =>
                   editor?.chain().focus().toggleHeading({ level: 2 }).run()
                 }
               >
                 H2
               </button>
+              <button
+                type="button"
+                aria-label="Нумерованный список"
+                aria-pressed={editor?.isActive("orderedList") || false}
+                onClick={() =>
+                  editor?.chain().focus().toggleOrderedList().run()
+                }
+              >
+                <ListOrdered size={17} />
+              </button>
+              <button
+                type="button"
+                aria-label="Цитата"
+                aria-pressed={editor?.isActive("blockquote") || false}
+                onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+              >
+                <Quote size={17} />
+              </button>
+              <span className="live-toolbar-divider" />
+              <button
+                type="button"
+                aria-label="Отменить изменение"
+                disabled={!editor?.can().undo()}
+                onClick={() => editor?.chain().focus().undo().run()}
+              >
+                <Undo2 size={17} />
+              </button>
+              <button
+                type="button"
+                aria-label="Повторить изменение"
+                disabled={!editor?.can().redo()}
+                onClick={() => editor?.chain().focus().redo().run()}
+              >
+                <Redo2 size={17} />
+              </button>
             </div>
             <EditorContent editor={editor} />
+            <div className="live-editor-status">
+              <span>
+                {editor?.getText().trim().split(/\s+/).filter(Boolean).length ||
+                  0}{" "}
+                слов
+              </span>
+              <span aria-live="polite">
+                {busy
+                  ? "Сохраняем…"
+                  : dirty.current
+                    ? "Есть несохранённые изменения"
+                    : id
+                      ? "Все изменения сохранены"
+                      : "Новый черновик"}
+              </span>
+            </div>
             <label className="field-label">
               Теги
               <input
@@ -279,7 +405,11 @@ export function MaterialEditor({ id }: { id?: string }) {
                   () => api.deleteNote(id),
                   "Материал удалён",
                 );
-                if (result.ok) go("/my");
+                if (result.ok) {
+                  baseline.current = snapshot;
+                  dirty.current = false;
+                  go("/my");
+                }
               }}
             >
               Удалить материал
@@ -393,7 +523,30 @@ export function MaterialEditor({ id }: { id?: string }) {
             </section>
           )}
         </aside>
-      </div>
+      </fieldset>
+      {blocker.status === "blocked" && (
+        <Dialog title="Несохранённые изменения" close={() => blocker.reset()}>
+          <h2>Сохранить изменения?</h2>
+          <p>
+            В материале есть изменения, которые ещё не сохранены. Если уйти
+            сейчас, они будут потеряны.
+          </p>
+          <div className="live-actions">
+            <button className="button primary" onClick={() => blocker.reset()}>
+              Остаться в редакторе
+            </button>
+            <button
+              className="button secondary"
+              onClick={() => {
+                dirty.current = false;
+                blocker.proceed();
+              }}
+            >
+              Уйти без сохранения
+            </button>
+          </div>
+        </Dialog>
+      )}
     </>
   );
 }

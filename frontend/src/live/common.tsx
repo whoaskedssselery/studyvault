@@ -256,17 +256,24 @@ export function Dialog({
   title,
   close,
   children,
+  placement = "center",
 }: {
   title: string;
   close: () => void;
   children: ReactNode;
+  placement?: "center" | "drawer";
 }) {
   const panel = useRef<HTMLDivElement>(null),
     closeRef = useRef(close);
   closeRef.current = close;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    panel.current?.querySelector<HTMLElement>("input,textarea,button")?.focus();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    (
+      panel.current?.querySelector<HTMLElement>("[data-autofocus]") ||
+      panel.current?.querySelector<HTMLElement>("input,textarea,button")
+    )?.focus();
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -274,7 +281,7 @@ export function Dialog({
       }
       if (event.key !== "Tab") return;
       const fields = panel.current?.querySelectorAll<HTMLElement>(
-        "button:not(:disabled),input:not(:disabled),textarea:not(:disabled),a[href]",
+        "button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href]",
       );
       if (!fields?.length) return;
       const first = fields[0],
@@ -291,18 +298,19 @@ export function Dialog({
     document.addEventListener("keydown", key);
     return () => {
       document.removeEventListener("keydown", key);
+      document.body.style.overflow = overflow;
       previous?.focus();
     };
   }, []);
   return (
     <div
-      className="modal-backdrop"
+      className={`modal-backdrop ${placement === "drawer" ? "live-drawer-backdrop" : ""}`}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) close();
       }}
     >
       <div
-        className="modal"
+        className={`modal ${placement === "drawer" ? "live-drawer" : ""}`}
         ref={panel}
         role="dialog"
         aria-modal="true"

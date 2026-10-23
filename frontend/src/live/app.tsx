@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import {
@@ -18,16 +18,21 @@ import {
   Sun,
   Trophy,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { api, ApiError } from "../api/client";
 import type { ApiUser } from "../api/client";
 import { AccountMenu } from "../account-menu";
 import { useTheme } from "../theme";
-import { ApiStatus } from "../api-status";
-import { ApiWorkspace } from "../api/workspace";
-import { LiveContext, VerificationBanner, useLive, viewUser } from "./common";
+import {
+  LiveContext,
+  Loading,
+  VerificationBanner,
+  useLive,
+  viewUser,
+} from "./common";
+import { ActivityPanel, HelpPanel, SearchPanel, SubjectsPanel } from "./panels";
 import { AuthorPage, LibraryFeed, MyNotes } from "./library";
 import { MaterialPage } from "./material";
-import { MaterialEditor } from "./editor";
 import {
   AuthPage,
   ProfilePage,
@@ -35,6 +40,17 @@ import {
   VerifyEmailPage,
 } from "./account";
 import { ModerationPage } from "./moderation";
+const MaterialEditor = lazy(() =>
+  import("./editor").then((module) => ({ default: module.MaterialEditor })),
+);
+const ApiStatus = lazy(() =>
+  import("../api-status").then((module) => ({ default: module.ApiStatus })),
+);
+const ApiWorkspace = lazy(() =>
+  import("../api/workspace").then((module) => ({
+    default: module.ApiWorkspace,
+  })),
+);
 
 export function LiveApp() {
   const cache = useQueryClient(),
@@ -47,9 +63,13 @@ export function LiveApp() {
     [mobile, setMobile] = useState(false),
     [subject, setSubject] = useState(""),
     [message, setMessage] = useState(""),
-    [error, setError] = useState(false);
+    [error, setError] = useState(false),
+    [panel, setPanel] = useState<
+      "search" | "activity" | "subjects" | "help" | null
+    >(null);
   const working = useRef(false);
   const go = (route: string) => {
+    setPanel(null);
     void router.navigate({ to: route });
     setMobile(false);
     window.scrollTo(0, 0);
@@ -94,14 +114,7 @@ export function LiveApp() {
     const key = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        go("/");
-        requestAnimationFrame(() =>
-          document
-            .querySelector<HTMLInputElement>(
-              'input[aria-label="Поиск материалов"]',
-            )
-            ?.focus(),
-        );
+        setPanel((value) => (value === "search" ? null : "search"));
       }
       if (event.key === "Escape") setMobile(false);
     };
@@ -145,16 +158,24 @@ export function LiveApp() {
     queryFn: api.librarySubjects,
     retry: false,
   });
-  const navigation = [
+  const navigation: [string, string, LucideIcon][] = [
     ["/", "Библиотека", BookOpen],
     ["/saved", "Избранное", Bookmark],
     ["/my", "Мои материалы", FileText],
     ["/ranking", "Рейтинг авторов", Trophy],
-    ...(user?.role === "moderator"
-      ? [["/moderation", "Модерация", ShieldCheck]]
-      : []),
-  ] as const;
+  ];
+  if (user?.role === "moderator")
+    navigation.push(["/moderation", "Модерация", ShieldCheck]);
   const title =
+    (
+      {
+        "/login": "Вход",
+        "/register": "Регистрация",
+        "/forgot-password": "Восстановление пароля",
+        "/verify-email": "Подтверждение почты",
+        "/reset-password": "Новый пароль",
+      } as Record<string, string>
+    )[path] ||
     navigation.find(([route]) => route === path)?.[1] ||
     (path.startsWith("/notes/")
       ? "Материал"
@@ -162,7 +183,15 @@ export function LiveApp() {
         ? "Редактор"
         : path.startsWith("/authors/")
           ? "Профиль автора"
-          : "Мой профиль");
+          : path === "/verify-email"
+            ? "Подтверждение почты"
+            : path === "/reset-password"
+              ? "Новый пароль"
+              : "Мой профиль");
+  useEffect(() => {
+    document.title = `${title} · StudyVault`;
+    setPanel(null);
+  }, [path, title]);
   const auth = ["/login", "/register", "/forgot-password"].includes(path);
   let page;
   if (path === "/")
@@ -200,6 +229,12 @@ export function LiveApp() {
         </button>
       </div>
     );
+  if (
+    restoring &&
+    (["/saved", "/my", "/profile", "/new", "/moderation"].includes(path) ||
+      path.startsWith("/edit/"))
+  )
+    page = <Loading />;
   return (
     <LiveContext.Provider
       value={{ user, restoring, busy, go, run, notice, setUser, requireUser }}
@@ -212,6 +247,16 @@ export function LiveApp() {
         />
       ) : (
         <div className="app-shell">
+          <a
+            className="skip-link"
+            href="#main-content"
+            onClick={(event) => {
+              event.preventDefault();
+              document.getElementById("main-content")?.focus();
+            }}
+          >
+            Перейти к содержимому
+          </a>
           {mobile && (
             <button
               className="sidebar-overlay"
@@ -237,14 +282,8 @@ export function LiveApp() {
             <button
               className="sidebar-search"
               onClick={() => {
-                go("/");
-                requestAnimationFrame(() =>
-                  document
-                    .querySelector<HTMLInputElement>(
-                      'input[aria-label="Поиск материалов"]',
-                    )
-                    ?.focus(),
-                );
+                setMobile(false);
+                setPanel("search");
               }}
             >
               <Search size={16} />
@@ -254,14 +293,14 @@ export function LiveApp() {
               {navigation.map(([route, label, Icon]) => (
                 <button
                   className={`nav-item ${route === path ? "selected" : ""}`}
-                  key={route as string}
+                  key={route}
                   onClick={() => {
                     if (route === "/") setSubject("");
-                    go(route as string);
+                    go(route);
                   }}
                 >
                   <Icon size={19} />
-                  {label as string}
+                  {label}
                 </button>
               ))}
             </nav>
@@ -270,8 +309,8 @@ export function LiveApp() {
               <button
                 aria-label="Все предметы"
                 onClick={() => {
-                  setSubject("");
-                  go("/");
+                  setMobile(false);
+                  setPanel("subjects");
                 }}
               >
                 <Plus size={15} />
@@ -315,11 +354,10 @@ export function LiveApp() {
               </div>
               <button
                 className="help-button"
-                onClick={() =>
-                  notice(
-                    "StudyVault — библиотека конспектов и шпаргалок. Находите материалы, делитесь знаниями и помогайте друг другу.",
-                  )
-                }
+                onClick={() => {
+                  setMobile(false);
+                  setPanel("help");
+                }}
               >
                 <HelpCircle size={17} />О проекте
               </button>
@@ -338,17 +376,13 @@ export function LiveApp() {
                 <GraduationCap size={19} />
                 <span>База знаний</span>
                 <ChevronRight size={14} />
-                <strong>{title as string}</strong>
+                <strong>{title}</strong>
               </div>
               <div className="topbar-actions">
                 <button
                   className="icon-button"
                   aria-label="Уведомления"
-                  onClick={() =>
-                    notice(
-                      "Статусы проверки и причины отклонения доступны в разделе «Мои материалы».",
-                    )
-                  }
+                  onClick={() => setPanel("activity")}
                 >
                   <Bell size={18} />
                 </button>
@@ -394,9 +428,9 @@ export function LiveApp() {
                 )}
               </div>
             </header>
-            <main className="main-content">
+            <main className="main-content" id="main-content" tabIndex={-1}>
               <VerificationBanner />
-              {page}
+              <Suspense fallback={<Loading />}>{page}</Suspense>
             </main>
             <footer className="page-footer">
               <span>StudyVault © 2026</span>
@@ -404,6 +438,22 @@ export function LiveApp() {
             </footer>
           </div>
         </div>
+      )}
+      {panel === "search" && <SearchPanel close={() => setPanel(null)} />}
+      {panel === "activity" && <ActivityPanel close={() => setPanel(null)} />}
+      {panel === "help" && <HelpPanel close={() => setPanel(null)} />}
+      {panel === "subjects" && (
+        <SubjectsPanel
+          subjects={subjects.data?.items || []}
+          error={subjects.error}
+          pending={subjects.isPending}
+          retry={() => void subjects.refetch()}
+          close={() => setPanel(null)}
+          select={(id) => {
+            setSubject(id);
+            go("/");
+          }}
+        />
       )}
       {message && (
         <div
