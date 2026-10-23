@@ -26,6 +26,23 @@ import {
 } from "./common";
 import type { Models } from "./common";
 
+export type LibraryFilters = {
+  search: string;
+  subject: string;
+  kind: "" | Models["MaterialKind"];
+  semester: string;
+  sort: "new" | "rating" | "views";
+  tag: string;
+};
+export const defaultLibraryFilters: LibraryFilters = {
+  search: "",
+  subject: "",
+  kind: "",
+  semester: "",
+  sort: "new",
+  tag: "",
+};
+
 export function MaterialCard({ item }: { item: Models["LibraryItem"] }) {
   const { go, run, busy, requireUser } = useLive();
   return (
@@ -116,19 +133,22 @@ export function MaterialCard({ item }: { item: Models["LibraryItem"] }) {
 export function LibraryFeed({
   saved = false,
   authorId,
-  initialSubject = "",
+  filters: savedFilters,
+  onFiltersChange,
 }: {
   saved?: boolean;
   authorId?: string;
-  initialSubject?: string;
+  filters?: LibraryFilters;
+  onFiltersChange?: (filters: LibraryFilters) => void;
 }) {
   const { user, go, requireUser } = useLive();
-  const [search, setSearch] = useState(""),
-    [subject, setSubject] = useState(initialSubject),
-    [kind, setKind] = useState<"" | Models["MaterialKind"]>(""),
-    [semester, setSemester] = useState(""),
-    [sort, setSort] = useState<"new" | "rating" | "views">("new"),
-    [tag, setTag] = useState("");
+  const [localFilters, setLocalFilters] = useState(defaultLibraryFilters);
+  const filters = savedFilters || localFilters;
+  const { search, subject, kind, semester, sort, tag } = filters;
+  const changeFilter = <K extends keyof LibraryFilters>(
+    key: K,
+    value: LibraryFilters[K],
+  ) => (onFiltersChange || setLocalFilters)({ ...filters, [key]: value });
   const q = useDebounced(search.trim()),
     exactTag = useDebounced(tag.trim());
   const subjects = useQuery({
@@ -223,13 +243,13 @@ export function LibraryFeed({
                 placeholder="Поиск по названию, теме или тексту…"
                 maxLength={200}
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => changeFilter("search", e.target.value)}
               />
             </label>
             <select
               aria-label="Сортировка"
               value={sort}
-              onChange={(e) => setSort(e.target.value as typeof sort)}
+              onChange={(e) => changeFilter("sort", e.target.value as typeof sort)}
             >
               <option value="new">Сначала новые</option>
               <option value="rating">По оценке</option>
@@ -242,7 +262,7 @@ export function LibraryFeed({
               <select
                 aria-label="Предмет библиотеки"
                 value={subject}
-                onChange={(e) => setSubject(e.target.value)}
+                onChange={(e) => changeFilter("subject", e.target.value)}
               >
                 <option value="">Все предметы</option>
                 {subjects.data?.items.map((item) => (
@@ -257,7 +277,7 @@ export function LibraryFeed({
               <select
                 aria-label="Тип материала"
                 value={kind}
-                onChange={(e) => setKind(e.target.value as typeof kind)}
+                onChange={(e) => changeFilter("kind", e.target.value as typeof kind)}
               >
                 <option value="">Все материалы</option>
                 <option value="note">Конспекты</option>
@@ -269,7 +289,7 @@ export function LibraryFeed({
               <select
                 aria-label="Семестр"
                 value={semester}
-                onChange={(e) => setSemester(e.target.value)}
+                onChange={(e) => changeFilter("semester", e.target.value)}
               >
                 <option value="">Все семестры</option>
                 {Array.from({ length: 12 }, (_, i) => (
@@ -285,7 +305,7 @@ export function LibraryFeed({
                 aria-label="Фильтр по тегу"
                 value={tag}
                 maxLength={50}
-                onChange={(e) => setTag(e.target.value)}
+                onChange={(e) => changeFilter("tag", e.target.value)}
                 placeholder="Точное название"
               />
             </label>

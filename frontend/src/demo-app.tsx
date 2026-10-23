@@ -75,6 +75,12 @@ type AppState = {
   requireUser: () => User | null;
   selectSubject: (value: string) => void;
 };
+type LibraryView = {
+  type: string;
+  sort: string;
+  layout: string;
+  semester: string;
+};
 const AppContext = createContext<AppState>(null!);
 const useApp = () => useContext(AppContext);
 function Avatar({ user, size = "" }: { user: User; size?: string }) {
@@ -187,6 +193,12 @@ export function DemoApp() {
   const [userId, setUserId] = useState<string | null>(readSession);
   const [subject, setSubject] = useState("Все предметы"),
     [search, setSearch] = useState(""),
+    [libraryView, setLibraryView] = useState<LibraryView>({
+      type: "Все материалы",
+      sort: "popular",
+      layout: "grid",
+      semester: "all",
+    }),
     [mobile, setMobile] = useState(false),
     [toast, setToast] = useState(""),
     [dialog, setDialog] = useState<"help" | "search" | "notifications" | null>(
@@ -451,6 +463,8 @@ export function DemoApp() {
                 setSubject={setSubject}
                 search={search}
                 setSearch={setSearch}
+                view={libraryView}
+                setView={setLibraryView}
               />
             ) : pathname.startsWith("/notes/") ? (
               <NotePage
@@ -672,18 +686,24 @@ function Library({
   setSubject,
   search,
   setSearch,
+  view,
+  setView,
 }: {
   mode: string;
   subject: string;
   setSubject: (s: string) => void;
   search: string;
   setSearch: (s: string) => void;
+  view: LibraryView;
+  setView: React.Dispatch<React.SetStateAction<LibraryView>>;
 }) {
   const { db, user, go, requireUser } = useApp();
-  const [type, setType] = useState("Все материалы"),
-    [sort, setSort] = useState("popular"),
-    [layout, setLayout] = useState("grid"),
-    [semester, setSemester] = useState("all");
+  const { type, sort, layout, semester } = view;
+  const setType = (type: string) => setView((view) => ({ ...view, type }));
+  const setSort = (sort: string) => setView((view) => ({ ...view, sort }));
+  const setLayout = (layout: string) => setView((view) => ({ ...view, layout }));
+  const setSemester = (semester: string) =>
+    setView((view) => ({ ...view, semester }));
   const published = db.notes.filter((n) => n.status === "published"),
     isLibrary = mode === "/";
   const notes = db.notes

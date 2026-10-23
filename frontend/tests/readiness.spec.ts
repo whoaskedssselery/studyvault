@@ -2,6 +2,51 @@ import { test, expect } from "@playwright/test";
 import { ids, liveFixture, liveLogin } from "./live-fixture";
 test.use({ storageState: { cookies: [], origins: [] } });
 
+test("library keeps every filter after opening a material and returning by either back action", async ({ page }) => {
+  const data = await liveFixture(page);
+  await page.goto("/");
+  await page.getByLabel("Поиск материалов").fill("SQL");
+  await page.getByLabel("Предмет библиотеки").selectOption(ids.subject);
+  await page.getByLabel("Тип материала", { exact: true }).selectOption("note");
+  await page.getByLabel("Семестр", { exact: true }).selectOption("2");
+  await page.getByLabel("Сортировка").selectOption("views");
+  await page.getByLabel("Фильтр по тегу").fill("SQL");
+  await expect.poll(() => data.calls.some((call) => {
+    const query = new URLSearchParams(call.query);
+    return call.path === "/library" && query.get("q") === "SQL" && query.get("tag") === "SQL";
+  })).toBe(true);
+  for (const back of ["browser", "page"]) {
+    await page.locator(".material-card .card-body > p").first().click();
+    await expect(page).toHaveURL(new RegExp(`/notes/${ids.material}$`));
+    if (back === "browser") await page.goBack();
+    else await page.getByRole("button", { name: "Назад в библиотеку" }).click();
+    await expect(page.getByLabel("Поиск материалов")).toHaveValue("SQL");
+    await expect(page.getByLabel("Предмет библиотеки")).toHaveValue(ids.subject);
+    await expect(page.getByLabel("Тип материала", { exact: true })).toHaveValue("note");
+    await expect(page.getByLabel("Семестр", { exact: true })).toHaveValue("2");
+    await expect(page.getByLabel("Сортировка")).toHaveValue("views");
+    await expect(page.getByLabel("Фильтр по тегу")).toHaveValue("SQL");
+    await expect(page.getByRole("navigation", { name: "Предметы" }).locator(".selected")).toHaveCount(1);
+  }
+});
+
+test("clearing the subject filter stays cleared after reading a material and navigating to the library", async ({ page }) => {
+  await liveFixture(page);
+  await page.goto("/");
+  const subjects = page.getByRole("navigation", { name: "Предметы" });
+  await subjects.getByRole("button", { name: /Базы данных/ }).click();
+  await page.getByLabel("Предмет библиотеки").selectOption("");
+  await expect(subjects.locator(".selected")).toHaveCount(0);
+  await page.locator(".material-card .material-art").first().click();
+  await page.goBack();
+  await expect(page.getByLabel("Предмет библиотеки")).toHaveValue("");
+  await expect(subjects.locator(".selected")).toHaveCount(0);
+  await page.getByLabel("Предмет библиотеки").selectOption(ids.subject);
+  await page.locator(".material-card .card-author").first().click();
+  await page.getByRole("navigation", { name: "Основная навигация" }).getByRole("button", { name: "Библиотека", exact: true }).click();
+  await expect(page.getByLabel("Предмет библиотеки")).toHaveValue(ids.subject);
+});
+
 test("quick search works from a material, supports the keyboard and opens a real result", async ({
   page,
 }) => {

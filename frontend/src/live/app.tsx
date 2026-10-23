@@ -31,7 +31,7 @@ import {
   viewUser,
 } from "./common";
 import { ActivityPanel, HelpPanel, SearchPanel, SubjectsPanel } from "./panels";
-import { AuthorPage, LibraryFeed, MyNotes } from "./library";
+import { AuthorPage, LibraryFeed, MyNotes, defaultLibraryFilters } from "./library";
 import { MaterialPage } from "./material";
 import {
   AuthPage,
@@ -61,13 +61,15 @@ export function LiveApp() {
     [restoring, setRestoring] = useState(true),
     [busy, setBusy] = useState(false),
     [mobile, setMobile] = useState(false),
-    [subject, setSubject] = useState(""),
+    [libraryFilters, setLibraryFilters] = useState(defaultLibraryFilters),
     [message, setMessage] = useState(""),
     [error, setError] = useState(false),
     [panel, setPanel] = useState<
       "search" | "activity" | "subjects" | "help" | null
     >(null);
   const working = useRef(false);
+  const setSubject = (subject: string) =>
+    setLibraryFilters((filters) => ({ ...filters, subject }));
   const go = (route: string) => {
     setPanel(null);
     void router.navigate({ to: route });
@@ -198,7 +200,9 @@ export function LiveApp() {
   const auth = ["/login", "/register", "/forgot-password"].includes(path);
   let page;
   if (path === "/")
-    page = <LibraryFeed key={subject} initialSubject={subject} />;
+    page = (
+      <LibraryFeed filters={libraryFilters} onFiltersChange={setLibraryFilters} />
+    );
   else if (path === "/saved") page = <LibraryFeed key="saved" saved />;
   else if (path === "/my") page = <MyNotes />;
   else if (path.startsWith("/notes/"))
@@ -271,7 +275,6 @@ export function LiveApp() {
             <button
               className="brand"
               onClick={() => {
-                setSubject("");
                 go("/");
               }}
             >
@@ -298,7 +301,6 @@ export function LiveApp() {
                   className={`nav-item ${route === path ? "selected" : ""}`}
                   key={route}
                   onClick={() => {
-                    if (route === "/") setSubject("");
                     go(route);
                   }}
                 >
@@ -322,7 +324,7 @@ export function LiveApp() {
             <nav aria-label="Предметы">
               {subjects.data?.items.map((item) => (
                 <button
-                  className={`subject-nav ${item.id === subject ? "selected" : ""}`}
+                  className={`subject-nav ${path === "/" && item.id === libraryFilters.subject ? "selected" : ""}`}
                   key={item.id}
                   onClick={() => {
                     setSubject(item.id);

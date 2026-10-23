@@ -1,6 +1,28 @@
 import { test, expect } from "@playwright/test";
 import path from "node:path";
 
+test("demo library keeps filters and list layout after reading a material", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Поиск материалов").fill("SQL");
+  await page.locator(".subject-chips").getByRole("button", { name: "Базы данных", exact: true }).click();
+  await page.getByRole("button", { name: "Шпаргалки", exact: true }).click();
+  await page.getByLabel("Семестр", { exact: true }).selectOption("2");
+  await page.getByLabel("Сортировка").selectOption("new");
+  await page.getByRole("button", { name: "Список", exact: true }).click();
+  for (const back of ["browser", "page"]) {
+    await page.locator(".material-card .card-body > p").first().click();
+    await expect(page).toHaveURL(/\/notes\//);
+    if (back === "browser") await page.goBack();
+    else await page.getByRole("button", { name: "Назад в библиотеку" }).click();
+    await expect(page.getByLabel("Поиск материалов")).toHaveValue("SQL");
+    await expect(page.getByLabel("Семестр", { exact: true })).toHaveValue("2");
+    await expect(page.getByLabel("Сортировка")).toHaveValue("new");
+    await expect(page.locator(".subject-chips .active")).toHaveText("Базы данных");
+    await expect(page.locator(".material-tabs .active")).toHaveText("Шпаргалки");
+    await expect(page.locator(".list-layout .material-card")).toHaveCount(1);
+  }
+});
+
 test("search, filters and favorites persist after reload", async ({ page }) => {
   await page.goto("/");
   await expect(
