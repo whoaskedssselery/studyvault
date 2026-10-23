@@ -1,0 +1,604 @@
+{
+  "checkedAt": "2026-10-23T15:33:17.316Z",
+  "source": "Real local Docker API; Chromium headless, emulated viewports",
+  "samples": [
+    {
+      "theme": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 1050
+      },
+      "horizontalOverflow": false,
+      "text": [
+        {
+          "selector": ".live-material-card .card-title",
+          "text": "Irregular verbs",
+          "color": "rgb(40, 40, 55)",
+          "background": [
+            255,
+            255,
+            255
+          ],
+          "fontSize": "15px",
+          "contrast": 14.49
+        },
+        {
+          "selector": ".live-material-card .card-body > p",
+          "text": "Неправильные глаголы: три формы, сгруппированные по типам.",
+          "color": "rgb(141, 130, 152)",
+          "background": [
+            255,
+            255,
+            255
+          ],
+          "fontSize": "11px",
+          "contrast": 3.63
+        },
+        {
+          "selector": ".live-material-card .live-author-label strong",
+          "text": "Алексей Смирнов",
+          "color": "rgb(40, 40, 55)",
+          "background": [
+            255,
+            255,
+            255
+          ],
+          "fontSize": "10px",
+          "contrast": 14.49
+        },
+        {
+          "selector": ".live-material-card .live-author-label small",
+          "text": "Информационные технологии · 2 курс",
+          "color": "rgb(98, 88, 111)",
+          "background": [
+            255,
+            255,
+            255
+          ],
+          "fontSize": "9px",
+          "contrast": 6.68
+        },
+        {
+          "selector": ".live-material-card .card-author time",
+          "text": "23 окт.",
+          "color": "rgb(154, 139, 167)",
+          "background": [
+            255,
+            255,
+            255
+          ],
+          "fontSize": "8px",
+          "contrast": 3.17
+        },
+        {
+          "selector": ".live-material-card .card-footer",
+          "text": "4.0(1)047 просмотров",
+          "color": "rgb(176, 168, 183)",
+          "background": [
+            255,
+            255,
+            255
+          ],
+          "fontSize": "9px",
+          "contrast": 2.3
+        },
+        {
+          "selector": ".live-material-card .subject-label",
+          "text": "Английский язык",
+          "color": "rgb(133, 100, 202)",
+          "background": [
+            240,
+            234,
+            250
+          ],
+          "fontSize": "9px",
+          "contrast": 3.82
+        },
+        {
+          "selector": ".live-material-card .tag-row > span",
+          "text": "шпаргалка",
+          "color": "rgb(155, 139, 170)",
+          "background": [
+            246,
+            245,
+            248
+          ],
+          "fontSize": "8px",
+          "contrast": 2.9
+        },
+        {
+          "selector": ".page-heading p",
+          "text": "Хорошие конспекты заслуживают большего, чем лежать в папке.",
+          "color": "rgb(136, 128, 146)",
+          "background": [
+            248,
+            249,
+            252
+          ],
+          "fontSize": "12px",
+          "contrast": 3.59
+        }
+      ],
+      "targets": [
+        {
+          "selector": ".card-save",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".sidebar-search",
+          "width": 197,
+          "height": 38
+        },
+        {
+          "selector": ".live-material-card .card-author",
+          "width": 332,
+          "height": 36
+        }
+      ]
+    },
+    {
+      "theme": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "horizontalOverflow": false,
+      "text": [
+        {
+          "selector": ".live-material-card .card-title",
+          "text": "Irregular verbs",
+          "color": "rgb(40, 40, 55)",
+          "background": [
+            255,
+            255,
+            255
+          ],
+          "fontSize": "15px",
+          "contrast": 14.49
+        },
+        {
+          "selector": ".live-material-card .card-body > p",
+          "text": "Неправильные глаголы: три формы, сгруппированные по типам.",
+          "color": "rgb(141, 130, 152)",
+          "background": [
+            255,
+            255,
+            255
+          ],
+          "fontSize": "11px",
+          "contrast": 3.63
+        },
+        {
+          "selector": ".live-material-card .live-author-label strong",
+          "text": "Алексей Смирнов",
+          "color": "rgb(40, 40, 55)",
+          "background": [
+            255,
+            255,
+            255
+          ],
+          "fontSize": "10px",
+          "contrast": 14.49
+        },
+        {
+          "selector": ".live-material-card .live-author-label small",
+          "text": "Информационные технологии · 2 курс",
+          "color": "rgb(98, 88, 111)",
+          "background": [
+            255,
+            255,
+            255
+          ],
+          "fontSize": "9px",
+          "contrast": 6.68
+        },
+        {
+          "selector": ".live-material-card .card-author time",
+          "text": "23 окт.",
+          "color": "rgb(154, 139, 167)",
+          "background": [
+            255,
+            255,
+            255
+          ],
+          "fontSize": "8px",
+          "contrast": 3.17
+        },
+        {
+          "selector": ".live-material-card .card-footer",
+          "text": "4.0(1)047 просмотров",
+          "color": "rgb(176, 168, 183)",
+          "background": [
+            255,
+            255,
+            255
+          ],
+          "fontSize": "9px",
+          "contrast": 2.3
+        },
+        {
+          "selector": ".live-material-card .subject-label",
+          "text": "Английский язык",
+          "color": "rgb(133, 100, 202)",
+          "background": [
+            240,
+            234,
+            250
+          ],
+          "fontSize": "9px",
+          "contrast": 3.82
+        },
+        {
+          "selector": ".live-material-card .tag-row > span",
+          "text": "шпаргалка",
+          "color": "rgb(155, 139, 170)",
+          "background": [
+            246,
+            245,
+            248
+          ],
+          "fontSize": "8px",
+          "contrast": 2.9
+        },
+        {
+          "selector": ".page-heading p",
+          "text": "Хорошие конспекты заслуживают большего, чем лежать в папке.",
+          "color": "rgb(136, 128, 146)",
+          "background": [
+            248,
+            249,
+            252
+          ],
+          "fontSize": "11px",
+          "contrast": 3.59
+        }
+      ],
+      "targets": [
+        {
+          "selector": ".card-save",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".sidebar-search",
+          "width": 203,
+          "height": 38
+        },
+        {
+          "selector": ".live-material-card .card-author",
+          "width": 314,
+          "height": 36
+        }
+      ]
+    },
+    {
+      "theme": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 1050
+      },
+      "horizontalOverflow": false,
+      "text": [
+        {
+          "selector": ".live-material-card .card-title",
+          "text": "Irregular verbs",
+          "color": "rgb(238, 235, 247)",
+          "background": [
+            29,
+            29,
+            43
+          ],
+          "fontSize": "15px",
+          "contrast": 14.14
+        },
+        {
+          "selector": ".live-material-card .card-body > p",
+          "text": "Неправильные глаголы: три формы, сгруппированные по типам.",
+          "color": "rgb(178, 169, 195)",
+          "background": [
+            29,
+            29,
+            43
+          ],
+          "fontSize": "11px",
+          "contrast": 7.41
+        },
+        {
+          "selector": ".live-material-card .live-author-label strong",
+          "text": "Алексей Смирнов",
+          "color": "rgb(238, 235, 247)",
+          "background": [
+            29,
+            29,
+            43
+          ],
+          "fontSize": "10px",
+          "contrast": 14.14
+        },
+        {
+          "selector": ".live-material-card .live-author-label small",
+          "text": "Информационные технологии · 2 курс",
+          "color": "rgb(197, 189, 214)",
+          "background": [
+            29,
+            29,
+            43
+          ],
+          "fontSize": "9px",
+          "contrast": 9.2
+        },
+        {
+          "selector": ".live-material-card .card-author time",
+          "text": "23 окт.",
+          "color": "rgb(178, 169, 195)",
+          "background": [
+            29,
+            29,
+            43
+          ],
+          "fontSize": "8px",
+          "contrast": 7.41
+        },
+        {
+          "selector": ".live-material-card .card-footer",
+          "text": "4.0(1)047 просмотров",
+          "color": "rgb(178, 169, 195)",
+          "background": [
+            29,
+            29,
+            43
+          ],
+          "fontSize": "9px",
+          "contrast": 7.41
+        },
+        {
+          "selector": ".live-material-card .subject-label",
+          "text": "Английский язык",
+          "color": "rgb(186, 154, 242)",
+          "background": [
+            43,
+            37,
+            62
+          ],
+          "fontSize": "9px",
+          "contrast": 6.26
+        },
+        {
+          "selector": ".live-material-card .tag-row > span",
+          "text": "шпаргалка",
+          "color": "rgb(197, 173, 233)",
+          "background": [
+            43,
+            37,
+            62
+          ],
+          "fontSize": "8px",
+          "contrast": 7.33
+        },
+        {
+          "selector": ".page-heading p",
+          "text": "Хорошие конспекты заслуживают большего, чем лежать в папке.",
+          "color": "rgb(178, 169, 195)",
+          "background": [
+            20,
+            20,
+            30
+          ],
+          "fontSize": "12px",
+          "contrast": 8.15
+        }
+      ],
+      "targets": [
+        {
+          "selector": ".card-save",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".sidebar-search",
+          "width": 197,
+          "height": 38
+        },
+        {
+          "selector": ".live-material-card .card-author",
+          "width": 332,
+          "height": 36
+        }
+      ]
+    },
+    {
+      "theme": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "horizontalOverflow": false,
+      "text": [
+        {
+          "selector": ".live-material-card .card-title",
+          "text": "Irregular verbs",
+          "color": "rgb(238, 235, 247)",
+          "background": [
+            29,
+            29,
+            43
+          ],
+          "fontSize": "15px",
+          "contrast": 14.14
+        },
+        {
+          "selector": ".live-material-card .card-body > p",
+          "text": "Неправильные глаголы: три формы, сгруппированные по типам.",
+          "color": "rgb(178, 169, 195)",
+          "background": [
+            29,
+            29,
+            43
+          ],
+          "fontSize": "11px",
+          "contrast": 7.41
+        },
+        {
+          "selector": ".live-material-card .live-author-label strong",
+          "text": "Алексей Смирнов",
+          "color": "rgb(238, 235, 247)",
+          "background": [
+            29,
+            29,
+            43
+          ],
+          "fontSize": "10px",
+          "contrast": 14.14
+        },
+        {
+          "selector": ".live-material-card .live-author-label small",
+          "text": "Информационные технологии · 2 курс",
+          "color": "rgb(197, 189, 214)",
+          "background": [
+            29,
+            29,
+            43
+          ],
+          "fontSize": "9px",
+          "contrast": 9.2
+        },
+        {
+          "selector": ".live-material-card .card-author time",
+          "text": "23 окт.",
+          "color": "rgb(178, 169, 195)",
+          "background": [
+            29,
+            29,
+            43
+          ],
+          "fontSize": "8px",
+          "contrast": 7.41
+        },
+        {
+          "selector": ".live-material-card .card-footer",
+          "text": "4.0(1)047 просмотров",
+          "color": "rgb(178, 169, 195)",
+          "background": [
+            29,
+            29,
+            43
+          ],
+          "fontSize": "9px",
+          "contrast": 7.41
+        },
+        {
+          "selector": ".live-material-card .subject-label",
+          "text": "Английский язык",
+          "color": "rgb(186, 154, 242)",
+          "background": [
+            43,
+            37,
+            62
+          ],
+          "fontSize": "9px",
+          "contrast": 6.26
+        },
+        {
+          "selector": ".live-material-card .tag-row > span",
+          "text": "шпаргалка",
+          "color": "rgb(197, 173, 233)",
+          "background": [
+            43,
+            37,
+            62
+          ],
+          "fontSize": "8px",
+          "contrast": 7.33
+        },
+        {
+          "selector": ".page-heading p",
+          "text": "Хорошие конспекты заслуживают большего, чем лежать в папке.",
+          "color": "rgb(178, 169, 195)",
+          "background": [
+            20,
+            20,
+            30
+          ],
+          "fontSize": "11px",
+          "contrast": 8.15
+        }
+      ],
+      "targets": [
+        {
+          "selector": ".card-save",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".sidebar-search",
+          "width": 203,
+          "height": 38
+        },
+        {
+          "selector": ".live-material-card .card-author",
+          "width": 314,
+          "height": 36
+        }
+      ]
+    }
+  ],
+  "browserErrors": [],
+  "javascript": [
+    {
+      "file": "api-status-BcUZJQdp.js",
+      "bytes": 5895,
+      "gzipBytes": 2593
+    },
+    {
+      "file": "app-DcE5GdXp.js",
+      "bytes": 59231,
+      "gzipBytes": 16469
+    },
+    {
+      "file": "code-xml-D-J66lT7.js",
+      "bytes": 204,
+      "gzipBytes": 170
+    },
+    {
+      "file": "demo-app-B2Of7RhI.js",
+      "bytes": 55385,
+      "gzipBytes": 16535
+    },
+    {
+      "file": "editor-CyumLZ2O.js",
+      "bytes": 13882,
+      "gzipBytes": 4797
+    },
+    {
+      "file": "files-COM0AUG8.js",
+      "bytes": 402484,
+      "gzipBytes": 128633
+    },
+    {
+      "file": "index-DNEIWOCD.js",
+      "bytes": 329102,
+      "gzipBytes": 105905
+    },
+    {
+      "file": "list-WfsEtSQI.js",
+      "bytes": 616,
+      "gzipBytes": 323
+    },
+    {
+      "file": "server-DuKe0tib.js",
+      "bytes": 335,
+      "gzipBytes": 212
+    },
+    {
+      "file": "theme-2lrmuAUZ.js",
+      "bytes": 35017,
+      "gzipBytes": 13187
+    },
+    {
+      "file": "workspace-CV6xR4Ch.js",
+      "bytes": 16529,
+      "gzipBytes": 5602
+    }
+  ]
+}
