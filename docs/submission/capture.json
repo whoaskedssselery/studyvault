@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-10-23T14:17:34.949Z",
-  "sourceCommit": "62ce96f869291bfb50bd334fd31102549b9ed5d3",
-  "initialJsBytes": 423117,
+  "capturedAt": "2026-10-23T16:02:16.966Z",
+  "sourceCommit": "5abcde2407d554a7e31ee3e94478de8c449782c8",
+  "initialJsBytes": 421337,
   "baseURL": "http://localhost:5173",
   "source": "real local API, PostgreSQL, Meilisearch and RustFS; no intercepted responses",
   "screenshots": [
