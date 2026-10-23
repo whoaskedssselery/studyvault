@@ -208,7 +208,10 @@ export function DemoApp() {
   }, [toast]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.code === "KeyK" || e.key.toLowerCase() === "k")
+      ) {
         e.preventDefault();
         setDialog("search");
       }

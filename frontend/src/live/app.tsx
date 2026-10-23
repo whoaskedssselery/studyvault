@@ -112,7 +112,10 @@ export function LiveApp() {
   }, [message, error]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        (event.code === "KeyK" || event.key.toLowerCase() === "k")
+      ) {
         event.preventDefault();
         setPanel((value) => (value === "search" ? null : "search"));
       }
