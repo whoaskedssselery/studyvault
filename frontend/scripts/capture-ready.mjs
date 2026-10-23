@@ -22,6 +22,7 @@ const create = async () => {
 const shot = async (page, name, description) => {
   await page.screenshot({
     path: resolve(directory, name + ".png"),
+    animations: "disabled",
     fullPage: ["08-editor", "10-profile", "11-moderation"].includes(name),
   });
   shots.push({ file: name + ".png", description });

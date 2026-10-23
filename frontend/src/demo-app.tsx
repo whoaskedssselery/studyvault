@@ -2020,13 +2020,13 @@ function Auth({
         </button>
         <div>
           <h1>
-            Хорошие знания
+            Учебные материалы
             <br />
-            стоит разделить.
+            в одном месте.
           </h1>
           <p>
-            Собирайте конспекты, помогайте друг другу
-            <br />и готовьтесь к следующей сессии вместе.
+            Конспекты, шпаргалки и обсуждения
+            <br />по вашим предметам.
           </p>
           <div className="auth-features">
             <span>
@@ -2043,16 +2043,12 @@ function Auth({
             </span>
           </div>
         </div>
-        <span className="auth-footer">Маленький конспект. Большая помощь.</span>
       </section>
       <section className="auth-form-section">
         <button className="back-link" onClick={() => go("/")}>
           <ArrowLeft size={16} />В библиотеку
         </button>
         <form className="auth-form" onSubmit={submit}>
-          <span className="auth-icon">
-            <GraduationCap size={30} />
-          </span>
           <h1>{register ? "Присоединяйтесь" : "С возвращением"}</h1>
           <p>
             {register

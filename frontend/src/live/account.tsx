@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   BookOpen,
   CheckCircle2,
-  GraduationCap,
 } from "lucide-react";
 import { api, ApiError } from "../api/client";
 import {
@@ -49,13 +48,13 @@ export function AuthPage({
         </button>
         <div>
           <h1>
-            Хорошие знания
+            Учебные материалы
             <br />
-            стоит разделить.
+            в одном месте.
           </h1>
           <p>
-            Собирайте конспекты, помогайте друг другу
-            <br />и готовьтесь к следующей сессии вместе.
+            Конспекты, шпаргалки и обсуждения
+            <br />по вашим предметам.
           </p>
           <div className="auth-features">
             <span>
@@ -72,7 +71,6 @@ export function AuthPage({
             </span>
           </div>
         </div>
-        <span className="auth-footer">Маленький конспект. Большая помощь.</span>
       </section>
       <section className="auth-form-section">
         <button className="back-link" onClick={() => go("/")}>
@@ -109,9 +107,6 @@ export function AuthPage({
             }
           }}
         >
-          <span className="auth-icon">
-            <GraduationCap size={30} />
-          </span>
           <h1>
             {forgot
               ? "Восстановить пароль"

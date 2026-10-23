@@ -250,6 +250,29 @@ h2 { font-size: 22px; }
 :root .comment p { font-size: 14px; color: var(--text-secondary); }
 .comment > div { font-size: 13px; }
 .aside-panel > h3 { font-size: 16px; }
+:root .reader-meta,
+:root .reader-aside :is(p, small, .rating-explanation),
+:root .muted {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+:root .reader-aside .text-button { color: var(--purple); }
+.attachment { min-height: 56px; }
+.attachment > span { font-size: 13px; }
+.attachment small { font-size: 12px; }
+:root .auth-story {
+  background: var(--page);
+  color: var(--text);
+  border-right: 1px solid var(--border);
+}
+.auth-story:after { content: none; }
+:root .auth-story h1 { color: var(--text); font-size: 34px; line-height: 1.3; }
+:root .auth-story p { color: var(--text-secondary); font-size: 15px; }
+:root .auth-features span { color: var(--text-secondary); font-size: 14px; }
+:root .auth-features svg { color: var(--purple); }
+.auth-form h1 { color: var(--text); font-size: 28px; }
+:root .auth-form > p { color: var(--text-secondary); font-size: 14px; }
+.auth-form .auth-bottom, .auth-form .info-box { font-size: 13px; }
 .field-label, .auth-form .field-label { font-size: 14px; color: var(--text-secondary); }
 .field-label :is(input, select, textarea) { font-size: 14px; min-height: 44px; }
 .editor-prose { font-size: 16px; }
@@ -283,6 +306,8 @@ h2 { font-size: 22px; }
   .live-filter-controls { gap: 12px; }
   .reader { padding: 22px 18px; }
   .reader h1 { font-size: 26px; }
+  :root .auth-story h1 { font-size: 26px; }
+  :root .auth-story p { font-size: 14px; }
   .reader-meta { gap: 8px; }
   .live-reader-actions { gap: 12px; }
   .live-reader-actions > .back-link { width: 100%; margin-bottom: 0; }
